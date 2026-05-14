@@ -1,0 +1,23 @@
+# Supabase
+supabase/.temp/
+supabase/.branches/
+
+# Node / Vue (à venir)
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
