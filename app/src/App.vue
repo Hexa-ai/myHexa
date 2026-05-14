@@ -1,7 +1,5 @@
-<script setup lang="ts">
-import HelloWorld from './components/HelloWorld.vue'
-</script>
-
 <template>
-  <HelloWorld />
+  <div class="p-8 text-3xl font-bold text-blue-600">
+    Hello myHexa
+  </div>
 </template>
