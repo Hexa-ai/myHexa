@@ -13,6 +13,8 @@
     "test:unit": "vitest run"
   },
   "dependencies": {
+    "@tanstack/vue-table": "^8.21.3",
+    "@vueuse/core": "^14.3.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-vue-next": "^1.0.0",
