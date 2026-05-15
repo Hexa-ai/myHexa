@@ -1,19 +1,23 @@
 // Shared cursor + zoom state across SeriesChart instances on a page.
-// Charts write `activeTs` on hover and `zoomRange` on zoom/pan ; the others
-// react by showing tooltips and applying the same x-range.
+//
+// Cursor uses Vue refs (fired only on hover — low frequency).
+// Zoom uses a direct callback registry to avoid reactivity overhead during
+// continuous wheel/pan gestures.
 
 import { ref } from 'vue'
 
 const activeTs = ref<number | null>(null)
-const zoomRange = ref<{ min: number; max: number } | null>(null)
 let cursorOwner: symbol | null = null
-let zoomOwner: symbol | null = null
-let zoomEpoch = 0
+
+interface ZoomRange { min: number; max: number }
+type ZoomListener = (range: ZoomRange | null, ownerId: symbol) => void
+const zoomListeners = new Set<ZoomListener>()
+let currentZoomRange: ZoomRange | null = null
 
 export function useChartSync() {
   const id = Symbol('chart-sync')
 
-  // Cursor
+  // ---- Cursor ----
   function setCursor(ts: number | null) {
     cursorOwner = id
     activeTs.value = ts
@@ -28,14 +32,19 @@ export function useChartSync() {
     }
   }
 
-  // Zoom
-  function setZoom(range: { min: number; max: number } | null) {
-    zoomOwner = id
-    zoomEpoch += 1
-    zoomRange.value = range
+  // ---- Zoom ----
+  function subscribeZoom(cb: ZoomListener): () => void {
+    zoomListeners.add(cb)
+    // Replay the current state so newly mounted charts catch up
+    if (currentZoomRange) cb(currentZoomRange, id)
+    return () => zoomListeners.delete(cb)
   }
-  function isZoomOwner() {
-    return zoomOwner === id
+  function broadcastZoom(range: ZoomRange | null) {
+    currentZoomRange = range
+    for (const cb of zoomListeners) cb(range, id)
+  }
+  function getZoomRange() {
+    return currentZoomRange
   }
 
   return {
@@ -43,8 +52,9 @@ export function useChartSync() {
     setCursor,
     isCursorOwner,
     resetCursor,
-    zoomRange,
-    setZoom,
-    isZoomOwner,
+    subscribeZoom,
+    broadcastZoom,
+    getZoomRange,
+    id,
   }
 }

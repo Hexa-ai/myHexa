@@ -61,10 +61,14 @@ const {
   setCursor,
   isCursorOwner,
   resetCursor,
-  zoomRange,
-  setZoom,
-  isZoomOwner,
+  subscribeZoom,
+  broadcastZoom,
+  getZoomRange,
+  id: syncId,
 } = useChartSync()
+let unsubZoom: (() => void) | null = null
+let rafPending = false
+let pendingRange: { min: number; max: number } | null = null
 
 function fmtTs(ts: number | string): string {
   return new Date(ts).toLocaleString('fr-FR', {
@@ -75,19 +79,25 @@ function fmtTs(ts: number | string): string {
   })
 }
 
-// Broadcast our visible x-range to the sync bus.
+// Broadcast our visible x-range to the sync bus. Fired during a continuous
+// gesture (wheel, pan) — we coalesce to once per animation frame.
 function emitZoom() {
   if (!chart || applyingExternalZoom || timestamps.length === 0) return
   const x = chart.scales.x
   const minIdx = Math.max(0, Math.floor(x.min as number))
   const maxIdx = Math.min(timestamps.length - 1, Math.ceil(x.max as number))
   const total = timestamps.length - 1
-  // If fully unzoomed, broadcast null
   if (minIdx <= 0 && maxIdx >= total) {
-    setZoom(null)
-    return
+    pendingRange = null
+  } else {
+    pendingRange = { min: timestamps[minIdx], max: timestamps[maxIdx] }
   }
-  setZoom({ min: timestamps[minIdx], max: timestamps[maxIdx] })
+  if (rafPending) return
+  rafPending = true
+  requestAnimationFrame(() => {
+    rafPending = false
+    broadcastZoom(pendingRange)
+  })
 }
 
 function build() {
@@ -126,6 +136,7 @@ function build() {
           pan: {
             enabled: true,
             mode: 'x',
+            onPan: () => emitZoom(),
             onPanComplete: () => emitZoom(),
           },
           zoom: {
@@ -133,6 +144,7 @@ function build() {
             pinch: { enabled: true },
             drag: { enabled: false },
             mode: 'x',
+            onZoom: () => emitZoom(),
             onZoomComplete: () => emitZoom(),
           },
         },
@@ -151,7 +163,8 @@ function build() {
   })
 
   // If a zoom range is already set in the sync bus, apply it now.
-  if (zoomRange.value) applyZoomFromRange(zoomRange.value)
+  const existing = getZoomRange()
+  if (existing) applyZoomFromRange(existing)
 }
 
 function applyZoomFromRange(range: { min: number; max: number } | null) {
@@ -214,14 +227,8 @@ watch(activeTs, (ts) => {
   chart.update('none')
 })
 
-// Sync zoom across charts
-watch(zoomRange, (range) => {
-  if (isZoomOwner()) return
-  applyZoomFromRange(range)
-})
-
 function resetZoomLocal() {
-  setZoom(null) // broadcast: triggers other charts via watch + ours
+  broadcastZoom(null)
   chart?.resetZoom('none')
 }
 
@@ -266,12 +273,17 @@ function onMouseLeave() {
 
 onMounted(() => {
   build()
+  unsubZoom = subscribeZoom((range, ownerId) => {
+    if (ownerId === syncId) return // don't echo our own broadcast
+    applyZoomFromRange(range)
+  })
   document.addEventListener('fullscreenchange', onFsChange)
   document.addEventListener('webkitfullscreenchange', onFsChange)
 })
 watch(() => [props.points, props.color, props.type], build, { deep: true })
 onBeforeUnmount(() => {
   chart?.destroy()
+  unsubZoom?.()
   document.removeEventListener('fullscreenchange', onFsChange)
   document.removeEventListener('webkitfullscreenchange', onFsChange)
   resetCursor()
