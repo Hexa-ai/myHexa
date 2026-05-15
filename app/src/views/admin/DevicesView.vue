@@ -185,9 +185,21 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
     <!-- Status / loading -->
     <div v-if="loading" class="border border-border rounded-sm bg-card/40 p-10 text-center font-mono text-sm text-muted-foreground">
       <span class="blink">▍</span> loading telemetry…
+      <button
+        @click="load"
+        class="block mx-auto mt-4 text-[10px] uppercase tracking-wider text-muted-foreground/70 hover:text-signal transition"
+      >
+        Forcer le rechargement
+      </button>
     </div>
-    <div v-else-if="error" class="border border-offline/40 rounded-sm bg-offline-soft p-5 font-mono text-sm text-offline">
-      ERR · {{ error }}
+    <div v-else-if="error" class="border border-offline/40 rounded-sm bg-offline-soft p-5 font-mono text-sm text-offline flex items-center justify-between gap-3 flex-wrap">
+      <span>ERR · {{ error }}</span>
+      <button
+        @click="load"
+        class="font-mono text-[10px] uppercase tracking-wider border border-offline/40 px-2.5 py-1 rounded hover:bg-offline-soft transition"
+      >
+        Réessayer
+      </button>
     </div>
 
     <!-- Desktop table -->
