@@ -49,18 +49,23 @@ interface Row {
   tsIp: string | null
 }
 
-const rows = computed<Row[]>(() =>
-  filtered.value.map((d) => ({
-    id: d.id,
-    name: d.name,
-    serial: d.serial_number,
-    online: isOnline(d.last_connection_at),
-    lastSeenIso: d.last_connection_at,
-    interfaces: activeInterfaces(d.status_payload),
-    alarmCount: activeAlarmCount(d.status_payload),
-    tsIp: tailscaleIp(d.status_payload),
-  })),
-)
+const rows = computed<Row[]>(() => {
+  return filtered.value.map((d) => {
+    const online = isOnline(d.last_connection_at)
+    return {
+      id: d.id,
+      name: d.name,
+      serial: d.serial_number,
+      online,
+      lastSeenIso: d.last_connection_at,
+      // Hide interfaces / Tailscale IP when the device itself is offline:
+      // the cached payload is stale, the device can't be reached anyway.
+      interfaces: online ? activeInterfaces(d.status_payload) : [],
+      alarmCount: activeAlarmCount(d.status_payload),
+      tsIp: online ? tailscaleIp(d.status_payload) : null,
+    }
+  })
+})
 
 // Probe Tailscale reachability against the first few candidate IPs in parallel.
 // One success on any of them is enough to mark Tailscale as reachable.

@@ -392,7 +392,7 @@ async function copyTailscaleIp(ip: string) {
             <div v-else class="mt-3 font-mono text-xs text-muted-foreground/70">—</div>
 
             <div
-              v-if="key === 'tailscale' && ifc.ip && ifc.connected"
+              v-if="key === 'tailscale' && ifc.ip && ifc.connected && online"
               class="mt-3 flex items-center gap-2 flex-wrap"
             >
               <a
