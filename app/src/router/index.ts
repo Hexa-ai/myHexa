@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomeView from '@/views/HomeView.vue'
 import LoginView from '@/views/auth/LoginView.vue'
+import { useAuthStore } from '@/stores/auth'
 import AdminLayout from '@/views/admin/AdminLayout.vue'
 import DevicesView from '@/views/admin/DevicesView.vue'
 import DeviceDetailView from '@/views/admin/DeviceDetailView.vue'
@@ -16,7 +16,14 @@ import { requireAuth } from '@/router/guards'
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', name: 'home', component: HomeView },
+    {
+      path: '/',
+      name: 'home',
+      redirect: () => {
+        const auth = useAuthStore()
+        return auth.isAuthenticated ? { name: 'admin-devices' } : { name: 'login' }
+      },
+    },
     { path: '/login', name: 'login', component: LoginView },
     { path: '/report', name: 'report', component: ReportView },
     { path: '/report/periodic', name: 'report-periodic', component: PeriodicReportView },
