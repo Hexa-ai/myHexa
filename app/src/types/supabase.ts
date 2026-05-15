@@ -314,6 +314,13 @@ export type Database = {
     }
     Views: { [_ in never]: never }
     Functions: {
+      alarm_counts: {
+        Args: never
+        Returns: {
+          active_alarms: number
+          open_interventions: number
+        }[]
+      }
       alarm_history: {
         Args: never
         Returns: {

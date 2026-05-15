@@ -153,8 +153,8 @@ async function openDetail(row: InterventionRow) {
     return
   }
   detailPhotoUrls.value = (data ?? [])
-    .filter((d) => d.signedUrl)
     .map((d) => d.signedUrl)
+    .filter((u): u is string => Boolean(u))
 }
 function closeDetail() {
   detailRow.value = null
@@ -446,7 +446,7 @@ function openDevice(id: string) {
           </thead>
           <tbody>
             <tr
-              v-for="(row, i) in filteredLive"
+              v-for="row in filteredLive"
               :key="row.kind === 'alarm' ? `a-${row.device_id}-${row.title}` : `i-${row.intervention.id}`"
               class="border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition"
               @click="row.kind === 'alarm' ? openDevice(row.device_id) : openDetail(row.intervention)"
@@ -535,7 +535,7 @@ function openDevice(id: string) {
           </thead>
           <tbody>
             <tr
-              v-for="(a, i) in filteredHistory"
+              v-for="a in filteredHistory"
               :key="`${a.device_id}-${a.ts}-${a.variable_name}-${a.state_label}`"
               class="border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition"
               @click="openDevice(a.device_id)"

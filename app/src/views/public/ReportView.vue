@@ -100,7 +100,7 @@ onMounted(async () => {
         v-else-if="data"
         ref="reportRef"
         :device="data.device"
-        :status="data.status"
+        :status="data.status as any"
         :role="data.role"
         :expires-at="data.expiresAt"
         :can-edit-location="data.role === 'admin'"
