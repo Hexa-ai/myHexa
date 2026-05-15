@@ -156,6 +156,7 @@ export type Database = {
           status: 'open' | 'resolved'
           resolved_at: string | null
           resolved_by_recipient_id: string | null
+          photo_paths: string[]
         }
         Insert: {
           id?: string

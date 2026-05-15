@@ -85,6 +85,12 @@ export function viewPeriodicReport(
 
 // ----------------------------- submit-intervention --------------------------
 
+export interface InterventionPhotoInput {
+  name?: string
+  contentType?: string
+  dataBase64: string
+}
+
 export interface SubmitInterventionInput {
   deviceId: string
   technicianName: string
@@ -92,12 +98,14 @@ export interface SubmitInterventionInput {
   category: 'intervention' | 'incident' | 'controle' | 'autre'
   severity: 'info' | 'warning' | 'error'
   message?: string | null
+  photos?: InterventionPhotoInput[]
 }
 
 export interface SubmitInterventionData {
   id: string
   createdAt: string
   device: { id: string; name: string | null }
+  photoCount?: number
 }
 
 export const submitIntervention = (input: SubmitInterventionInput) =>

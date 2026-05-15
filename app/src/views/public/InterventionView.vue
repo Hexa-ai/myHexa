@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { submitIntervention } from '@/lib/api'
+import { submitIntervention, type InterventionPhotoInput } from '@/lib/api'
 import { useTheme } from '@/composables/useTheme'
 import { severityButtonClass, SEVERITY_ICON, SEVERITY_LABEL, type Severity } from '@/lib/utils'
+import { compressImage } from '@/lib/image'
+
+const MAX_PHOTOS = 5
 
 const route = useRoute()
 const { theme, toggle: toggleTheme } = useTheme()
@@ -19,6 +22,48 @@ const message = ref('')
 const submitting = ref(false)
 const submitted = ref<string | null>(null) // intervention id
 const error = ref<string | null>(null)
+
+interface PhotoSlot {
+  preview: string
+  data: InterventionPhotoInput
+  sizeKb: number
+}
+const photoSlots = ref<PhotoSlot[]>([])
+const compressing = ref(0)
+
+async function onPhotoSelect(e: Event) {
+  const input = e.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = '' // allow selecting the same file twice
+  const available = MAX_PHOTOS - photoSlots.value.length
+  if (available <= 0) {
+    error.value = `Maximum ${MAX_PHOTOS} photos.`
+    return
+  }
+  for (const file of files.slice(0, available)) {
+    if (!file.type.startsWith('image/')) continue
+    compressing.value += 1
+    try {
+      const compressed = await compressImage(file, { maxSize: 1600, quality: 0.85 })
+      photoSlots.value.push({
+        preview: `data:${compressed.contentType};base64,${compressed.dataBase64}`,
+        data: {
+          name: compressed.name,
+          contentType: compressed.contentType,
+          dataBase64: compressed.dataBase64,
+        },
+        sizeKb: Math.round(compressed.sizeBytes / 1024),
+      })
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Erreur photo'
+    } finally {
+      compressing.value -= 1
+    }
+  }
+}
+function removePhoto(idx: number) {
+  photoSlots.value.splice(idx, 1)
+}
 
 const CATEGORIES = [
   { value: 'intervention', label: 'Intervention' },
@@ -42,6 +87,7 @@ async function handleSubmit() {
     category: category.value,
     severity: severity.value,
     message: message.value || null,
+    photos: photoSlots.value.map((s) => s.data),
   })
   submitting.value = false
   if (!res.ok) {
@@ -54,6 +100,7 @@ async function handleSubmit() {
 function submitAnother() {
   submitted.value = null
   message.value = ''
+  photoSlots.value = []
 }
 </script>
 
@@ -189,6 +236,64 @@ function submitAnother() {
             placeholder="Décrivez l'intervention…"
             class="w-full bg-transparent border border-border rounded-md focus:border-signal focus:outline-none px-3 py-2 text-sm font-mono transition resize-y"
           />
+        </div>
+
+        <!-- Photos -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              Photos ({{ photoSlots.length }}/{{ MAX_PHOTOS }})
+            </label>
+            <span v-if="compressing > 0" class="font-mono text-[10px] text-muted-foreground">
+              <span class="blink">▍</span> compression…
+            </span>
+          </div>
+
+          <div class="grid grid-cols-3 sm:grid-cols-5 gap-2">
+            <div
+              v-for="(p, i) in photoSlots"
+              :key="i"
+              class="relative aspect-square border border-border rounded-md overflow-hidden bg-card"
+            >
+              <img :src="p.preview" class="absolute inset-0 w-full h-full object-cover" />
+              <button
+                type="button"
+                @click="removePhoto(i)"
+                class="absolute top-1 right-1 size-5 inline-flex items-center justify-center rounded-full bg-background/80 backdrop-blur text-foreground border border-border hover:text-offline hover:border-offline/60 transition"
+                aria-label="Retirer"
+              >
+                <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+              <span class="absolute bottom-1 left-1 font-mono text-[9px] uppercase tracking-wider bg-background/80 backdrop-blur px-1.5 py-0.5 rounded text-muted-foreground">
+                {{ p.sizeKb }} ko
+              </span>
+            </div>
+
+            <label
+              v-if="photoSlots.length < MAX_PHOTOS"
+              class="aspect-square border-2 border-dashed border-border rounded-md flex flex-col items-center justify-center text-muted-foreground hover:border-signal/60 hover:text-signal cursor-pointer transition"
+            >
+              <svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z" />
+                <circle cx="9" cy="9" r="2" />
+                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+              </svg>
+              <span class="mt-1.5 font-mono text-[10px] uppercase tracking-wider">Ajouter</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                capture="environment"
+                class="hidden"
+                @change="onPhotoSelect"
+              />
+            </label>
+          </div>
+          <p class="font-mono text-[10px] text-muted-foreground/70">
+            Les photos sont compressées localement avant l'envoi (max {{ MAX_PHOTOS }}, 1600px).
+          </p>
         </div>
 
         <p v-if="error" class="font-mono text-xs text-offline flex items-center gap-2">
