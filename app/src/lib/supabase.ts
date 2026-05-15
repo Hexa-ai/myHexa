@@ -8,4 +8,12 @@ if (!url || !anonKey) {
   throw new Error('Missing Supabase env vars (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)')
 }
 
-export const supabase = createClient<Database>(url, anonKey)
+export const supabase = createClient<Database>(url, anonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    flowType: 'pkce',
+  },
+})

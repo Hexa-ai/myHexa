@@ -9,6 +9,7 @@ type Recipient = Database['public']['Tables']['recipients']['Row']
 export const useAuthStore = defineStore('auth', () => {
   const session = ref<Session | null>(null)
   const recipient = ref<Recipient | null>(null)
+  const companyName = ref<string | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -19,14 +20,21 @@ export const useAuthStore = defineStore('auth', () => {
     if (!session.value) return
     const { data, error: err } = await supabase
       .from('recipients')
-      .select('*')
+      .select('*, companies(name)')
       .eq('auth_user_id', session.value.user.id)
       .maybeSingle()
     if (err) {
       error.value = err.message
       return
     }
-    recipient.value = data
+    if (data) {
+      const { companies, ...rest } = data as Recipient & { companies: { name: string } | null }
+      recipient.value = rest as Recipient
+      companyName.value = companies?.name ?? null
+    } else {
+      recipient.value = null
+      companyName.value = null
+    }
   }
 
   async function init() {
@@ -38,7 +46,10 @@ export const useAuthStore = defineStore('auth', () => {
     supabase.auth.onAuthStateChange(async (_event, newSession) => {
       session.value = newSession
       if (newSession) await loadRecipient()
-      else recipient.value = null
+      else {
+        recipient.value = null
+        companyName.value = null
+      }
     })
   }
 
@@ -58,11 +69,13 @@ export const useAuthStore = defineStore('auth', () => {
     await supabase.auth.signOut()
     session.value = null
     recipient.value = null
+    companyName.value = null
   }
 
   return {
     session,
     recipient,
+    companyName,
     loading,
     error,
     isAuthenticated,

@@ -1,37 +1,176 @@
 <script setup lang="ts">
-import { RouterView, RouterLink, useRouter } from 'vue-router'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { Button } from '@/components/ui/button'
+import { useTheme } from '@/composables/useTheme'
+
+const { theme, toggle: toggleTheme } = useTheme()
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 
 async function handleLogout() {
   await auth.signOut()
   router.push({ name: 'login' })
 }
+
+const now = ref(new Date())
+let timer: ReturnType<typeof setInterval> | undefined
+onMounted(() => { timer = setInterval(() => (now.value = new Date()), 1000) })
+onUnmounted(() => { if (timer) clearInterval(timer) })
+
+const clock = computed(() =>
+  now.value.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+)
+
+const company = computed(() => auth.companyName ?? '—')
+const email = computed(() => auth.recipient?.contact_email ?? '—')
+const role = computed(() => auth.recipient?.role ?? 'member')
+
+const breadcrumb = computed(() => {
+  const map: Record<string, string> = { 'admin-devices': 'devices' }
+  return map[String(route.name ?? '')] ?? String(route.name ?? '')
+})
+
+function goDevices() { router.push({ name: 'admin-devices' }) }
+const isDevices = computed(() => route.name === 'admin-devices')
 </script>
 
 <template>
-  <div class="min-h-screen flex">
-    <aside class="w-64 bg-slate-900 text-slate-100 p-4 flex flex-col">
-      <h1 class="text-xl font-bold mb-6">myHexa Admin</h1>
-      <nav class="flex-1 space-y-1">
-        <RouterLink
-          :to="{ name: 'admin-devices' }"
-          class="block px-3 py-2 rounded hover:bg-slate-800"
-          active-class="bg-slate-800"
-        >
-          Devices
-        </RouterLink>
-      </nav>
-      <div class="text-xs text-slate-400 mb-2 truncate">
-        {{ auth.recipient?.contact_email }}
+  <div class="min-h-screen flex text-foreground">
+    <aside class="w-64 shrink-0 border-r border-border bg-card/60 backdrop-blur-sm flex flex-col">
+      <!-- Logo -->
+      <div class="px-5 pt-6 pb-5 border-b border-border">
+        <img
+          :src="theme === 'dark' ? '/hexa-logo-dark.png' : '/hexa-logo-light.png'"
+          alt="Hexa.ai"
+          class="h-9 w-[140px] object-contain object-left select-none"
+          draggable="false"
+        />
+        <div class="mt-4 flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="size-1.5 rounded-full bg-signal pulse-dot shrink-0" />
+            <span class="font-mono text-[11px] uppercase tracking-wider text-muted-foreground truncate">{{ company }}</span>
+          </div>
+          <span class="font-mono text-[9px] uppercase tracking-[0.22em] text-signal/80 shrink-0">Edge</span>
+        </div>
       </div>
-      <Button variant="secondary" size="sm" @click="handleLogout">Se déconnecter</Button>
+
+      <!-- Nav -->
+      <nav class="flex-1 px-3 py-4 space-y-0.5">
+        <button
+          @click="goDevices"
+          :class="[
+            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
+            isDevices
+              ? 'text-foreground bg-secondary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+          ]"
+        >
+          <span
+            :class="[
+              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
+              isDevices ? 'bg-signal' : 'bg-transparent',
+            ]"
+          />
+          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path d="M12 2 3 7v10l9 5 9-5V7l-9-5Z" />
+            <path d="M3 7l9 5 9-5M12 12v10" stroke-opacity="0.5" />
+          </svg>
+          <span class="tracking-tight">Devices</span>
+          <span v-if="isDevices" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
+        </button>
+
+        <div class="px-3 py-2.5 text-sm text-muted-foreground/40 cursor-not-allowed select-none flex items-center gap-3">
+          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+          <span>Recipients</span>
+          <span class="ml-auto text-[9px] uppercase tracking-widest">soon</span>
+        </div>
+        <div class="px-3 py-2.5 text-sm text-muted-foreground/40 cursor-not-allowed select-none flex items-center gap-3">
+          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path d="M3 3v18h18" />
+            <path d="M7 14l4-4 4 4 5-6" />
+          </svg>
+          <span>Reports</span>
+          <span class="ml-auto text-[9px] uppercase tracking-widest">soon</span>
+        </div>
+      </nav>
+
+      <!-- Session -->
+      <div class="border-t border-border px-4 py-4 space-y-2.5">
+        <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Session</div>
+        <div class="text-xs truncate">{{ email }}</div>
+        <div class="flex items-center justify-between">
+          <span class="font-mono text-[10px] uppercase px-1.5 py-0.5 border border-hairline rounded text-muted-foreground bg-secondary/60">
+            {{ role }}
+          </span>
+          <button
+            @click="handleLogout"
+            class="font-mono text-[11px] uppercase tracking-wider text-muted-foreground hover:text-signal transition"
+          >
+            sign out ↗
+          </button>
+        </div>
+      </div>
     </aside>
-    <main class="flex-1 p-8 bg-slate-50">
-      <RouterView />
-    </main>
+
+    <div class="flex-1 flex flex-col min-w-0">
+      <header class="h-12 border-b border-border bg-background/60 backdrop-blur-sm flex items-center justify-between px-6">
+        <div class="flex items-center gap-2.5 text-xs font-mono text-muted-foreground">
+          <span class="text-signal">⬢</span>
+          <span class="text-muted-foreground/50">/</span>
+          <span>admin</span>
+          <span class="text-muted-foreground/50">/</span>
+          <span class="text-foreground">{{ breadcrumb }}</span>
+        </div>
+        <div class="flex items-center gap-5 text-[11px] font-mono text-muted-foreground">
+          <span class="flex items-center gap-1.5">
+            <span class="size-1 rounded-full bg-signal pulse-dot" />
+            <span class="uppercase tracking-wider">Live</span>
+          </span>
+          <span class="tabular">{{ clock }}</span>
+          <button
+            @click="toggleTheme"
+            :title="theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'"
+            class="ml-1 size-7 inline-flex items-center justify-center rounded-md border border-border hover:border-signal/60 hover:text-foreground transition"
+          >
+            <svg v-if="theme === 'dark'" viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="flex-1 hex-grid overflow-auto">
+        <RouterView v-slot="{ Component }">
+          <transition name="page" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </RouterView>
+      </main>
+
+      <footer class="border-t border-border bg-card/40 px-6 py-2 flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+        <span>Hexa.ai · myHexa edge ops</span>
+        <span class="flex items-center gap-3">
+          <span>build 2026.05.15</span>
+          <span class="text-signal">●</span>
+        </span>
+      </footer>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.page-enter-active, .page-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
+.page-enter-from { opacity: 0; transform: translateY(4px); }
+.page-leave-to { opacity: 0; transform: translateY(-4px); }
+</style>
