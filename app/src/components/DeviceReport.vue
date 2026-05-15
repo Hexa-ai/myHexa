@@ -55,6 +55,7 @@ const props = withDefaults(
     vncHost?: string | null
     vncPort?: number | null
     canEditVnc?: boolean
+    periodicHref?: ((type: 'daily' | 'weekly') => string) | null
   }>(),
   {
     role: 'viewer',
@@ -63,6 +64,7 @@ const props = withDefaults(
     vncHost: null,
     vncPort: 5900,
     canEditVnc: false,
+    periodicHref: null,
   },
 )
 
@@ -278,22 +280,43 @@ async function copyTailscaleIp(ip: string) {
       </div>
     </header>
 
-    <!-- Tabs -->
-    <nav class="inline-flex gap-1 p-1 border border-border rounded-md bg-card/40 overflow-x-auto max-w-full">
-      <button
-        v-for="tab in (['data', 'status', 'config'] as const)"
-        :key="tab"
-        @click="activeTab = tab"
-        :class="[
-          'font-mono text-[10px] sm:text-[11px] uppercase tracking-[0.18em] px-3 sm:px-4 py-1.5 rounded transition whitespace-nowrap',
-          activeTab === tab
-            ? 'bg-signal text-primary-foreground'
-            : 'text-muted-foreground hover:text-foreground',
-        ]"
-      >
-        {{ tab === 'data' ? 'Données' : tab === 'status' ? 'État' : 'Configuration' }}
-      </button>
-    </nav>
+    <!-- Tabs + Periodic links -->
+    <div class="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+      <nav class="inline-flex gap-1 p-1 border border-border rounded-md bg-card/40 overflow-x-auto max-w-full self-start">
+        <button
+          v-for="tab in (['data', 'status', 'config'] as const)"
+          :key="tab"
+          @click="activeTab = tab"
+          :class="[
+            'font-mono text-[10px] sm:text-[11px] uppercase tracking-[0.18em] px-3 sm:px-4 py-1.5 rounded transition whitespace-nowrap',
+            activeTab === tab
+              ? 'bg-signal text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground',
+          ]"
+        >
+          {{ tab === 'data' ? 'Données' : tab === 'status' ? 'État' : 'Configuration' }}
+        </button>
+      </nav>
+
+      <div v-if="periodicHref" class="flex items-center gap-2 flex-wrap">
+        <a
+          :href="periodicHref('daily')"
+          class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] border border-border text-foreground px-3 py-1.5 rounded-md hover:border-signal/60 hover:text-signal transition"
+        >
+          <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 3v18h18" />
+            <path d="M7 14l4-4 4 4 5-6" />
+          </svg>
+          Quotidien
+        </a>
+        <a
+          :href="periodicHref('weekly')"
+          class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] border border-border text-foreground px-3 py-1.5 rounded-md hover:border-signal/60 hover:text-signal transition"
+        >
+          Hebdomadaire
+        </a>
+      </div>
+    </div>
 
     <!-- Données -->
     <section v-if="activeTab === 'data'" class="space-y-6">

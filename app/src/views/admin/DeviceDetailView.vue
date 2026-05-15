@@ -148,6 +148,7 @@ onMounted(() => loadDetail(String(route.params.id)))
       :can-edit-vnc="canEdit"
       :vnc-host="device.vnc_host"
       :vnc-port="device.vnc_port"
+      :periodic-href="(t) => router.resolve({ name: 'admin-device-periodic', params: { id: device!.id }, query: { type: t } }).href"
       @save-location="onSaveLocation"
       @save-vnc="onSaveVnc"
     />

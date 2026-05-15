@@ -32,6 +32,7 @@ const breadcrumb = computed(() => {
   const map: Record<string, string> = {
     'admin-devices': 'devices',
     'admin-device-detail': 'devices / detail',
+    'admin-device-periodic': 'devices / rapports',
     'admin-map': 'map',
   }
   return map[String(route.name ?? '')] ?? String(route.name ?? '')
