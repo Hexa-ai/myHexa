@@ -2,10 +2,24 @@ import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/types/supabase'
 
-type Device = Database['public']['Tables']['devices']['Row']
+type Row = Database['public']['Functions']['devices_with_latest_status']['Returns'][number]
+
+export interface DeviceWithStatus {
+  id: string
+  company_id: string | null
+  name: string | null
+  serial_number: string | null
+  mac_eth0: string | null
+  address: string | null
+  latitude: number | null
+  longitude: number | null
+  last_connection_at: string | null
+  status_payload: Record<string, unknown> | null
+  status_received_at: string | null
+}
 
 export function useDevices() {
-  const devices = ref<Device[]>([])
+  const devices = ref<DeviceWithStatus[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -13,15 +27,26 @@ export function useDevices() {
     loading.value = true
     error.value = null
     const { data, error: err } = await supabase
-      .from('devices')
-      .select('*')
+      .rpc('devices_with_latest_status')
       .order('name', { ascending: true })
     loading.value = false
     if (err) {
       error.value = err.message
       return
     }
-    devices.value = data ?? []
+    devices.value = (data ?? []).map((d: Row) => ({
+      id: d.id,
+      company_id: d.company_id,
+      name: d.name,
+      serial_number: d.serial_number,
+      mac_eth0: d.mac_eth0,
+      address: d.address,
+      latitude: d.latitude,
+      longitude: d.longitude,
+      last_connection_at: d.last_connection_at,
+      status_payload: d.status_payload as Record<string, unknown> | null,
+      status_received_at: d.status_received_at,
+    }))
   }
 
   return { devices, loading, error, load }

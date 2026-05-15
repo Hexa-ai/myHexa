@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { formatRelative, isOnline } from '@/lib/utils'
 import DeviceMap from '@/components/DeviceMap.vue'
+import { useTailscaleReachable } from '@/composables/useTailscaleReachable'
 
 interface Device {
   id: string
@@ -165,6 +166,20 @@ function interfaceRows(ifc: NetworkInterface): Array<[string, string]> {
   if (ifc.operator) rows.push(['Opérateur', ifc.operator])
   return rows
 }
+
+const { reachable: tsReachable, probe: probeTs } = useTailscaleReachable()
+
+onMounted(() => {
+  const ip = payload.value.network?.tailscale?.ip
+  if (ip && payload.value.network?.tailscale?.connected) probeTs(ip)
+})
+
+watch(
+  () => payload.value.network?.tailscale?.ip,
+  (ip) => {
+    if (ip && payload.value.network?.tailscale?.connected) probeTs(ip)
+  },
+)
 
 const copiedTailscaleIp = ref<string | null>(null)
 async function copyTailscaleIp(ip: string) {
@@ -381,6 +396,7 @@ async function copyTailscaleIp(ip: string) {
               class="mt-3 flex items-center gap-2 flex-wrap"
             >
               <a
+                v-if="tsReachable === true"
                 :href="`http://${ifc.ip}`"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -393,6 +409,13 @@ async function copyTailscaleIp(ip: string) {
                 </svg>
                 Ouvrir
               </a>
+              <span
+                v-else-if="tsReachable === false"
+                class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5"
+                title="Activez Tailscale sur votre poste pour ouvrir"
+              >
+                <span class="size-1.5 rounded-full bg-muted-foreground/40" /> Hors Tailscale
+              </span>
               <button
                 type="button"
                 @click="copyTailscaleIp(ifc.ip!)"

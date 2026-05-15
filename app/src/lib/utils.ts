@@ -24,3 +24,34 @@ export function isOnline(lastConnectionAt: string | null | undefined, thresholdM
   if (!lastConnectionAt) return false
   return Date.now() - new Date(lastConnectionAt).getTime() < thresholdMs
 }
+
+const NETWORK_KEYS = ['eth0', 'eth1', 'wlan0', 'wwan0', 'tailscale'] as const
+export type InterfaceKey = (typeof NETWORK_KEYS)[number]
+
+interface RawNetIfc {
+  ip?: string | null
+  connected?: boolean
+}
+
+export function activeInterfaces(payload: unknown): InterfaceKey[] {
+  if (!payload || typeof payload !== 'object') return []
+  const net = (payload as { network?: Record<string, RawNetIfc> }).network
+  if (!net) return []
+  return NETWORK_KEYS.filter((k) => net[k]?.connected === true)
+}
+
+export function tailscaleIp(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null
+  const ts = (payload as { network?: { tailscale?: RawNetIfc } }).network?.tailscale
+  if (ts?.connected && ts.ip) return ts.ip
+  return null
+}
+
+export function activeAlarmCount(payload: unknown): number {
+  if (!payload || typeof payload !== 'object') return 0
+  const vars = (payload as { variables?: Array<{ category?: string; value: unknown }> }).variables
+  if (!Array.isArray(vars)) return 0
+  return vars.filter(
+    (v) => v?.category === 'alarm' && v?.value !== 0 && v?.value !== null && v?.value !== false,
+  ).length
+}

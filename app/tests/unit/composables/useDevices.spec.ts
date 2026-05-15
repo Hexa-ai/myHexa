@@ -4,10 +4,8 @@ import { setActivePinia, createPinia } from 'pinia'
 const mockOrder = vi.fn()
 vi.mock('@/lib/supabase', () => ({
   supabase: {
-    from: vi.fn(() => ({
-      select: () => ({
-        order: () => mockOrder(),
-      }),
+    rpc: vi.fn(() => ({
+      order: () => mockOrder(),
     })),
   },
 }))
@@ -15,14 +13,15 @@ vi.mock('@/lib/supabase', () => ({
 import { useDevices } from '@/composables/useDevices'
 
 describe('useDevices', () => {
-  it('loads devices into a ref', async () => {
+  it('loads devices via RPC into a ref', async () => {
     setActivePinia(createPinia())
     mockOrder.mockResolvedValue({
-      data: [{ id: '1', name: 'D1' }],
+      data: [{ id: '1', name: 'D1', status_payload: null }],
       error: null,
     })
     const { devices, load } = useDevices()
     await load()
     expect(devices.value).toHaveLength(1)
+    expect(devices.value[0].id).toBe('1')
   })
 })
