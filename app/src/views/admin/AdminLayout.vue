@@ -4,9 +4,31 @@ import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useTheme } from '@/composables/useTheme'
 import { useAlarmCounts } from '@/composables/useAlarmCounts'
+import { watch } from 'vue'
 
 const { theme, toggle: toggleTheme } = useTheme()
 const alarms = useAlarmCounts()
+
+const notif = ref<{ id: number; count: number } | null>(null)
+let notifSeq = 0
+let notifTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(
+  () => alarms.lastDeltaAt.value,
+  (v) => {
+    if (!v || alarms.lastDelta.value <= 0) return
+    const id = ++notifSeq
+    notif.value = { id, count: alarms.lastDelta.value }
+    if (notifTimer) clearTimeout(notifTimer)
+    notifTimer = setTimeout(() => {
+      if (notif.value?.id === id) notif.value = null
+    }, 6000)
+  },
+)
+function dismissNotif() {
+  notif.value = null
+  if (notifTimer) clearTimeout(notifTimer)
+}
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -270,6 +292,32 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
           <span class="text-signal">●</span>
         </span>
       </footer>
+    </div>
+
+    <!-- Apparition notification banner -->
+    <div
+      v-if="notif"
+      class="fixed top-4 right-4 z-[80] max-w-[360px] w-[calc(100vw-2rem)] border-2 border-offline/60 rounded-md bg-offline/10 backdrop-blur-md p-3 shadow-2xl flex items-start gap-3 fade-up cursor-pointer"
+      @click="router.push({ name: 'admin-alarms' }); dismissNotif()"
+    >
+      <span class="text-lg leading-none mt-0.5 text-offline">●</span>
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold tracking-tight text-foreground">
+          {{ notif.count === 1 ? 'Nouvelle alarme active' : `${notif.count} nouvelles alarmes actives` }}
+        </div>
+        <div class="font-mono text-xs text-muted-foreground mt-0.5">
+          Click pour voir le détail
+        </div>
+      </div>
+      <button
+        @click.stop="dismissNotif"
+        class="size-5 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition"
+        aria-label="Fermer"
+      >
+        <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M18 6 6 18M6 6l12 12" />
+        </svg>
+      </button>
     </div>
   </div>
 </template>
