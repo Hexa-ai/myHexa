@@ -4,7 +4,13 @@ import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { useDevices } from '@/composables/useDevices'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
-import { formatRelative } from '@/lib/utils'
+import {
+  formatRelative,
+  severityPillClass,
+  severityButtonClass,
+  SEVERITY_ICON,
+  SEVERITY_LABEL,
+} from '@/lib/utils'
 
 const router = useRouter()
 const { devices, loading: devicesLoading, error: devicesError, load: loadDevices } = useDevices()
@@ -197,16 +203,8 @@ const kpiHistory = computed(() => filteredHistory.value.length)
 
 // ------------------------------ Rendering helpers ----------------------------
 
-const TYPE_CLASS: Record<AlarmType | 'default', string> = {
-  error: 'bg-offline-soft text-offline',
-  warning: 'bg-amber/15 text-amber',
-  info: 'bg-signal-soft text-signal',
-  default: 'bg-muted text-muted-foreground',
-}
-
 function typeClass(t: string | null) {
-  const k = (t ?? '').toLowerCase() as AlarmType
-  return TYPE_CLASS[k] ?? TYPE_CLASS.default
+  return severityPillClass(t)
 }
 
 function fmtFullDate(iso: string | null): string {
@@ -271,13 +269,12 @@ function openDevice(id: string) {
           :key="t"
           @click="toggleType(t)"
           :class="[
-            'font-mono text-[10px] uppercase tracking-[0.18em] px-3 py-1.5 rounded-md border transition',
-            selectedTypes.has(t)
-              ? typeClass(t) + ' border-transparent'
-              : 'border-border text-muted-foreground hover:border-signal/40 hover:text-foreground',
+            'font-mono text-[10px] uppercase tracking-[0.18em] px-3 py-1.5 rounded-md border-2 transition inline-flex items-center gap-1.5',
+            severityButtonClass(t, selectedTypes.has(t)),
           ]"
         >
-          {{ t }}
+          <span class="text-xs leading-none">{{ SEVERITY_ICON[t] }}</span>
+          {{ SEVERITY_LABEL[t] }}
         </button>
       </div>
 
@@ -362,8 +359,9 @@ function openDevice(id: string) {
             >
               <td class="px-4 py-3">
                 <span
-                  :class="['font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', typeClass(a.type_alarm)]"
+                  :class="['inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', typeClass(a.type_alarm)]"
                 >
+                  <span v-if="a.type_alarm" class="text-xs leading-none">{{ SEVERITY_ICON[a.type_alarm as 'info' | 'warning' | 'error'] || '' }}</span>
                   {{ a.type_alarm || '—' }}
                 </span>
               </td>
@@ -423,8 +421,9 @@ function openDevice(id: string) {
               </td>
               <td class="px-4 py-3">
                 <span
-                  :class="['font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', typeClass(a.type_alarm)]"
+                  :class="['inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', typeClass(a.type_alarm)]"
                 >
+                  <span v-if="a.type_alarm" class="text-xs leading-none">{{ SEVERITY_ICON[a.type_alarm as 'info' | 'warning' | 'error'] || '' }}</span>
                   {{ a.type_alarm || '—' }}
                 </span>
               </td>
@@ -507,8 +506,9 @@ function openDevice(id: string) {
               </td>
               <td class="px-4 py-3">
                 <span
-                  :class="['font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', typeClass(row.severity)]"
+                  :class="['inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', typeClass(row.severity)]"
                 >
+                  <span class="text-xs leading-none">{{ SEVERITY_ICON[row.severity] }}</span>
                   {{ row.severity }}
                 </span>
               </td>

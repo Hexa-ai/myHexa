@@ -5,6 +5,47 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export type Severity = 'info' | 'warning' | 'error'
+
+export const SEVERITY_LABEL: Record<Severity, string> = {
+  info: 'Info',
+  warning: 'Warning',
+  error: 'Error',
+}
+
+export const SEVERITY_ICON: Record<Severity, string> = {
+  info: 'ⓘ',
+  warning: '⚠',
+  error: '●',
+}
+
+/** Strong chip used in tables — colored bg + border + bold text. */
+export function severityPillClass(level: string | null | undefined): string {
+  const k = String(level ?? '').toLowerCase() as Severity
+  if (k === 'error') {
+    return 'bg-offline/15 text-offline border border-offline/40 font-semibold'
+  }
+  if (k === 'warning') {
+    return 'bg-warn/15 text-warn border border-warn/40 font-semibold'
+  }
+  if (k === 'info') {
+    return 'bg-signal/10 text-signal border border-signal/30 font-semibold'
+  }
+  return 'bg-muted text-muted-foreground border border-border'
+}
+
+/** For toggle/select buttons : inactive is outline-only, active is filled. */
+export function severityButtonClass(level: Severity, active: boolean): string {
+  if (active) {
+    if (level === 'error') return 'bg-offline text-background border-offline shadow-[0_0_30px_-12px_var(--offline)]'
+    if (level === 'warning') return 'bg-warn text-background border-warn shadow-[0_0_30px_-12px_var(--warn)]'
+    return 'bg-signal text-primary-foreground border-signal shadow-[0_0_30px_-12px_var(--signal)]'
+  }
+  if (level === 'error') return 'border-offline/40 text-offline hover:bg-offline/10'
+  if (level === 'warning') return 'border-warn/40 text-warn hover:bg-warn/10'
+  return 'border-signal/40 text-signal hover:bg-signal/10'
+}
+
 const RTF = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' })
 
 export function formatRelative(input: string | null | undefined): string {

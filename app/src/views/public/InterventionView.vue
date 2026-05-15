@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { submitIntervention } from '@/lib/api'
 import { useTheme } from '@/composables/useTheme'
+import { severityButtonClass, SEVERITY_ICON, SEVERITY_LABEL, type Severity } from '@/lib/utils'
 
 const route = useRoute()
 const { theme, toggle: toggleTheme } = useTheme()
@@ -25,11 +26,7 @@ const CATEGORIES = [
   { value: 'controle', label: 'Contrôle' },
   { value: 'autre', label: 'Autre' },
 ] as const
-const SEVERITIES = [
-  { value: 'info', label: 'Info', class: 'border-signal/40 text-signal data-[active=true]:bg-signal-soft' },
-  { value: 'warning', label: 'Warning', class: 'border-amber/40 text-amber data-[active=true]:bg-amber/15' },
-  { value: 'error', label: 'Error', class: 'border-offline/40 text-offline data-[active=true]:bg-offline-soft' },
-] as const
+const SEVERITIES: readonly Severity[] = ['info', 'warning', 'error'] as const
 
 async function handleSubmit() {
   if (!deviceId.value) {
@@ -166,20 +163,19 @@ function submitAnother() {
 
         <div class="space-y-1.5">
           <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Sévérité</label>
-          <div class="flex gap-2 flex-wrap">
+          <div class="grid grid-cols-3 gap-2">
             <button
               v-for="s in SEVERITIES"
-              :key="s.value"
+              :key="s"
               type="button"
-              @click="severity = s.value"
-              :data-active="severity === s.value"
+              @click="severity = s"
               :class="[
-                'font-mono text-[10px] uppercase tracking-[0.18em] px-3 py-2 rounded-md border transition flex-1',
-                s.class,
-                severity === s.value ? '' : 'opacity-70',
+                'font-mono text-[11px] uppercase tracking-[0.18em] px-3 py-2.5 rounded-md border-2 transition inline-flex items-center justify-center gap-1.5',
+                severityButtonClass(s, severity === s),
               ]"
             >
-              {{ s.label }}
+              <span class="text-sm leading-none">{{ SEVERITY_ICON[s] }}</span>
+              {{ SEVERITY_LABEL[s] }}
             </button>
           </div>
         </div>
