@@ -376,23 +376,40 @@ async function copyTailscaleIp(ip: string) {
             </dl>
             <div v-else class="mt-3 font-mono text-xs text-muted-foreground/70">—</div>
 
-            <button
+            <div
               v-if="key === 'tailscale' && ifc.ip && ifc.connected"
-              type="button"
-              @click="copyTailscaleIp(ifc.ip!)"
-              class="mt-3 self-start inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-3 py-1.5 rounded-md hover:brightness-110 transition"
+              class="mt-3 flex items-center gap-2 flex-wrap"
             >
-              <template v-if="copiedTailscaleIp === ifc.ip">
-                ✓ Copié
-              </template>
-              <template v-else>
+              <a
+                :href="`http://${ifc.ip}`"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-3 py-1.5 rounded-md hover:brightness-110 transition"
+              >
                 <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <path d="M15 3h6v6" />
+                  <path d="M10 14 21 3" />
                 </svg>
-                Copier l'IP
-              </template>
-            </button>
+                Ouvrir
+              </a>
+              <button
+                type="button"
+                @click="copyTailscaleIp(ifc.ip!)"
+                class="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] border border-border text-foreground px-3 py-1.5 rounded-md hover:border-signal/60 hover:text-signal transition"
+              >
+                <template v-if="copiedTailscaleIp === ifc.ip">
+                  ✓ Copié
+                </template>
+                <template v-else>
+                  <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  Copier l'IP
+                </template>
+              </button>
+            </div>
           </div>
         </div>
       </div>
