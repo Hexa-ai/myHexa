@@ -55,6 +55,34 @@ export interface ViewReportData {
 export const viewReport = (token: string, deviceId: string) =>
   get<ViewReportData>('view-report', { t: token, d: deviceId })
 
+// ----------------------------- view-periodic-report -------------------------
+
+export interface PeriodicOption {
+  period_start: string
+  period_end: string | null
+}
+
+export interface ViewPeriodicReportData {
+  type: 'daily' | 'weekly'
+  deviceName: string | null
+  role: string
+  payload: unknown
+  periodStart: string | null
+  periodEnd: string | null
+  periods: PeriodicOption[]
+}
+
+export function viewPeriodicReport(
+  token: string,
+  deviceId: string,
+  type: 'daily' | 'weekly',
+  period?: string,
+) {
+  const params: Record<string, string> = { t: token, d: deviceId, type }
+  if (period) params.period = period
+  return get<ViewPeriodicReportData>('view-periodic-report', params)
+}
+
 // ----------------------------- recover-link ---------------------------------
 
 export const recoverLink = (email: string, fromUrl?: string) =>

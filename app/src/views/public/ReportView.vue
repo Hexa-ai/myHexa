@@ -104,6 +104,7 @@ onMounted(async () => {
         :role="data.role"
         :expires-at="data.expiresAt"
         :can-edit-location="data.role === 'admin'"
+        :periodic-href="(t) => router.resolve({ name: 'report-periodic', query: { t: token, d: deviceId, type: t } }).href"
         @save-location="onSaveLocation"
       />
     </div>
