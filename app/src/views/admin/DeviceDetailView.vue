@@ -27,8 +27,27 @@ interface Status {
 
 const device = ref<Device | null>(null)
 const status = ref<Status | null>(null)
+const reportRef = ref<InstanceType<typeof DeviceReport> | null>(null)
 
 const role = computed(() => auth.recipient?.role ?? 'viewer')
+const canEdit = computed(() => role.value === 'admin')
+
+async function onSaveLocation(address: string) {
+  if (!device.value) return
+  // RLS protects the company; admin can update only own-company devices
+  const { data: updated, error: updErr } = await supabase
+    .from('devices')
+    .update({ address })
+    .eq('id', device.value.id)
+    .select('id, name, address, latitude, longitude')
+    .single()
+  if (updErr) {
+    reportRef.value?.setLocationFeedback('error', updErr.message)
+    return
+  }
+  device.value = updated
+  reportRef.value?.setLocationFeedback('success', 'Adresse enregistrée.')
+}
 
 async function loadDetail(deviceId: string) {
   loading.value = true
@@ -101,9 +120,12 @@ onMounted(() => loadDetail(String(route.params.id)))
 
     <DeviceReport
       v-else-if="device"
+      ref="reportRef"
       :device="device"
       :status="status"
       :role="role"
+      :can-edit-location="canEdit"
+      @save-location="onSaveLocation"
     />
   </section>
 </template>

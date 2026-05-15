@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { formatRelative, isOnline } from '@/lib/utils'
 
 interface Device {
@@ -36,11 +36,44 @@ const props = withDefaults(
     status: Status | null
     role?: string
     expiresAt?: string | null
+    canEditLocation?: boolean
   }>(),
-  { role: 'viewer', expiresAt: null },
+  { role: 'viewer', expiresAt: null, canEditLocation: false },
 )
 
+const emit = defineEmits<{
+  (e: 'save-location', address: string): void
+}>()
+
 const activeTab = ref<'data' | 'status' | 'config'>('data')
+
+const addressDraft = ref('')
+const savingLocation = ref(false)
+const locationFeedback = ref<{ kind: 'success' | 'error'; message: string } | null>(null)
+
+watch(
+  () => props.device.address,
+  (v) => { addressDraft.value = v ?? '' },
+  { immediate: true },
+)
+
+function submitAddress() {
+  const a = addressDraft.value.trim()
+  if (!a) return
+  locationFeedback.value = null
+  savingLocation.value = true
+  emit('save-location', a)
+}
+
+defineExpose({
+  setLocationFeedback(kind: 'success' | 'error', message: string) {
+    locationFeedback.value = { kind, message }
+    savingLocation.value = false
+  },
+  resetSaving() {
+    savingLocation.value = false
+  },
+})
 
 const online = computed(() => isOnline(props.status?.receivedAt))
 const lastSeen = computed(() => formatRelative(props.status?.receivedAt))
@@ -263,14 +296,65 @@ function formatValue(v: unknown, unit?: string): string {
       <p v-if="!isAdmin" class="font-mono text-xs text-muted-foreground">
         Accès en lecture seule — seuls les administrateurs peuvent modifier la configuration.
       </p>
+
       <div v-else class="border border-border rounded-md bg-card/40 p-5">
-        <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Adresse enregistrée</div>
-        <div class="text-sm mb-4">{{ device.address || 'Aucune adresse renseignée.' }}</div>
-        <slot name="config-extra">
-          <p class="text-xs text-muted-foreground">
-            Le formulaire de mise à jour sera disponible dans la prochaine itération.
-          </p>
-        </slot>
+        <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+          Adresse enregistrée
+        </div>
+        <div class="text-sm mb-5 break-words">
+          {{ device.address || 'Aucune adresse renseignée.' }}
+        </div>
+
+        <template v-if="canEditLocation">
+          <form @submit.prevent="submitAddress" class="space-y-3">
+            <div class="space-y-1.5">
+              <label
+                for="address-input"
+                class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+              >
+                Nouvelle adresse
+              </label>
+              <input
+                id="address-input"
+                v-model="addressDraft"
+                type="text"
+                required
+                placeholder="Ex: 12 rue de la Paix, 75002 Paris"
+                class="w-full bg-transparent border-0 border-b border-border focus:border-signal focus:outline-none px-0 py-2 text-sm font-mono placeholder:text-muted-foreground/40 transition"
+              />
+            </div>
+
+            <p
+              v-if="locationFeedback"
+              :class="[
+                'font-mono text-xs flex items-center gap-2',
+                locationFeedback.kind === 'success' ? 'text-signal' : 'text-offline',
+              ]"
+            >
+              <span
+                :class="[
+                  'size-1.5 rounded-full',
+                  locationFeedback.kind === 'success' ? 'bg-signal' : 'bg-offline',
+                ]"
+              />
+              {{ locationFeedback.message }}
+            </p>
+
+            <button
+              type="submit"
+              :disabled="savingLocation"
+              class="bg-signal text-primary-foreground font-semibold px-5 py-2.5 rounded-md transition disabled:opacity-60 disabled:cursor-not-allowed hover:brightness-110"
+            >
+              <span class="font-mono text-[11px] uppercase tracking-[0.22em]">
+                <template v-if="savingLocation">
+                  <span class="blink">▍</span> enregistrement
+                </template>
+                <template v-else>Enregistrer</template>
+              </span>
+            </button>
+          </form>
+        </template>
+        <slot v-else name="config-extra" />
       </div>
     </section>
 

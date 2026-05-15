@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { viewReport, type ViewReportData } from '@/lib/api'
+import { viewReport, updateLocation, type ViewReportData } from '@/lib/api'
 import { useTheme } from '@/composables/useTheme'
 import DeviceReport from '@/components/DeviceReport.vue'
 
@@ -12,9 +12,30 @@ const { theme, toggle: toggleTheme } = useTheme()
 const loading = ref(true)
 const error = ref<{ code: string; message: string } | null>(null)
 const data = ref<ViewReportData | null>(null)
+const reportRef = ref<InstanceType<typeof DeviceReport> | null>(null)
 
 const token = computed(() => String(route.query.t ?? ''))
 const deviceId = computed(() => String(route.query.d ?? ''))
+
+async function onSaveLocation(address: string) {
+  if (!data.value) return
+  const res = await updateLocation({ token: token.value, deviceId: deviceId.value, address })
+  if (!res.ok) {
+    reportRef.value?.setLocationFeedback('error', res.error.message)
+    return
+  }
+  // Optimistically update local state
+  data.value = {
+    ...data.value,
+    device: {
+      ...data.value.device,
+      address: res.data.address,
+      latitude: res.data.latitude,
+      longitude: res.data.longitude,
+    },
+  }
+  reportRef.value?.setLocationFeedback('success', 'Adresse mise à jour.')
+}
 
 onMounted(async () => {
   if (!token.value || !deviceId.value) {
@@ -77,10 +98,13 @@ onMounted(async () => {
 
       <DeviceReport
         v-else-if="data"
+        ref="reportRef"
         :device="data.device"
         :status="data.status"
         :role="data.role"
         :expires-at="data.expiresAt"
+        :can-edit-location="data.role === 'admin'"
+        @save-location="onSaveLocation"
       />
     </div>
   </main>
