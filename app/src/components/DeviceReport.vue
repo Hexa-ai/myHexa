@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { formatRelative, isOnline } from '@/lib/utils'
+import DeviceMap from '@/components/DeviceMap.vue'
 
 interface Device {
   id: string
@@ -46,6 +47,29 @@ const emit = defineEmits<{
 }>()
 
 const activeTab = ref<'data' | 'status' | 'config'>('data')
+
+const mapRef = ref<InstanceType<typeof DeviceMap> | null>(null)
+
+const mapMarkers = computed(() => {
+  const d = props.device
+  if (d.latitude == null || d.longitude == null) return []
+  return [
+    {
+      id: d.id,
+      lat: Number(d.latitude),
+      lng: Number(d.longitude),
+      label: d.name ?? undefined,
+      online: online.value,
+    },
+  ]
+})
+
+watch(activeTab, async (t) => {
+  if (t === 'data') {
+    await nextTick()
+    mapRef.value?.invalidateSize()
+  }
+})
 
 const addressDraft = ref('')
 const savingLocation = ref(false)
@@ -157,9 +181,18 @@ function formatValue(v: unknown, unit?: string): string {
 
     <!-- Données -->
     <section v-if="activeTab === 'data'" class="space-y-6">
-      <div class="border border-border rounded-md bg-card/40 p-5">
-        <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Adresse</div>
-        <div class="text-sm">{{ device.address || '—' }}</div>
+      <div class="border border-border rounded-md bg-card/40 p-5 space-y-4">
+        <div>
+          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Adresse</div>
+          <div class="text-sm">{{ device.address || '—' }}</div>
+        </div>
+        <DeviceMap
+          v-if="mapMarkers.length"
+          ref="mapRef"
+          :markers="mapMarkers"
+          height="240px"
+          :zoom="14"
+        />
       </div>
 
       <div>

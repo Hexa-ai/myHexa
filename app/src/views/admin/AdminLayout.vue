@@ -29,12 +29,18 @@ const email = computed(() => auth.recipient?.contact_email ?? '—')
 const role = computed(() => auth.recipient?.role ?? 'member')
 
 const breadcrumb = computed(() => {
-  const map: Record<string, string> = { 'admin-devices': 'devices' }
+  const map: Record<string, string> = {
+    'admin-devices': 'devices',
+    'admin-device-detail': 'devices / detail',
+    'admin-map': 'map',
+  }
   return map[String(route.name ?? '')] ?? String(route.name ?? '')
 })
 
 function goDevices() { router.push({ name: 'admin-devices' }) }
-const isDevices = computed(() => route.name === 'admin-devices')
+function goMap() { router.push({ name: 'admin-map' }) }
+const isDevices = computed(() => route.name === 'admin-devices' || route.name === 'admin-device-detail')
+const isMap = computed(() => route.name === 'admin-map')
 </script>
 
 <template>
@@ -80,6 +86,29 @@ const isDevices = computed(() => route.name === 'admin-devices')
           </svg>
           <span class="tracking-tight">Devices</span>
           <span v-if="isDevices" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
+        </button>
+
+        <button
+          @click="goMap"
+          :class="[
+            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
+            isMap
+              ? 'text-foreground bg-secondary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+          ]"
+        >
+          <span
+            :class="[
+              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
+              isMap ? 'bg-signal' : 'bg-transparent',
+            ]"
+          />
+          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path d="M1 6v17l7-3 8 3 7-3V3l-7 3-8-3-7 3Z" />
+            <path d="M8 3v17M16 6v17" stroke-opacity="0.5" />
+          </svg>
+          <span class="tracking-tight">Carte</span>
+          <span v-if="isMap" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
         </button>
 
         <div class="px-3 py-2.5 text-sm text-muted-foreground/40 cursor-not-allowed select-none flex items-center gap-3">
