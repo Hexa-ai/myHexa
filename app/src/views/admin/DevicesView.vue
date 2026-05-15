@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useDevices } from '@/composables/useDevices'
 import { formatRelative, isOnline } from '@/lib/utils'
 
+const router = useRouter()
 const { devices, loading, error, load } = useDevices()
 const query = ref('')
+
+function openDevice(id: string) {
+  router.push({ name: 'admin-device-detail', params: { id } })
+}
 
 onMounted(load)
 
@@ -99,7 +105,8 @@ const offlineCount = computed(() => devices.value.length - onlineCount.value)
           <tr
             v-for="(device, i) in filtered"
             :key="device.id"
-            class="group border-b border-border/50 last:border-0 hover:bg-secondary/40 transition-colors fade-up"
+            @click="openDevice(device.id)"
+            class="group border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition-colors fade-up"
             :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
           >
             <td class="px-5 py-3.5">
