@@ -2,13 +2,19 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useAlarmsStore } from '@/stores/alarms'
 import { useTheme } from '@/composables/useTheme'
+import ToastContainer from '@/components/ToastContainer.vue'
 
 const { theme, toggle: toggleTheme } = useTheme()
 
 const auth = useAuthStore()
+const alarms = useAlarmsStore()
 const router = useRouter()
 const route = useRoute()
+
+onMounted(() => alarms.start())
+onUnmounted(() => alarms.stop())
 
 async function handleLogout() {
   await auth.signOut()
@@ -151,7 +157,19 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
             <path d="M12 9v4M12 17h.01" />
           </svg>
           <span class="tracking-tight">Alarmes</span>
-          <span v-if="isAlarms" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
+          <span
+            v-if="alarms.total > 0"
+            class="ml-auto font-mono text-[10px] font-semibold tabular px-1.5 py-0.5 rounded bg-offline text-background"
+            :title="`${alarms.activeAlarms} alarmes · ${alarms.openInterventions} interventions`"
+          >
+            {{ alarms.total }}
+          </span>
+          <span
+            v-else-if="isAlarms"
+            class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal"
+          >
+            ●
+          </span>
         </button>
 
         <div class="px-3 py-2.5 text-sm text-muted-foreground/40 cursor-not-allowed select-none flex items-center gap-3">
@@ -210,6 +228,19 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
           <span class="text-foreground truncate">{{ breadcrumb }}</span>
         </div>
         <div class="flex items-center gap-2 sm:gap-5 text-[11px] font-mono text-muted-foreground">
+          <button
+            v-if="alarms.total > 0"
+            @click="router.push({ name: 'admin-alarms' })"
+            :class="[
+              'inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded-md transition border-2',
+              'border-offline/50 bg-offline/10 text-offline hover:bg-offline/20',
+            ]"
+            :title="`${alarms.activeAlarms} alarmes capteur · ${alarms.openInterventions} interventions ouvertes`"
+          >
+            <span class="size-1.5 rounded-full bg-offline pulse-dot" />
+            <span class="tabular">{{ alarms.total }}</span>
+            <span class="hidden sm:inline">à traiter</span>
+          </button>
           <span class="hidden sm:flex items-center gap-1.5">
             <span class="size-1 rounded-full bg-signal pulse-dot" />
             <span class="uppercase tracking-wider">Live</span>
@@ -247,6 +278,8 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
         </span>
       </footer>
     </div>
+
+    <ToastContainer />
   </div>
 </template>
 
