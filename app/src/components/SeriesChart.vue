@@ -53,9 +53,18 @@ const wrapper = ref<HTMLDivElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
 let chart: Chart | null = null
 let timestamps: number[] = []
+let applyingExternalZoom = false
 
 const isFs = ref(false)
-const { activeTs, set: setSyncTs, isOwner, reset: resetSync } = useChartSync()
+const {
+  activeTs,
+  setCursor,
+  isCursorOwner,
+  resetCursor,
+  zoomRange,
+  setZoom,
+  isZoomOwner,
+} = useChartSync()
 
 function fmtTs(ts: number | string): string {
   return new Date(ts).toLocaleString('fr-FR', {
@@ -64,6 +73,21 @@ function fmtTs(ts: number | string): string {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+// Broadcast our visible x-range to the sync bus.
+function emitZoom() {
+  if (!chart || applyingExternalZoom || timestamps.length === 0) return
+  const x = chart.scales.x
+  const minIdx = Math.max(0, Math.floor(x.min as number))
+  const maxIdx = Math.min(timestamps.length - 1, Math.ceil(x.max as number))
+  const total = timestamps.length - 1
+  // If fully unzoomed, broadcast null
+  if (minIdx <= 0 && maxIdx >= total) {
+    setZoom(null)
+    return
+  }
+  setZoom({ min: timestamps[minIdx], max: timestamps[maxIdx] })
 }
 
 function build() {
@@ -99,12 +123,17 @@ function build() {
         legend: { display: true, position: 'top' },
         tooltip: { intersect: false, mode: 'index' },
         zoom: {
-          pan: { enabled: true, mode: 'x' },
+          pan: {
+            enabled: true,
+            mode: 'x',
+            onPanComplete: () => emitZoom(),
+          },
           zoom: {
             wheel: { enabled: true },
             pinch: { enabled: true },
             drag: { enabled: false },
             mode: 'x',
+            onZoomComplete: () => emitZoom(),
           },
         },
       },
@@ -116,22 +145,58 @@ function build() {
         if (!elements.length || !chart) return
         const idx = elements[0].index
         const ts = timestamps[idx]
-        if (Number.isFinite(ts)) setSyncTs(ts)
+        if (Number.isFinite(ts)) setCursor(ts)
       },
     },
   })
+
+  // If a zoom range is already set in the sync bus, apply it now.
+  if (zoomRange.value) applyZoomFromRange(zoomRange.value)
 }
 
-// Listen to shared cursor: when another chart drives, highlight the closest point here.
+function applyZoomFromRange(range: { min: number; max: number } | null) {
+  if (!chart || timestamps.length === 0) return
+  applyingExternalZoom = true
+  try {
+    if (!range) {
+      chart.resetZoom('none')
+    } else {
+      // Find indices closest to range.min and range.max in our local timestamps.
+      let minIdx = 0
+      let maxIdx = timestamps.length - 1
+      for (let i = 0; i < timestamps.length; i++) {
+        if (timestamps[i] >= range.min) {
+          minIdx = i
+          break
+        }
+      }
+      for (let i = timestamps.length - 1; i >= 0; i--) {
+        if (timestamps[i] <= range.max) {
+          maxIdx = i
+          break
+        }
+      }
+      if (maxIdx < minIdx) maxIdx = minIdx
+      chart.zoomScale('x', { min: minIdx, max: maxIdx }, 'none')
+    }
+  } finally {
+    // Defer reset so onZoomComplete (if it fires) sees the guard.
+    setTimeout(() => {
+      applyingExternalZoom = false
+    }, 0)
+  }
+}
+
+// Sync cursor across charts
 watch(activeTs, (ts) => {
-  if (!chart || ts == null) {
-    chart?.setActiveElements([])
-    chart?.tooltip?.setActiveElements([], { x: 0, y: 0 })
-    chart?.update('none')
+  if (!chart) return
+  if (ts == null) {
+    chart.setActiveElements([])
+    chart.tooltip?.setActiveElements([], { x: 0, y: 0 })
+    chart.update('none')
     return
   }
-  if (isOwner()) return // our own write — skip echo
-  // Find closest index by timestamp
+  if (isCursorOwner()) return
   let best = 0
   let bestDiff = Infinity
   for (let i = 0; i < timestamps.length; i++) {
@@ -144,16 +209,20 @@ watch(activeTs, (ts) => {
   const datasetIndex = 0
   chart.setActiveElements([{ datasetIndex, index: best }])
   if (chart.tooltip) {
-    chart.tooltip.setActiveElements(
-      [{ datasetIndex, index: best }],
-      { x: 0, y: 0 },
-    )
+    chart.tooltip.setActiveElements([{ datasetIndex, index: best }], { x: 0, y: 0 })
   }
   chart.update('none')
 })
 
-function resetZoom() {
-  chart?.resetZoom()
+// Sync zoom across charts
+watch(zoomRange, (range) => {
+  if (isZoomOwner()) return
+  applyZoomFromRange(range)
+})
+
+function resetZoomLocal() {
+  setZoom(null) // broadcast: triggers other charts via watch + ours
+  chart?.resetZoom('none')
 }
 
 async function toggleFullscreen() {
@@ -178,7 +247,6 @@ async function toggleFullscreen() {
     if (req) {
       await req.call(el)
     } else {
-      // Fallback: CSS-only fake fullscreen
       isFs.value = true
     }
   } catch {
@@ -188,15 +256,12 @@ async function toggleFullscreen() {
 
 function onFsChange() {
   const doc = document as Document & { webkitFullscreenElement?: Element | null }
-  const native = doc.fullscreenElement === wrapper.value || doc.webkitFullscreenElement === wrapper.value
-  isFs.value = native || isFs.value === true && !doc.fullscreenElement && !doc.webkitFullscreenElement
-    ? native
-    : false
+  isFs.value = doc.fullscreenElement === wrapper.value || doc.webkitFullscreenElement === wrapper.value
   setTimeout(() => chart?.resize(), 100)
 }
 
 function onMouseLeave() {
-  if (isOwner()) resetSync()
+  if (isCursorOwner()) resetCursor()
 }
 
 onMounted(() => {
@@ -209,7 +274,7 @@ onBeforeUnmount(() => {
   chart?.destroy()
   document.removeEventListener('fullscreenchange', onFsChange)
   document.removeEventListener('webkitfullscreenchange', onFsChange)
-  resetSync()
+  resetCursor()
 })
 </script>
 
@@ -223,7 +288,7 @@ onBeforeUnmount(() => {
     <div class="absolute top-2 right-2 z-10 flex gap-1">
       <button
         type="button"
-        @click="resetZoom"
+        @click="resetZoomLocal"
         title="Réinitialiser le zoom"
         class="size-7 inline-flex items-center justify-center rounded border border-border bg-card/80 backdrop-blur-sm text-muted-foreground hover:text-signal hover:border-signal/60 transition"
       >
