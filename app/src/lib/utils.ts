@@ -19,20 +19,22 @@ export const SEVERITY_ICON: Record<Severity, string> = {
   error: '●',
 }
 
-/**
- * Canonical filled chip — same recipe across filter buttons (active state)
- * and table pills so the colours line up perfectly. Background = full
- * severity colour, foreground = dark text for contrast.
- */
+/** Strong chip used in tables — colored bg + border + bold text. */
 export function severityPillClass(level: string | null | undefined): string {
   const k = String(level ?? '').toLowerCase() as Severity
-  if (k === 'error') return 'bg-offline text-background border border-offline font-semibold'
-  if (k === 'warning') return 'bg-warn text-background border border-warn font-semibold'
-  if (k === 'info') return 'bg-signal text-primary-foreground border border-signal font-semibold'
-  return 'bg-muted text-muted-foreground border border-border font-medium'
+  if (k === 'error') {
+    return 'bg-offline/15 text-offline border border-offline/40 font-semibold'
+  }
+  if (k === 'warning') {
+    return 'bg-warn/15 text-warn border border-warn/40 font-semibold'
+  }
+  if (k === 'info') {
+    return 'bg-signal/10 text-signal border border-signal/30 font-semibold'
+  }
+  return 'bg-muted text-muted-foreground border border-border'
 }
 
-/** Toggle/select buttons : inactive = outline ; active = the canonical pill. */
+/** For toggle/select buttons : inactive is outline-only, active is filled. */
 export function severityButtonClass(level: Severity, active: boolean): string {
   if (active) {
     if (level === 'error') return 'bg-offline text-background border-offline shadow-[0_0_30px_-12px_var(--offline)]'
