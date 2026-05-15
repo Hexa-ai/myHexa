@@ -84,7 +84,7 @@ onMounted(async () => {
       </button>
     </header>
 
-    <div class="max-w-5xl mx-auto px-6 py-10">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 lg:py-10">
       <div v-if="loading" class="border border-border rounded-md bg-card/40 p-10 text-center font-mono text-sm text-muted-foreground">
         <span class="blink">▍</span> chargement du rapport…
       </div>

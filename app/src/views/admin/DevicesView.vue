@@ -29,36 +29,36 @@ const offlineCount = computed(() => devices.value.length - onlineCount.value)
 </script>
 
 <template>
-  <section class="px-8 py-10 max-w-[1400px] mx-auto">
+  <section class="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 max-w-[1400px] mx-auto">
     <!-- Heading -->
-    <header class="flex items-end justify-between mb-10 fade-up">
+    <header class="flex flex-col md:flex-row md:items-end md:justify-between gap-5 mb-8 sm:mb-10 fade-up">
       <div>
         <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-3 flex items-center gap-2">
           <span class="text-signal">⬢</span> Fleet · read-only
         </div>
-        <h1 class="text-4xl font-semibold tracking-tight">
+        <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">
           Devices<span class="text-signal">.</span>
         </h1>
         <p class="mt-3 text-sm text-muted-foreground max-w-md">
-          Inventaire en direct des capteurs déployés. Statut basé sur la dernière télémétrie reçue (seuil 1 h).
+          Inventaire en direct des capteurs déployés. Statut basé sur la dernière télémétrie (seuil 1 h).
         </p>
       </div>
 
       <!-- KPI strip -->
-      <div class="grid grid-cols-3 gap-px bg-border border border-border rounded-sm overflow-hidden">
-        <div class="bg-card px-5 py-3 min-w-[110px]">
-          <div class="text-[10px] uppercase tracking-widest text-muted-foreground">Total</div>
-          <div class="font-mono text-2xl tabular mt-0.5">{{ devices.length.toString().padStart(2, '0') }}</div>
+      <div class="grid grid-cols-3 gap-px bg-border border border-border rounded-sm overflow-hidden self-start md:self-auto w-full md:w-auto">
+        <div class="bg-card px-3 sm:px-5 py-2.5 sm:py-3 min-w-0">
+          <div class="text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground">Total</div>
+          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5">{{ devices.length.toString().padStart(2, '0') }}</div>
         </div>
-        <div class="bg-card px-5 py-3 min-w-[110px]">
-          <div class="text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+        <div class="bg-card px-3 sm:px-5 py-2.5 sm:py-3 min-w-0">
+          <div class="text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
             <span class="size-1 rounded-full bg-signal pulse-dot" /> Online
           </div>
-          <div class="font-mono text-2xl tabular mt-0.5 text-signal">{{ onlineCount.toString().padStart(2, '0') }}</div>
+          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5 text-signal">{{ onlineCount.toString().padStart(2, '0') }}</div>
         </div>
-        <div class="bg-card px-5 py-3 min-w-[110px]">
-          <div class="text-[10px] uppercase tracking-widest text-muted-foreground">Offline</div>
-          <div class="font-mono text-2xl tabular mt-0.5" :class="offlineCount > 0 ? 'text-offline' : ''">
+        <div class="bg-card px-3 sm:px-5 py-2.5 sm:py-3 min-w-0">
+          <div class="text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground">Offline</div>
+          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5" :class="offlineCount > 0 ? 'text-offline' : ''">
             {{ offlineCount.toString().padStart(2, '0') }}
           </div>
         </div>
@@ -66,8 +66,8 @@ const offlineCount = computed(() => devices.value.length - onlineCount.value)
     </header>
 
     <!-- Toolbar -->
-    <div class="flex items-center justify-between mb-3 fade-up" style="animation-delay: 60ms">
-      <div class="relative w-72">
+    <div class="flex items-center justify-between gap-3 mb-3 fade-up" style="animation-delay: 60ms">
+      <div class="relative flex-1 sm:flex-none sm:w-72">
         <span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs">⌕</span>
         <input
           v-model="query"
@@ -76,7 +76,7 @@ const offlineCount = computed(() => devices.value.length - onlineCount.value)
           class="w-full pl-8 pr-3 py-2 bg-card border border-border rounded-sm text-sm font-mono placeholder:text-muted-foreground/60 focus:outline-none focus:border-signal/60 focus:ring-1 focus:ring-signal/40 transition"
         />
       </div>
-      <div class="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+      <div class="text-[10px] sm:text-[11px] font-mono uppercase tracking-wider text-muted-foreground shrink-0">
         {{ filtered.length }} / {{ devices.length }} shown
       </div>
     </div>
@@ -89,15 +89,15 @@ const offlineCount = computed(() => devices.value.length - onlineCount.value)
       ERR · {{ error }}
     </div>
 
-    <!-- Table -->
-    <div v-else class="border border-border rounded-sm bg-card/40 overflow-hidden fade-up" style="animation-delay: 120ms">
+    <!-- Table (md+) -->
+    <div v-else class="hidden md:block border border-border rounded-sm bg-card/40 overflow-hidden fade-up" style="animation-delay: 120ms">
       <table class="w-full text-sm">
         <thead>
           <tr class="border-b border-border bg-card/60">
-            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-5 py-3 w-[180px]">Status</th>
+            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-5 py-3 w-[160px]">Status</th>
             <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-5 py-3">Name</th>
-            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-5 py-3">Serial</th>
-            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-5 py-3">MAC</th>
+            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-5 py-3 hidden lg:table-cell">Serial</th>
+            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-5 py-3 hidden xl:table-cell">MAC</th>
             <th class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-5 py-3 w-[200px]">Last seen</th>
           </tr>
         </thead>
@@ -129,10 +129,10 @@ const offlineCount = computed(() => devices.value.length - onlineCount.value)
                 <span class="font-medium tracking-tight">{{ device.name || '—' }}</span>
               </div>
             </td>
-            <td class="px-5 py-3.5 font-mono text-xs text-muted-foreground tabular">
+            <td class="px-5 py-3.5 font-mono text-xs text-muted-foreground tabular hidden lg:table-cell">
               {{ device.serial_number || '—' }}
             </td>
-            <td class="px-5 py-3.5 font-mono text-xs text-muted-foreground">
+            <td class="px-5 py-3.5 font-mono text-xs text-muted-foreground hidden xl:table-cell">
               {{ device.mac_eth0 || '—' }}
             </td>
             <td class="px-5 py-3.5 text-right">
@@ -151,6 +151,41 @@ const offlineCount = computed(() => devices.value.length - onlineCount.value)
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Card list (mobile only) -->
+    <div v-if="!loading && !error" class="md:hidden space-y-2 fade-up" style="animation-delay: 120ms">
+      <button
+        v-for="(device, i) in filtered"
+        :key="device.id"
+        @click="openDevice(device.id)"
+        class="w-full text-left border border-border rounded-md bg-card/40 px-4 py-3.5 hover:bg-secondary/40 transition-colors fade-up"
+        :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
+      >
+        <div class="flex items-center justify-between gap-3 mb-1.5">
+          <span class="font-medium tracking-tight truncate">{{ device.name || '—' }}</span>
+          <span
+            class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider shrink-0"
+            :class="isOnline(device.last_connection_at) ? 'text-signal' : 'text-offline/80'"
+          >
+            <span :class="['size-1.5 rounded-full', isOnline(device.last_connection_at) ? 'bg-signal pulse-dot' : 'bg-offline/70']" />
+            {{ isOnline(device.last_connection_at) ? 'online' : 'offline' }}
+          </span>
+        </div>
+        <div class="flex items-center justify-between gap-3 text-[11px] font-mono text-muted-foreground">
+          <span class="truncate">{{ device.serial_number || '—' }}</span>
+          <span class="tabular shrink-0">{{ formatRelative(device.last_connection_at) }}</span>
+        </div>
+      </button>
+      <div
+        v-if="filtered.length === 0"
+        class="border border-border rounded-md bg-card/40 p-10 text-center"
+      >
+        <div class="text-xl text-muted-foreground/60 font-light">Aucun device</div>
+        <div class="mt-2 text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+          no devices matching current view
+        </div>
+      </div>
     </div>
   </section>
 </template>

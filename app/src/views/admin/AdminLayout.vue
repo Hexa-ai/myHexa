@@ -37,15 +37,31 @@ const breadcrumb = computed(() => {
   return map[String(route.name ?? '')] ?? String(route.name ?? '')
 })
 
-function goDevices() { router.push({ name: 'admin-devices' }) }
-function goMap() { router.push({ name: 'admin-map' }) }
+const sidebarOpen = ref(false)
+function closeSidebar() { sidebarOpen.value = false }
+function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
+
+function goDevices() { router.push({ name: 'admin-devices' }); closeSidebar() }
+function goMap() { router.push({ name: 'admin-map' }); closeSidebar() }
 const isDevices = computed(() => route.name === 'admin-devices' || route.name === 'admin-device-detail')
 const isMap = computed(() => route.name === 'admin-map')
 </script>
 
 <template>
   <div class="min-h-screen flex text-foreground">
-    <aside class="w-64 shrink-0 border-r border-border bg-card/60 backdrop-blur-sm flex flex-col">
+    <!-- Mobile backdrop -->
+    <div
+      v-if="sidebarOpen"
+      @click="closeSidebar"
+      class="md:hidden fixed inset-0 bg-background/70 backdrop-blur-sm z-30"
+    />
+
+    <aside
+      :class="[
+        'fixed md:static inset-y-0 left-0 w-64 shrink-0 border-r border-border bg-card md:bg-card/60 backdrop-blur-sm flex flex-col z-40 transition-transform md:translate-x-0',
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+      ]"
+    >
       <!-- Logo -->
       <div class="px-5 pt-6 pb-5 border-b border-border">
         <img
@@ -149,20 +165,29 @@ const isMap = computed(() => route.name === 'admin-map')
     </aside>
 
     <div class="flex-1 flex flex-col min-w-0">
-      <header class="h-12 border-b border-border bg-background/60 backdrop-blur-sm flex items-center justify-between px-6">
-        <div class="flex items-center gap-2.5 text-xs font-mono text-muted-foreground">
-          <span class="text-signal">⬢</span>
-          <span class="text-muted-foreground/50">/</span>
-          <span>admin</span>
-          <span class="text-muted-foreground/50">/</span>
-          <span class="text-foreground">{{ breadcrumb }}</span>
+      <header class="h-12 border-b border-border bg-background/60 backdrop-blur-sm flex items-center justify-between px-3 sm:px-5 md:px-6">
+        <div class="flex items-center gap-2 sm:gap-2.5 text-xs font-mono text-muted-foreground min-w-0">
+          <button
+            @click="toggleSidebar"
+            class="md:hidden size-8 inline-flex items-center justify-center rounded-md border border-border hover:border-signal/60 text-muted-foreground hover:text-foreground transition shrink-0"
+            aria-label="Menu"
+          >
+            <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M3 6h18M3 12h18M3 18h18" />
+            </svg>
+          </button>
+          <span class="text-signal hidden sm:inline">⬢</span>
+          <span class="text-muted-foreground/50 hidden sm:inline">/</span>
+          <span class="hidden sm:inline">admin</span>
+          <span class="text-muted-foreground/50 hidden sm:inline">/</span>
+          <span class="text-foreground truncate">{{ breadcrumb }}</span>
         </div>
-        <div class="flex items-center gap-5 text-[11px] font-mono text-muted-foreground">
-          <span class="flex items-center gap-1.5">
+        <div class="flex items-center gap-2 sm:gap-5 text-[11px] font-mono text-muted-foreground">
+          <span class="hidden sm:flex items-center gap-1.5">
             <span class="size-1 rounded-full bg-signal pulse-dot" />
             <span class="uppercase tracking-wider">Live</span>
           </span>
-          <span class="tabular">{{ clock }}</span>
+          <span class="tabular text-[10px] sm:text-[11px]">{{ clock }}</span>
           <button
             @click="toggleTheme"
             :title="theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'"

@@ -32,41 +32,41 @@ function onSelect(id: string) {
 </script>
 
 <template>
-  <section class="px-8 py-10 max-w-[1600px] mx-auto h-[calc(100vh-3rem-2.25rem)] flex flex-col">
+  <section class="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 w-full h-[calc(100vh-3rem-2.25rem)] flex flex-col">
     <!-- Header -->
-    <header class="flex items-end justify-between mb-6 fade-up">
+    <header class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6 fade-up">
       <div>
         <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-2 flex items-center gap-2">
           <span class="text-signal">⬢</span> Fleet · map view
         </div>
-        <h1 class="text-3xl font-semibold tracking-tight">
+        <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight">
           Carte de la <span class="text-signal">flotte</span>
         </h1>
         <p
           v-if="missingCount > 0"
           class="mt-2 font-mono text-xs text-muted-foreground"
         >
-          {{ missingCount }} équipement(s) sans coordonnées géographiques — invisibles sur la carte.
+          {{ missingCount }} équipement(s) sans coordonnées — invisibles sur la carte.
         </p>
       </div>
 
-      <div class="grid grid-cols-3 gap-px bg-border border border-border rounded-sm overflow-hidden">
-        <div class="bg-card px-5 py-3 min-w-[110px]">
-          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Géolocalisés</div>
-          <div class="font-mono text-2xl tabular mt-0.5">{{ markers.length.toString().padStart(2, '0') }}</div>
+      <div class="grid grid-cols-3 gap-px bg-border border border-border rounded-sm overflow-hidden self-start md:self-auto w-full md:w-auto">
+        <div class="bg-card px-3 sm:px-5 py-2.5 sm:py-3 min-w-0">
+          <div class="font-mono text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground">Géoloc.</div>
+          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5">{{ markers.length.toString().padStart(2, '0') }}</div>
         </div>
-        <div class="bg-card px-5 py-3 min-w-[110px]">
-          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+        <div class="bg-card px-3 sm:px-5 py-2.5 sm:py-3 min-w-0">
+          <div class="font-mono text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
             <span class="size-1 rounded-full bg-signal pulse-dot" /> Online
           </div>
-          <div class="font-mono text-2xl tabular mt-0.5 text-signal">
+          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5 text-signal">
             {{ onlineCount.toString().padStart(2, '0') }}
           </div>
         </div>
-        <div class="bg-card px-5 py-3 min-w-[110px]">
-          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Offline</div>
+        <div class="bg-card px-3 sm:px-5 py-2.5 sm:py-3 min-w-0">
+          <div class="font-mono text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground">Offline</div>
           <div
-            class="font-mono text-2xl tabular mt-0.5"
+            class="font-mono text-xl sm:text-2xl tabular mt-0.5"
             :class="offlineCount > 0 ? 'text-offline' : ''"
           >
             {{ offlineCount.toString().padStart(2, '0') }}

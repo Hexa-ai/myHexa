@@ -163,13 +163,13 @@ function formatValue(v: unknown, unit?: string): string {
     </header>
 
     <!-- Tabs -->
-    <nav class="inline-flex gap-1 p-1 border border-border rounded-md bg-card/40">
+    <nav class="inline-flex gap-1 p-1 border border-border rounded-md bg-card/40 overflow-x-auto max-w-full">
       <button
         v-for="tab in (['data', 'status', 'config'] as const)"
         :key="tab"
         @click="activeTab = tab"
         :class="[
-          'font-mono text-[11px] uppercase tracking-[0.18em] px-4 py-1.5 rounded transition',
+          'font-mono text-[10px] sm:text-[11px] uppercase tracking-[0.18em] px-3 sm:px-4 py-1.5 rounded transition whitespace-nowrap',
           activeTab === tab
             ? 'bg-signal text-primary-foreground'
             : 'text-muted-foreground hover:text-foreground',
@@ -203,8 +203,8 @@ function formatValue(v: unknown, unit?: string): string {
         >
           Aucune alarme active.
         </div>
-        <div v-else class="border border-offline/40 rounded-md bg-card/60 overflow-hidden">
-          <table class="w-full text-sm">
+        <div v-else class="border border-offline/40 rounded-md bg-card/60 overflow-x-auto">
+          <table class="w-full text-sm min-w-[480px]">
             <tbody>
               <tr v-for="(a, i) in activeAlarms" :key="i" class="border-b border-border/50 last:border-0">
                 <td class="px-4 py-3 font-medium">{{ a.name }}</td>
@@ -220,8 +220,8 @@ function formatValue(v: unknown, unit?: string): string {
 
       <div v-if="measures.length">
         <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Mesures</h2>
-        <div class="border border-border rounded-md bg-card/40 overflow-hidden">
-          <table class="w-full text-sm">
+        <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
+          <table class="w-full text-sm min-w-[480px]">
             <tbody>
               <tr v-for="(m, i) in measures" :key="i" class="border-b border-border/50 last:border-0">
                 <td class="px-4 py-3 font-medium">{{ m.name }}</td>
@@ -235,8 +235,8 @@ function formatValue(v: unknown, unit?: string): string {
 
       <div v-if="counters.length">
         <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Compteurs</h2>
-        <div class="border border-border rounded-md bg-card/40 overflow-hidden">
-          <table class="w-full text-sm">
+        <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
+          <table class="w-full text-sm min-w-[480px]">
             <tbody>
               <tr v-for="(c, i) in counters" :key="i" class="border-b border-border/50 last:border-0">
                 <td class="px-4 py-3 font-medium">{{ c.name }}</td>
@@ -250,8 +250,8 @@ function formatValue(v: unknown, unit?: string): string {
 
       <div v-if="states.length">
         <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">États</h2>
-        <div class="border border-border rounded-md bg-card/40 overflow-hidden">
-          <table class="w-full text-sm">
+        <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
+          <table class="w-full text-sm min-w-[480px]">
             <tbody>
               <tr v-for="(s, i) in states" :key="i" class="border-b border-border/50 last:border-0">
                 <td class="px-4 py-3 font-medium">{{ s.name }}</td>
@@ -302,8 +302,8 @@ function formatValue(v: unknown, unit?: string): string {
 
       <div v-if="payload.services && Object.keys(payload.services).length">
         <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Services</h2>
-        <div class="border border-border rounded-md bg-card/40 overflow-hidden">
-          <table class="w-full text-sm">
+        <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
+          <table class="w-full text-sm min-w-[480px]">
             <tbody>
               <tr v-for="(svc, name) in payload.services" :key="name" class="border-b border-border/50 last:border-0">
                 <td class="px-4 py-2.5 font-mono text-xs">{{ name }}</td>
