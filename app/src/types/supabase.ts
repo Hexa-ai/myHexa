@@ -263,6 +263,18 @@ export type Database = {
     }
     Views: { [_ in never]: never }
     Functions: {
+      alarm_history: {
+        Args: never
+        Returns: {
+          device_id: string
+          device_name: string | null
+          ts: string | null
+          variable_name: string | null
+          description: string | null
+          type_alarm: string | null
+          state_label: string | null
+        }[]
+      }
       current_recipient_company_id: { Args: never; Returns: string }
       devices_with_latest_status: {
         Args: never

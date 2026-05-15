@@ -34,6 +34,7 @@ const breadcrumb = computed(() => {
     'admin-device-detail': 'devices / detail',
     'admin-device-periodic': 'devices / rapports',
     'admin-map': 'map',
+    'admin-alarms': 'alarms',
   }
   return map[String(route.name ?? '')] ?? String(route.name ?? '')
 })
@@ -44,8 +45,10 @@ function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
 
 function goDevices() { router.push({ name: 'admin-devices' }); closeSidebar() }
 function goMap() { router.push({ name: 'admin-map' }); closeSidebar() }
-const isDevices = computed(() => route.name === 'admin-devices' || route.name === 'admin-device-detail')
+function goAlarms() { router.push({ name: 'admin-alarms' }); closeSidebar() }
+const isDevices = computed(() => route.name === 'admin-devices' || route.name === 'admin-device-detail' || route.name === 'admin-device-periodic')
 const isMap = computed(() => route.name === 'admin-map')
+const isAlarms = computed(() => route.name === 'admin-alarms')
 </script>
 
 <template>
@@ -126,6 +129,29 @@ const isMap = computed(() => route.name === 'admin-map')
           </svg>
           <span class="tracking-tight">Carte</span>
           <span v-if="isMap" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
+        </button>
+
+        <button
+          @click="goAlarms"
+          :class="[
+            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
+            isAlarms
+              ? 'text-foreground bg-secondary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+          ]"
+        >
+          <span
+            :class="[
+              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
+              isAlarms ? 'bg-signal' : 'bg-transparent',
+            ]"
+          />
+          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <path d="M12 9v4M12 17h.01" />
+          </svg>
+          <span class="tracking-tight">Alarmes</span>
+          <span v-if="isAlarms" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
         </button>
 
         <div class="px-3 py-2.5 text-sm text-muted-foreground/40 cursor-not-allowed select-none flex items-center gap-3">
