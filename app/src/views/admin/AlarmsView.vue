@@ -232,7 +232,66 @@ function matchesFilters(row: { device_id: string; type_alarm: string | null }): 
 const filteredActive = computed(() => activeAlarms.value.filter(matchesFilters))
 const filteredHistory = computed(() => history.value.filter(matchesFilters))
 
-const kpiActive = computed(() => filteredActive.value.length)
+// Unified live feed = active sensor alarms + open interventions matching filters
+interface LiveAlarmRow {
+  kind: 'alarm'
+  device_id: string
+  device_name: string | null
+  severity: AlarmType | null
+  title: string
+  subtitle: string | null
+  ts: string | null
+}
+interface LiveInterventionRow {
+  kind: 'intervention'
+  intervention: InterventionRow
+  device_id: string
+  device_name: string | null
+  severity: AlarmType
+  title: string
+  subtitle: string | null
+  ts: string | null
+}
+type LiveRow = LiveAlarmRow | LiveInterventionRow
+
+const CATEGORY_LABEL: Record<InterventionRow['category'], string> = {
+  intervention: 'Intervention',
+  incident: 'Incident',
+  controle: 'Contrôle',
+  autre: 'Autre',
+}
+
+const filteredLive = computed<LiveRow[]>(() => {
+  const alarms: LiveAlarmRow[] = filteredActive.value.map((a) => ({
+    kind: 'alarm',
+    device_id: a.device_id,
+    device_name: a.device_name,
+    severity: a.type_alarm,
+    title: a.variable_name,
+    subtitle: a.description,
+    ts: a.ts,
+  }))
+  const opens: LiveInterventionRow[] = interventions.value
+    .filter((r) => r.status === 'open' && matchesFilters({ device_id: r.device_id, type_alarm: r.severity }))
+    .map((r) => ({
+      kind: 'intervention',
+      intervention: r,
+      device_id: r.device_id,
+      device_name: deviceNameById.value.get(r.device_id) ?? null,
+      severity: r.severity,
+      title: `${CATEGORY_LABEL[r.category]} · ${r.technician_name}`,
+      subtitle: r.message,
+      ts: r.created_at,
+    }))
+  // newest first ; alarms without ts sort to the end
+  return [...alarms, ...opens].sort((a, b) => {
+    const ta = a.ts ? new Date(a.ts).getTime() : 0
+    const tb = b.ts ? new Date(b.ts).getTime() : 0
+    return tb - ta
+  })
+})
+
+const kpiActive = computed(() => filteredLive.value.length)
 const kpiHistory = computed(() => filteredHistory.value.length)
 
 // ------------------------------ Rendering helpers ----------------------------
@@ -349,10 +408,10 @@ function openDevice(id: string) {
       </nav>
     </div>
 
-    <!-- Live (active) alarms -->
+    <!-- Live (unified : sensor alarms + open interventions) -->
     <template v-if="mode === 'live'">
       <div
-        v-if="devicesLoading && !devices.length"
+        v-if="(devicesLoading || interventionsLoading) && !devices.length && !interventions.length"
         class="border border-border rounded-md bg-card/40 p-8 text-center font-mono text-sm text-muted-foreground"
       >
         <span class="blink">▍</span> chargement…
@@ -364,46 +423,77 @@ function openDevice(id: string) {
         ERR · {{ devicesError }}
       </div>
       <div
-        v-else-if="filteredActive.length === 0"
+        v-else-if="filteredLive.length === 0"
         class="border border-border rounded-md bg-card/40 p-6 text-sm text-muted-foreground"
       >
-        Aucune alarme active ne correspond aux filtres.
+        Aucune alarme ni intervention ouverte ne correspond aux filtres.
       </div>
       <div
         v-else
         class="border border-offline/40 rounded-md bg-card/60 overflow-x-auto fade-up"
         style="animation-delay: 100ms"
       >
-        <table class="w-full text-sm min-w-[720px]">
+        <table class="w-full text-sm min-w-[760px]">
           <thead>
             <tr class="border-b border-border bg-card/80">
-              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Type</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]">Source</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]">Sévérité</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Device</th>
-              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Variable</th>
-              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Description</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Sujet</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Détail</th>
               <th class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[160px]">Depuis</th>
             </tr>
           </thead>
           <tbody>
             <tr
-              v-for="(a, i) in filteredActive"
-              :key="`${a.device_id}-${a.variable_name}`"
+              v-for="(row, i) in filteredLive"
+              :key="row.kind === 'alarm' ? `a-${row.device_id}-${row.title}` : `i-${row.intervention.id}`"
               class="border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition"
-              @click="openDevice(a.device_id)"
+              @click="row.kind === 'alarm' ? openDevice(row.device_id) : openDetail(row.intervention)"
             >
               <td class="px-4 py-3">
                 <span
-                  :class="['inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', typeClass(a.type_alarm)]"
+                  v-if="row.kind === 'alarm'"
+                  class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-offline/10 text-offline border border-offline/30"
                 >
-                  <span v-if="a.type_alarm" class="text-xs leading-none">{{ SEVERITY_ICON[a.type_alarm as 'info' | 'warning' | 'error'] || '' }}</span>
-                  {{ a.type_alarm || '—' }}
+                  <span class="size-1 rounded-full bg-offline" /> Alarme
+                </span>
+                <span
+                  v-else
+                  class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-signal/10 text-signal border border-signal/30"
+                >
+                  <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                  </svg>
+                  Interv.
                 </span>
               </td>
-              <td class="px-4 py-3 font-medium">{{ a.device_name || '—' }}</td>
-              <td class="px-4 py-3 font-mono text-xs">{{ a.variable_name }}</td>
-              <td class="px-4 py-3 text-muted-foreground text-xs">{{ a.description || '—' }}</td>
+              <td class="px-4 py-3">
+                <span
+                  :class="['inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', typeClass(row.severity)]"
+                >
+                  <span v-if="row.severity" class="text-xs leading-none">{{ SEVERITY_ICON[row.severity as 'info' | 'warning' | 'error'] || '' }}</span>
+                  {{ row.severity || '—' }}
+                </span>
+              </td>
+              <td class="px-4 py-3 font-medium">{{ row.device_name || '—' }}</td>
+              <td class="px-4 py-3 font-mono text-xs">{{ row.title }}</td>
+              <td class="px-4 py-3 text-muted-foreground text-xs max-w-[320px]">
+                <div class="line-clamp-2">{{ row.subtitle || '—' }}</div>
+                <div
+                  v-if="row.kind === 'intervention' && row.intervention.photo_paths.length"
+                  class="mt-0.5 inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-signal"
+                >
+                  <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z" />
+                    <circle cx="9" cy="9" r="2" />
+                    <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                  </svg>
+                  {{ row.intervention.photo_paths.length }} photo{{ row.intervention.photo_paths.length > 1 ? 's' : '' }}
+                </div>
+              </td>
               <td class="px-4 py-3 text-right font-mono text-xs text-muted-foreground tabular">
-                {{ a.ts ? formatRelative(a.ts) : '—' }}
+                {{ row.ts ? formatRelative(row.ts) : '—' }}
               </td>
             </tr>
           </tbody>
