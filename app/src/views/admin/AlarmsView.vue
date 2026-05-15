@@ -54,7 +54,7 @@ type AlarmType = (typeof TYPE_OPTIONS)[number]
 
 const selectedDevice = ref<'all' | string>('all')
 const selectedTypes = ref<Set<AlarmType>>(new Set(TYPE_OPTIONS))
-const showHistory = ref(true)
+const mode = ref<'live' | 'history'>('live')
 
 function toggleType(t: AlarmType) {
   if (selectedTypes.value.has(t)) selectedTypes.value.delete(t)
@@ -209,86 +209,93 @@ function openDevice(id: string) {
         </button>
       </div>
 
-      <button
-        @click="showHistory = !showHistory"
-        :class="[
-          'ml-auto font-mono text-[10px] uppercase tracking-[0.18em] px-3 py-1.5 rounded-md border transition',
-          showHistory
-            ? 'border-signal/50 text-signal'
-            : 'border-border text-muted-foreground hover:text-foreground',
-        ]"
-      >
-        {{ showHistory ? 'Historique : ON' : 'Historique : OFF' }}
-      </button>
+      <nav class="ml-auto inline-flex gap-1 p-1 border border-border rounded-md bg-card/40 self-start">
+        <button
+          v-for="m in (['live', 'history'] as const)"
+          :key="m"
+          @click="mode = m"
+          :class="[
+            'font-mono text-[10px] uppercase tracking-[0.18em] px-3 py-1.5 rounded transition whitespace-nowrap',
+            mode === m
+              ? 'bg-signal text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground',
+          ]"
+        >
+          <span class="inline-flex items-center gap-1.5">
+            <span
+              v-if="m === 'live'"
+              class="size-1 rounded-full"
+              :class="mode === 'live' ? 'bg-primary-foreground/80' : 'bg-offline'"
+            />
+            {{ m === 'live' ? `Fil de l'eau · ${kpiActive}` : `Historique · ${kpiHistory}` }}
+          </span>
+        </button>
+      </nav>
     </div>
 
-    <!-- Active alarms -->
-    <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
-      Alarmes actives ({{ kpiActive }})
-    </h2>
-    <div
-      v-if="devicesLoading && !devices.length"
-      class="border border-border rounded-md bg-card/40 p-8 text-center font-mono text-sm text-muted-foreground mb-8"
-    >
-      <span class="blink">▍</span> chargement…
-    </div>
-    <div
-      v-else-if="devicesError"
-      class="border border-offline/40 rounded-md bg-offline-soft p-5 font-mono text-sm text-offline mb-8"
-    >
-      ERR · {{ devicesError }}
-    </div>
-    <div
-      v-else-if="filteredActive.length === 0"
-      class="border border-border rounded-md bg-card/40 p-6 text-sm text-muted-foreground mb-8"
-    >
-      Aucune alarme active ne correspond aux filtres.
-    </div>
-    <div
-      v-else
-      class="border border-offline/40 rounded-md bg-card/60 overflow-x-auto mb-10 fade-up"
-      style="animation-delay: 100ms"
-    >
-      <table class="w-full text-sm min-w-[720px]">
-        <thead>
-          <tr class="border-b border-border bg-card/80">
-            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Type</th>
-            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Device</th>
-            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Variable</th>
-            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Description</th>
-            <th class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[160px]">Depuis</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="(a, i) in filteredActive"
-            :key="`${a.device_id}-${a.variable_name}`"
-            class="border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition"
-            @click="openDevice(a.device_id)"
-          >
-            <td class="px-4 py-3">
-              <span
-                :class="['font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', typeClass(a.type_alarm)]"
-              >
-                {{ a.type_alarm || '—' }}
-              </span>
-            </td>
-            <td class="px-4 py-3 font-medium">{{ a.device_name || '—' }}</td>
-            <td class="px-4 py-3 font-mono text-xs">{{ a.variable_name }}</td>
-            <td class="px-4 py-3 text-muted-foreground text-xs">{{ a.description || '—' }}</td>
-            <td class="px-4 py-3 text-right font-mono text-xs text-muted-foreground tabular">
-              {{ a.ts ? formatRelative(a.ts) : '—' }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <!-- Live (active) alarms -->
+    <template v-if="mode === 'live'">
+      <div
+        v-if="devicesLoading && !devices.length"
+        class="border border-border rounded-md bg-card/40 p-8 text-center font-mono text-sm text-muted-foreground"
+      >
+        <span class="blink">▍</span> chargement…
+      </div>
+      <div
+        v-else-if="devicesError"
+        class="border border-offline/40 rounded-md bg-offline-soft p-5 font-mono text-sm text-offline"
+      >
+        ERR · {{ devicesError }}
+      </div>
+      <div
+        v-else-if="filteredActive.length === 0"
+        class="border border-border rounded-md bg-card/40 p-6 text-sm text-muted-foreground"
+      >
+        Aucune alarme active ne correspond aux filtres.
+      </div>
+      <div
+        v-else
+        class="border border-offline/40 rounded-md bg-card/60 overflow-x-auto fade-up"
+        style="animation-delay: 100ms"
+      >
+        <table class="w-full text-sm min-w-[720px]">
+          <thead>
+            <tr class="border-b border-border bg-card/80">
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Type</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Device</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Variable</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Description</th>
+              <th class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[160px]">Depuis</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(a, i) in filteredActive"
+              :key="`${a.device_id}-${a.variable_name}`"
+              class="border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition"
+              @click="openDevice(a.device_id)"
+            >
+              <td class="px-4 py-3">
+                <span
+                  :class="['font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', typeClass(a.type_alarm)]"
+                >
+                  {{ a.type_alarm || '—' }}
+                </span>
+              </td>
+              <td class="px-4 py-3 font-medium">{{ a.device_name || '—' }}</td>
+              <td class="px-4 py-3 font-mono text-xs">{{ a.variable_name }}</td>
+              <td class="px-4 py-3 text-muted-foreground text-xs">{{ a.description || '—' }}</td>
+              <td class="px-4 py-3 text-right font-mono text-xs text-muted-foreground tabular">
+                {{ a.ts ? formatRelative(a.ts) : '—' }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
 
     <!-- History -->
-    <template v-if="showHistory">
-      <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
-        Historique ({{ kpiHistory }})
-      </h2>
+    <template v-else>
       <div
         v-if="historyLoading && !history.length"
         class="border border-border rounded-md bg-card/40 p-8 text-center font-mono text-sm text-muted-foreground"
