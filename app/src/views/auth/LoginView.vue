@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useTheme } from '@/composables/useTheme'
@@ -12,6 +12,13 @@ const route = useRoute()
 
 const email = ref('')
 const password = ref('')
+
+onMounted(() => {
+  if (auth.isAuthenticated) {
+    const redirect = (route.query.redirect as string) || '/admin'
+    router.replace(redirect)
+  }
+})
 
 async function handleSubmit() {
   const ok = await auth.signIn(email.value, password.value)
