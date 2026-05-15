@@ -32,7 +32,7 @@ function onSelect(id: string) {
 </script>
 
 <template>
-  <section class="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 w-full h-[calc(100vh-3rem-2.25rem)] flex flex-col">
+  <section class="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 w-full h-full flex flex-col">
     <!-- Header -->
     <header class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6 fade-up">
       <div>

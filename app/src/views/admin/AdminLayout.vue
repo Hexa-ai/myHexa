@@ -48,7 +48,7 @@ const isMap = computed(() => route.name === 'admin-map')
 </script>
 
 <template>
-  <div class="min-h-screen flex text-foreground">
+  <div class="h-screen flex text-foreground overflow-hidden">
     <!-- Mobile backdrop -->
     <div
       v-if="sidebarOpen"
