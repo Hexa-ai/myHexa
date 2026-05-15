@@ -34,6 +34,10 @@ const reportRef = ref<InstanceType<typeof DeviceReport> | null>(null)
 
 const role = computed(() => auth.recipient?.role ?? 'viewer')
 const canEdit = computed(() => role.value === 'admin')
+const interventionUrl = computed(() => {
+  if (!device.value || typeof window === 'undefined') return null
+  return `${window.location.origin}/intervention?d=${device.value.id}`
+})
 
 async function onSaveLocation(address: string) {
   if (!device.value) return
@@ -153,6 +157,7 @@ useAutoRefresh(loadDetail, { intervalMs: 120_000 })
       :vnc-host="device.vnc_host"
       :vnc-port="device.vnc_port"
       :periodic-href="(t) => router.resolve({ name: 'admin-device-periodic', params: { id: device!.id }, query: { type: t } }).href"
+      :intervention-url="interventionUrl"
       @save-location="onSaveLocation"
       @save-vnc="onSaveVnc"
     />

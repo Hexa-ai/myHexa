@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { formatRelative, isOnline } from '@/lib/utils'
 import DeviceMap from '@/components/DeviceMap.vue'
+import QRCodeBlock from '@/components/QRCodeBlock.vue'
 import { useTailscaleReachable } from '@/composables/useTailscaleReachable'
 
 interface Device {
@@ -56,6 +57,7 @@ const props = withDefaults(
     vncPort?: number | null
     canEditVnc?: boolean
     periodicHref?: ((type: 'daily' | 'weekly') => string) | null
+    interventionUrl?: string | null
   }>(),
   {
     role: 'viewer',
@@ -65,6 +67,7 @@ const props = withDefaults(
     vncPort: 5900,
     canEditVnc: false,
     periodicHref: null,
+    interventionUrl: null,
   },
 )
 
@@ -548,6 +551,29 @@ async function copyTailscaleIp(ip: string) {
       </p>
 
       <div v-else class="space-y-5">
+        <!-- QR intervention block -->
+        <div v-if="interventionUrl" class="border border-border rounded-md bg-card/40 p-5">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div class="flex-1 min-w-[200px]">
+              <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+                QR intervention terrain
+              </div>
+              <p class="text-sm text-muted-foreground mb-2">
+                À imprimer / coller sur l'équipement. Les techniciens scannent → formulaire mobile pour journaliser une intervention sans avoir besoin d'un compte.
+              </p>
+              <p class="font-mono text-[11px] text-muted-foreground/80 break-all">
+                {{ interventionUrl }}
+              </p>
+            </div>
+            <QRCodeBlock
+              :value="interventionUrl"
+              :size="180"
+              :download="`intervention-${device.name || device.id}`"
+              :sublabel="device.name || ''"
+            />
+          </div>
+        </div>
+
         <!-- VNC block -->
         <div class="border border-border rounded-md bg-card/40 p-5">
           <div class="flex items-center justify-between mb-3 flex-wrap gap-2">

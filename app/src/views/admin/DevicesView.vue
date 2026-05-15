@@ -13,6 +13,7 @@ import {
 } from '@/lib/utils'
 import { useTailscaleReachable } from '@/composables/useTailscaleReachable'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import QRCodeBlock from '@/components/QRCodeBlock.vue'
 
 const router = useRouter()
 const { devices, loading, error, load } = useDevices()
@@ -26,6 +27,18 @@ function openDevice(id: string) {
 
 function openReports(id: string) {
   router.push({ name: 'admin-device-periodic', params: { id }, query: { type: 'daily' } })
+}
+
+const qrModalDevice = ref<{ id: string; name: string | null } | null>(null)
+const qrModalUrl = computed(() => {
+  if (!qrModalDevice.value || typeof window === 'undefined') return ''
+  return `${window.location.origin}/intervention?d=${qrModalDevice.value.id}`
+})
+function openQrModal(id: string, name: string | null) {
+  qrModalDevice.value = { id, name }
+}
+function closeQrModal() {
+  qrModalDevice.value = null
 }
 
 const filtered = computed(() => {
@@ -325,6 +338,20 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
                     <path d="M7 14l4-4 4 4 5-6" />
                   </svg>
                 </button>
+                <!-- QR intervention button -->
+                <button
+                  type="button"
+                  @click.stop="openQrModal(r.id, r.name)"
+                  title="QR intervention terrain"
+                  class="inline-flex items-center justify-center size-7 border border-border text-muted-foreground rounded-md hover:border-signal/60 hover:text-signal transition"
+                >
+                  <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                    <path d="M14 14h3v3h-3zM17 17h4v4h-4z" />
+                  </svg>
+                </button>
               </div>
             </td>
             <td class="px-4 py-3.5 text-right">
@@ -427,5 +454,43 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
         <div class="text-xl text-muted-foreground/60 font-light">Aucun device</div>
       </div>
     </div>
+
+    <!-- QR modal -->
+    <Teleport to="body">
+      <div
+        v-if="qrModalDevice"
+        @click.self="closeQrModal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm fade-up"
+      >
+        <div class="relative border border-border rounded-lg bg-card p-6 max-w-md w-full">
+          <button
+            @click="closeQrModal"
+            class="absolute top-3 right-3 size-7 inline-flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-signal/60 transition"
+            aria-label="Fermer"
+          >
+            <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+
+          <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-2 flex items-center gap-2">
+            <span class="text-signal">⬢</span> QR intervention
+          </div>
+          <h3 class="text-xl font-semibold tracking-tight mb-4">
+            {{ qrModalDevice.name || 'Device' }}
+          </h3>
+          <p class="text-sm text-muted-foreground mb-5">
+            À scanner par un technicien pour journaliser une intervention sans login.
+          </p>
+
+          <QRCodeBlock
+            :value="qrModalUrl"
+            :size="240"
+            :sublabel="qrModalUrl"
+            :download="`intervention-${qrModalDevice.name || qrModalDevice.id}`"
+          />
+        </div>
+      </div>
+    </Teleport>
   </section>
 </template>

@@ -43,7 +43,7 @@ async function loadHistory() {
 }
 
 async function refreshAll() {
-  await Promise.all([loadDevices(), loadHistory()])
+  await Promise.all([loadDevices(), loadHistory(), loadInterventions()])
 }
 useAutoRefresh(refreshAll, { intervalMs: 120_000 })
 
@@ -54,7 +54,79 @@ type AlarmType = (typeof TYPE_OPTIONS)[number]
 
 const selectedDevice = ref<'all' | string>('all')
 const selectedTypes = ref<Set<AlarmType>>(new Set(TYPE_OPTIONS))
-const mode = ref<'live' | 'history'>('live')
+const mode = ref<'live' | 'history' | 'interventions'>('live')
+
+// ------------------------------ Interventions --------------------------------
+
+interface InterventionRow {
+  id: string
+  device_id: string
+  created_at: string
+  technician_name: string
+  technician_contact: string | null
+  category: 'intervention' | 'incident' | 'controle' | 'autre'
+  severity: AlarmType
+  message: string | null
+  status: 'open' | 'resolved'
+  resolved_at: string | null
+}
+
+const interventions = ref<InterventionRow[]>([])
+const interventionsLoading = ref(false)
+const interventionsError = ref<string | null>(null)
+const interventionStatusFilter = ref<'all' | 'open' | 'resolved'>('open')
+
+async function loadInterventions() {
+  if (interventions.value.length === 0) interventionsLoading.value = true
+  interventionsError.value = null
+  try {
+    const { data, error: err } = await supabase
+      .from('field_interventions')
+      .select('id, device_id, created_at, technician_name, technician_contact, category, severity, message, status, resolved_at')
+      .order('created_at', { ascending: false })
+    if (err) {
+      interventionsError.value = err.message
+      return
+    }
+    interventions.value = (data ?? []) as InterventionRow[]
+  } catch (e) {
+    interventionsError.value = e instanceof Error ? e.message : 'Unknown error'
+  } finally {
+    interventionsLoading.value = false
+  }
+}
+
+async function toggleInterventionStatus(row: InterventionRow) {
+  const next = row.status === 'open' ? 'resolved' : 'open'
+  const { error: updErr } = await supabase
+    .from('field_interventions')
+    .update({
+      status: next,
+      resolved_at: next === 'resolved' ? new Date().toISOString() : null,
+    })
+    .eq('id', row.id)
+  if (updErr) {
+    interventionsError.value = updErr.message
+    return
+  }
+  await loadInterventions()
+}
+
+const deviceNameById = computed(() => {
+  const m = new Map<string, string>()
+  for (const d of devices.value) m.set(d.id, d.name ?? d.id)
+  return m
+})
+
+const filteredInterventions = computed(() => {
+  return interventions.value.filter((r) => {
+    if (selectedDevice.value !== 'all' && r.device_id !== selectedDevice.value) return false
+    if (!selectedTypes.value.has(r.severity)) return false
+    if (interventionStatusFilter.value !== 'all' && r.status !== interventionStatusFilter.value) return false
+    return true
+  })
+})
+const kpiInterventions = computed(() => filteredInterventions.value.length)
 
 function toggleType(t: AlarmType) {
   if (selectedTypes.value.has(t)) selectedTypes.value.delete(t)
@@ -209,26 +281,39 @@ function openDevice(id: string) {
         </button>
       </div>
 
-      <nav class="ml-auto inline-flex gap-1 p-1 border border-border rounded-md bg-card/40 self-start">
+      <nav class="ml-auto inline-flex gap-1 p-1 border border-border rounded-md bg-card/40 self-start flex-wrap">
         <button
-          v-for="m in (['live', 'history'] as const)"
-          :key="m"
-          @click="mode = m"
+          @click="mode = 'live'"
           :class="[
             'font-mono text-[10px] uppercase tracking-[0.18em] px-3 py-1.5 rounded transition whitespace-nowrap',
-            mode === m
-              ? 'bg-signal text-primary-foreground'
-              : 'text-muted-foreground hover:text-foreground',
+            mode === 'live' ? 'bg-signal text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
           ]"
         >
           <span class="inline-flex items-center gap-1.5">
             <span
-              v-if="m === 'live'"
               class="size-1 rounded-full"
               :class="mode === 'live' ? 'bg-primary-foreground/80' : 'bg-offline'"
             />
-            {{ m === 'live' ? `Fil de l'eau · ${kpiActive}` : `Historique · ${kpiHistory}` }}
+            Fil de l'eau · {{ kpiActive }}
           </span>
+        </button>
+        <button
+          @click="mode = 'history'"
+          :class="[
+            'font-mono text-[10px] uppercase tracking-[0.18em] px-3 py-1.5 rounded transition whitespace-nowrap',
+            mode === 'history' ? 'bg-signal text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+          ]"
+        >
+          Historique · {{ kpiHistory }}
+        </button>
+        <button
+          @click="mode = 'interventions'"
+          :class="[
+            'font-mono text-[10px] uppercase tracking-[0.18em] px-3 py-1.5 rounded transition whitespace-nowrap',
+            mode === 'interventions' ? 'bg-signal text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+          ]"
+        >
+          Interventions · {{ kpiInterventions }}
         </button>
       </nav>
     </div>
@@ -295,7 +380,7 @@ function openDevice(id: string) {
     </template>
 
     <!-- History -->
-    <template v-else>
+    <template v-else-if="mode === 'history'">
       <div
         v-if="historyLoading && !history.length"
         class="border border-border rounded-md bg-card/40 p-8 text-center font-mono text-sm text-muted-foreground"
@@ -355,6 +440,108 @@ function openDevice(id: string) {
                 >
                   {{ a.state_label || '—' }}
                 </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
+
+    <!-- Interventions -->
+    <template v-else>
+      <div class="mb-3 flex items-center gap-1.5 flex-wrap">
+        <button
+          v-for="s in (['open', 'resolved', 'all'] as const)"
+          :key="s"
+          @click="interventionStatusFilter = s"
+          :class="[
+            'font-mono text-[10px] uppercase tracking-[0.18em] px-3 py-1.5 rounded-md border transition',
+            interventionStatusFilter === s
+              ? 'border-signal/50 text-signal bg-signal-soft'
+              : 'border-border text-muted-foreground hover:text-foreground',
+          ]"
+        >
+          {{ s === 'open' ? 'Ouvertes' : s === 'resolved' ? 'Résolues' : 'Toutes' }}
+        </button>
+      </div>
+
+      <div
+        v-if="interventionsLoading && !interventions.length"
+        class="border border-border rounded-md bg-card/40 p-8 text-center font-mono text-sm text-muted-foreground"
+      >
+        <span class="blink">▍</span> chargement des interventions…
+      </div>
+      <div
+        v-else-if="interventionsError"
+        class="border border-offline/40 rounded-md bg-offline-soft p-5 font-mono text-sm text-offline"
+      >
+        ERR · {{ interventionsError }}
+      </div>
+      <div
+        v-else-if="filteredInterventions.length === 0"
+        class="border border-border rounded-md bg-card/40 p-6 text-sm text-muted-foreground"
+      >
+        Aucune intervention terrain pour ces filtres.
+      </div>
+      <div v-else class="border border-border rounded-md bg-card/40 overflow-x-auto fade-up" style="animation-delay: 100ms">
+        <table class="w-full text-sm min-w-[840px]">
+          <thead>
+            <tr class="border-b border-border bg-card/60">
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[140px]">Date</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]">Sévérité</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[120px]">Catégorie</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Device</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Technicien</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Message</th>
+              <th class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[150px]">Statut</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in filteredInterventions"
+              :key="row.id"
+              class="border-b border-border/50 last:border-0 hover:bg-secondary/40 transition"
+            >
+              <td class="px-4 py-3 font-mono text-xs text-muted-foreground tabular whitespace-nowrap">
+                {{ fmtFullDate(row.created_at) }}
+              </td>
+              <td class="px-4 py-3">
+                <span
+                  :class="['font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', typeClass(row.severity)]"
+                >
+                  {{ row.severity }}
+                </span>
+              </td>
+              <td class="px-4 py-3 font-mono text-xs text-muted-foreground">{{ row.category }}</td>
+              <td class="px-4 py-3">
+                <button
+                  @click="openDevice(row.device_id)"
+                  class="font-medium hover:text-signal transition text-left"
+                >
+                  {{ deviceNameById.get(row.device_id) || '—' }}
+                </button>
+              </td>
+              <td class="px-4 py-3">
+                <div class="font-medium">{{ row.technician_name }}</div>
+                <div v-if="row.technician_contact" class="font-mono text-[11px] text-muted-foreground">
+                  {{ row.technician_contact }}
+                </div>
+              </td>
+              <td class="px-4 py-3 text-muted-foreground text-xs max-w-[360px] whitespace-pre-wrap">
+                {{ row.message || '—' }}
+              </td>
+              <td class="px-4 py-3 text-right">
+                <button
+                  @click="toggleInterventionStatus(row)"
+                  :class="[
+                    'font-mono text-[10px] uppercase tracking-wider px-2.5 py-1 rounded transition',
+                    row.status === 'open'
+                      ? 'bg-amber/15 text-amber hover:bg-amber/25'
+                      : 'bg-signal-soft text-signal hover:bg-signal/20',
+                  ]"
+                >
+                  {{ row.status === 'open' ? 'Marquer résolu' : '✓ Résolu' }}
+                </button>
               </td>
             </tr>
           </tbody>

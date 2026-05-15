@@ -143,6 +143,56 @@ export type Database = {
           },
         ]
       }
+      field_interventions: {
+        Row: {
+          id: string
+          device_id: string
+          created_at: string
+          technician_name: string
+          technician_contact: string | null
+          category: 'intervention' | 'incident' | 'controle' | 'autre'
+          severity: 'info' | 'warning' | 'error'
+          message: string | null
+          status: 'open' | 'resolved'
+          resolved_at: string | null
+          resolved_by_recipient_id: string | null
+        }
+        Insert: {
+          id?: string
+          device_id: string
+          created_at?: string
+          technician_name: string
+          technician_contact?: string | null
+          category: 'intervention' | 'incident' | 'controle' | 'autre'
+          severity: 'info' | 'warning' | 'error'
+          message?: string | null
+          status?: 'open' | 'resolved'
+          resolved_at?: string | null
+          resolved_by_recipient_id?: string | null
+        }
+        Update: {
+          id?: string
+          device_id?: string
+          created_at?: string
+          technician_name?: string
+          technician_contact?: string | null
+          category?: 'intervention' | 'incident' | 'controle' | 'autre'
+          severity?: 'info' | 'warning' | 'error'
+          message?: string | null
+          status?: 'open' | 'resolved'
+          resolved_at?: string | null
+          resolved_by_recipient_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'field_interventions_device_id_fkey'
+            columns: ['device_id']
+            isOneToOne: false
+            referencedRelation: 'devices'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       recipients: {
         Row: {
           allowed_device_ids: string[] | null

@@ -9,6 +9,7 @@ import FleetMapView from '@/views/admin/FleetMapView.vue'
 import AlarmsView from '@/views/admin/AlarmsView.vue'
 import ReportView from '@/views/public/ReportView.vue'
 import PeriodicReportView from '@/views/public/PeriodicReportView.vue'
+import InterventionView from '@/views/public/InterventionView.vue'
 import RecoverView from '@/views/public/RecoverView.vue'
 import { requireAuth } from '@/router/guards'
 
@@ -19,6 +20,7 @@ export const router = createRouter({
     { path: '/login', name: 'login', component: LoginView },
     { path: '/report', name: 'report', component: ReportView },
     { path: '/report/periodic', name: 'report-periodic', component: PeriodicReportView },
+    { path: '/intervention', name: 'intervention', component: InterventionView },
     { path: '/recover', name: 'recover', component: RecoverView },
     {
       path: '/admin',

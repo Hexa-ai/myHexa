@@ -83,6 +83,26 @@ export function viewPeriodicReport(
   return get<ViewPeriodicReportData>('view-periodic-report', params)
 }
 
+// ----------------------------- submit-intervention --------------------------
+
+export interface SubmitInterventionInput {
+  deviceId: string
+  technicianName: string
+  technicianContact?: string | null
+  category: 'intervention' | 'incident' | 'controle' | 'autre'
+  severity: 'info' | 'warning' | 'error'
+  message?: string | null
+}
+
+export interface SubmitInterventionData {
+  id: string
+  createdAt: string
+  device: { id: string; name: string | null }
+}
+
+export const submitIntervention = (input: SubmitInterventionInput) =>
+  post<SubmitInterventionData>('submit-intervention', input)
+
 // ----------------------------- recover-link ---------------------------------
 
 export const recoverLink = (email: string, fromUrl?: string) =>
