@@ -62,13 +62,17 @@ const rows = computed<Row[]>(() =>
   })),
 )
 
-// Probe Tailscale reachability once we have at least one device with a Tailscale IP
+// Probe Tailscale reachability against the first few candidate IPs in parallel.
+// One success on any of them is enough to mark Tailscale as reachable.
 watch(
   devices,
   (list) => {
     if (tsReachable.value !== null) return
-    const first = list.find((d) => tailscaleIp(d.status_payload))
-    if (first) probeTs(tailscaleIp(first.status_payload)!)
+    const ips = list
+      .map((d) => tailscaleIp(d.status_payload))
+      .filter((ip): ip is string => Boolean(ip))
+      .slice(0, 5)
+    if (ips.length) probeTs(ips)
   },
   { immediate: true },
 )
