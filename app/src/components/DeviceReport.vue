@@ -22,8 +22,21 @@ interface StatusPayload {
     timestamp?: string
     type_alarm?: string
   }>
-  network?: Record<string, { ip?: string | null; connected?: boolean; mode?: string; ssid?: string | null }>
+  network?: Record<string, NetworkInterface>
   services?: Record<string, { enabled?: boolean }>
+}
+
+interface NetworkInterface {
+  ip?: string | null
+  mask?: string | null
+  gateway?: string | null
+  dns?: string[] | null
+  mode?: string | null
+  ssid?: string | null
+  signal?: number | null
+  technology?: string | null
+  operator?: string | null
+  connected?: boolean
 }
 
 interface Status {
@@ -121,6 +134,49 @@ function formatValue(v: unknown, unit?: string): string {
     return unit ? `${s} ${unit}` : s
   }
   return String(v)
+}
+
+const NETWORK_ORDER: Array<{ key: string; label: string }> = [
+  { key: 'eth0', label: 'Ethernet 0' },
+  { key: 'eth1', label: 'Ethernet 1' },
+  { key: 'wlan0', label: 'Wi-Fi' },
+  { key: 'wwan0', label: '4G / Cellulaire' },
+  { key: 'tailscale', label: 'Tailscale' },
+]
+
+const networkInterfaces = computed(() => {
+  const net = payload.value.network ?? {}
+  return NETWORK_ORDER.filter((n) => net[n.key]).map((n) => ({
+    ...n,
+    ifc: net[n.key] as NetworkInterface,
+  }))
+})
+
+function interfaceRows(ifc: NetworkInterface): Array<[string, string]> {
+  const rows: Array<[string, string]> = []
+  if (ifc.ip) rows.push(['IP', ifc.ip])
+  if (ifc.mask) rows.push(['Masque', ifc.mask])
+  if (ifc.gateway) rows.push(['Passerelle', ifc.gateway])
+  if (Array.isArray(ifc.dns) && ifc.dns.length) rows.push(['DNS', ifc.dns.join(', ')])
+  if (ifc.mode) rows.push(['Mode', ifc.mode])
+  if (ifc.ssid) rows.push(['SSID', ifc.ssid])
+  if (ifc.signal != null) rows.push(['Signal', `${ifc.signal}%`])
+  if (ifc.technology) rows.push(['Techno', String(ifc.technology).toUpperCase()])
+  if (ifc.operator) rows.push(['Opérateur', ifc.operator])
+  return rows
+}
+
+const copiedTailscaleIp = ref<string | null>(null)
+async function copyTailscaleIp(ip: string) {
+  try {
+    await navigator.clipboard.writeText(ip)
+    copiedTailscaleIp.value = ip
+    setTimeout(() => {
+      if (copiedTailscaleIp.value === ip) copiedTailscaleIp.value = null
+    }, 1500)
+  } catch {
+    // ignore — clipboard may be unavailable
+  }
 }
 </script>
 
@@ -283,19 +339,60 @@ function formatValue(v: unknown, unit?: string): string {
         </div>
       </div>
 
-      <div v-if="payload.network">
+      <div v-if="networkInterfaces.length">
         <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Réseau</h2>
         <div class="grid sm:grid-cols-2 gap-3">
           <div
-            v-for="(ifc, name) in payload.network"
-            :key="name"
-            class="border border-border rounded-md bg-card/40 p-4"
+            v-for="{ key, label, ifc } in networkInterfaces"
+            :key="key"
+            class="border border-border rounded-md bg-card/40 p-4 flex flex-col"
           >
-            <div class="flex items-center gap-2">
-              <span :class="['size-1.5 rounded-full', ifc.connected ? 'bg-signal' : 'bg-muted-foreground/40']" />
-              <span class="font-mono text-xs uppercase tracking-wider">{{ name }}</span>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span :class="['size-1.5 rounded-full shrink-0', ifc.connected ? 'bg-signal pulse-dot' : 'bg-muted-foreground/40']" />
+              <span class="font-medium text-sm">{{ label }}</span>
+              <span class="font-mono text-[10px] text-muted-foreground/70 uppercase tracking-wider">{{ key }}</span>
+              <span
+                v-if="!ifc.connected"
+                class="ml-auto font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+              >
+                déconnecté
+              </span>
             </div>
-            <div class="mt-2 font-mono text-xs text-muted-foreground">{{ ifc.ip || '—' }}</div>
+
+            <dl
+              v-if="interfaceRows(ifc).length"
+              class="mt-3 space-y-1 text-xs"
+            >
+              <div
+                v-for="[k, v] in interfaceRows(ifc)"
+                :key="k"
+                class="flex items-baseline gap-3"
+              >
+                <dt class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70 shrink-0 w-[78px]">
+                  {{ k }}
+                </dt>
+                <dd class="font-mono break-all text-foreground/90">{{ v }}</dd>
+              </div>
+            </dl>
+            <div v-else class="mt-3 font-mono text-xs text-muted-foreground/70">—</div>
+
+            <button
+              v-if="key === 'tailscale' && ifc.ip && ifc.connected"
+              type="button"
+              @click="copyTailscaleIp(ifc.ip!)"
+              class="mt-3 self-start inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-3 py-1.5 rounded-md hover:brightness-110 transition"
+            >
+              <template v-if="copiedTailscaleIp === ifc.ip">
+                ✓ Copié
+              </template>
+              <template v-else>
+                <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Copier l'IP
+              </template>
+            </button>
           </div>
         </div>
       </div>
