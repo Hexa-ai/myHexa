@@ -155,7 +155,10 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
           <span class="tracking-tight">Alarmes</span>
           <span
             v-if="alarms.total.value > 0"
-            class="ml-auto font-mono text-[10px] font-semibold tabular px-1.5 py-0.5 rounded bg-offline text-background"
+            :class="[
+              'ml-auto font-mono text-[10px] font-semibold tabular px-1.5 py-0.5 rounded bg-offline text-background',
+              alarms.justIncreased.value ? 'alarm-flash' : '',
+            ]"
             :title="`${alarms.active.value} alarmes · ${alarms.open.value} interventions`"
           >
             {{ alarms.total.value }}
@@ -227,7 +230,10 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
           <button
             v-if="alarms.total.value > 0"
             @click="router.push({ name: 'admin-alarms' })"
-            class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded-md transition border-2 border-offline/50 bg-offline/10 text-offline hover:bg-offline/20"
+            :class="[
+              'inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded-md transition border-2 border-offline/50 bg-offline/10 text-offline hover:bg-offline/20',
+              alarms.justIncreased.value ? 'alarm-flash' : '',
+            ]"
             :title="`${alarms.active.value} alarmes capteur · ${alarms.open.value} interventions ouvertes`"
           >
             <span class="size-1.5 rounded-full bg-offline pulse-dot" />

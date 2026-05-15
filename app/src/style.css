@@ -190,4 +190,18 @@
     0% { transform: translateX(-100%); }
     100% { transform: translateX(100%); }
   }
+
+  @keyframes alarm-flash {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgb(255 122 122 / 0.6);
+      transform: scale(1);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgb(255 122 122 / 0);
+      transform: scale(1.15);
+    }
+  }
+  .alarm-flash {
+    animation: alarm-flash 1s ease-out infinite;
+  }
 }
