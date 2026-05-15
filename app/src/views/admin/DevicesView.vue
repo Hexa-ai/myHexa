@@ -228,6 +228,13 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
               >
                 <span class="size-1 rounded-full bg-offline" /> {{ r.alarmCount }}
               </span>
+              <span
+                v-else-if="r.online"
+                class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-signal-soft text-signal"
+                title="Aucune alarme active"
+              >
+                <span class="size-1 rounded-full bg-signal" /> OK
+              </span>
               <span v-else class="font-mono text-xs text-muted-foreground/50">—</span>
             </td>
             <td class="px-4 py-3.5">
@@ -334,6 +341,12 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
               class="inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-offline-soft text-offline tabular"
             >
               <span class="size-1 rounded-full bg-offline" /> {{ r.alarmCount }} alarme
+            </span>
+            <span
+              v-else-if="r.online"
+              class="inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-signal-soft text-signal"
+            >
+              <span class="size-1 rounded-full bg-signal" /> OK
             </span>
             <span
               v-for="k in r.interfaces"
