@@ -202,6 +202,21 @@ Idem `INSERT/UPDATE/DELETE` avec `WITH CHECK` pour les écritures admin.
 
 Hors MVP. Tous les members ont les mêmes droits sur leur company. Ajout futur via colonne `permissions` si besoin.
 
+### Stockage des tokens publics (audit n8n existant — 2026-05-15)
+
+Les workflows n8n actifs (Report View `K6gY6Zcxy29OOJ1v`, Token Recovery `HCXdZ8tnbQ2bDH09`, Location Update `u85ZmX7GSWSUW15u`) utilisent une table **`report_tokens` déjà en place** (pas de signature : lookup DB).
+
+```
+report_tokens(token TEXT PK, recipient_id UUID, device_ids TEXT, expires_at TIMESTAMPTZ, created_at TIMESTAMPTZ)
+```
+
+Contrats existants à reproduire côté Edge Functions :
+- **`GET /report/view?t=<token>&d=<deviceId>`** : valide token (existe + non expiré) + autorisation `deviceId` via `recipients.allowed_device_ids` ou `company_id`, renvoie HTML détail (3 onglets : Données / État / Configuration). Erreur → 410 + form de récupération.
+- **`POST /recover-link`** (`email`, `from_url`) : lookup recipient par email, génère un nouveau token, persiste, envoie email avec lien.
+- **`POST /location/update`** (`token`, `deviceId`, `address`) : valide token + role admin, géocode (Nominatim/Photon ?), update `devices.latitude/longitude/address`, redirige vers `/report/view?...&saved=1`.
+
+Décision P3 : pas de migration `report_links`, on garde `report_tokens`. Les Edge Functions feront le lookup DB comme les workflows n8n. Migration vers tokens signés (JWT) reportée post-MVP.
+
 ## 7. Data flow
 
 ### Page publique (lien signé)
