@@ -26,7 +26,10 @@ export function useDevices() {
   const error = ref<string | null>(null)
 
   async function load() {
-    loading.value = true
+    // Soft-refresh: only show the spinner on the initial fetch. Subsequent
+    // refreshes (auto-refresh, manual retry with data already in place) keep
+    // the existing table visible.
+    if (devices.value.length === 0) loading.value = true
     error.value = null
     try {
       const { data, error: err } = await supabase

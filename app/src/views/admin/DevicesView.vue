@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDevices } from '@/composables/useDevices'
 import {
@@ -12,6 +12,7 @@ import {
   type InterfaceKey,
 } from '@/lib/utils'
 import { useTailscaleReachable } from '@/composables/useTailscaleReachable'
+import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
 const router = useRouter()
 const { devices, loading, error, load } = useDevices()
@@ -89,7 +90,7 @@ watch(
   { immediate: true },
 )
 
-onMounted(load)
+useAutoRefresh(load, { intervalMs: 120_000 })
 
 const IFC_LABEL: Record<InterfaceKey, string> = {
   eth0: 'Ethernet 0',

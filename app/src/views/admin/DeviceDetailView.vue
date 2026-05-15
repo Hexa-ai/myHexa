@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
+import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import DeviceReport from '@/components/DeviceReport.vue'
 
 const route = useRoute()
@@ -69,49 +70,52 @@ async function onSaveVnc({ host, port }: { host: string | null; port: number }) 
   )
 }
 
-async function loadDetail(deviceId: string) {
-  loading.value = true
+async function loadDetail() {
+  const deviceId = String(route.params.id)
+  // Soft-refresh: only show the spinner on the initial load
+  if (!device.value) loading.value = true
   error.value = null
 
-  // RLS already restricts to the user's company
-  const { data: d, error: dErr } = await supabase
-    .from('devices')
-    .select('id, name, address, latitude, longitude, vnc_host, vnc_port')
-    .eq('id', deviceId)
-    .maybeSingle()
+  try {
+    const { data: d, error: dErr } = await supabase
+      .from('devices')
+      .select('id, name, address, latitude, longitude, vnc_host, vnc_port')
+      .eq('id', deviceId)
+      .maybeSingle()
 
-  if (dErr) {
-    error.value = dErr.message
-    loading.value = false
-    return
-  }
-  if (!d) {
-    error.value = 'Équipement introuvable ou non accessible.'
-    loading.value = false
-    return
-  }
-  device.value = d
-
-  const { data: s, error: sErr } = await supabase
-    .from('reports')
-    .select('payload, received_at')
-    .eq('device_id', d.id)
-    .eq('type', 'status')
-    .order('received_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (!sErr && s) {
-    status.value = {
-      payload: (s.payload as Record<string, unknown>) ?? {},
-      receivedAt: s.received_at as string,
+    if (dErr) {
+      error.value = dErr.message
+      return
     }
-  }
+    if (!d) {
+      error.value = 'Équipement introuvable ou non accessible.'
+      return
+    }
+    device.value = d
 
-  loading.value = false
+    const { data: s, error: sErr } = await supabase
+      .from('reports')
+      .select('payload, received_at')
+      .eq('device_id', d.id)
+      .eq('type', 'status')
+      .order('received_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!sErr && s) {
+      status.value = {
+        payload: (s.payload as Record<string, unknown>) ?? {},
+        receivedAt: s.received_at as string,
+      }
+    }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Unknown error'
+  } finally {
+    loading.value = false
+  }
 }
 
-onMounted(() => loadDetail(String(route.params.id)))
+useAutoRefresh(loadDetail, { intervalMs: 120_000 })
 </script>
 
 <template>

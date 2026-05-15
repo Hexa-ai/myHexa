@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDevices } from '@/composables/useDevices'
 import { isOnline } from '@/lib/utils'
+import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import DeviceMap, { type MarkerInput } from '@/components/DeviceMap.vue'
 
 const router = useRouter()
 const { devices, loading, error, load } = useDevices()
 
-onMounted(load)
+useAutoRefresh(load, { intervalMs: 120_000 })
 
 const markers = computed<MarkerInput[]>(() =>
   devices.value
