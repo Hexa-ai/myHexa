@@ -23,6 +23,10 @@ function openDevice(id: string) {
   router.push({ name: 'admin-device-detail', params: { id } })
 }
 
+function openReports(id: string) {
+  router.push({ name: 'admin-device-periodic', params: { id }, query: { type: 'daily' } })
+}
+
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase()
   if (!q) return devices.value
@@ -252,50 +256,63 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
               <span v-else class="font-mono text-xs text-muted-foreground/50">—</span>
             </td>
             <td class="px-4 py-3.5">
-              <div v-if="r.tsIp && tsReachable === true" class="flex items-center gap-1.5">
-                <a
-                  :href="`http://${r.tsIp}`"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  :title="`Web · ${r.tsIp}`"
-                  @click.stop
-                  class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-2.5 py-1 rounded-md hover:brightness-110 transition"
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <template v-if="r.tsIp && tsReachable === true">
+                  <a
+                    :href="`http://${r.tsIp}`"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    :title="`Web · ${r.tsIp}`"
+                    @click.stop
+                    class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-2.5 py-1 rounded-md hover:brightness-110 transition"
+                  >
+                    <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <path d="M15 3h6v6M10 14 21 3" />
+                    </svg>
+                    Web
+                  </a>
+                  <a
+                    v-if="r.vnc"
+                    :href="r.vnc"
+                    :title="`VNC · ${r.vnc}`"
+                    @click.stop
+                    class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] border border-signal/50 text-signal px-2.5 py-1 rounded-md hover:bg-signal-soft transition"
+                  >
+                    <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="2" y="4" width="20" height="14" rx="2" />
+                      <path d="M8 21h8M12 18v3" />
+                    </svg>
+                    VNC
+                  </a>
+                </template>
+                <span
+                  v-else-if="r.tsIp && tsReachable === false"
+                  class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60"
+                  title="Activez Tailscale sur votre poste"
                 >
-                  <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                    <path d="M15 3h6v6M10 14 21 3" />
-                  </svg>
-                  Web
-                </a>
-                <a
-                  v-if="r.vnc"
-                  :href="r.vnc"
-                  :title="`VNC · ${r.vnc}`"
-                  @click.stop
-                  class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] border border-signal/50 text-signal px-2.5 py-1 rounded-md hover:bg-signal-soft transition"
+                  Hors VPN
+                </span>
+                <span
+                  v-else-if="r.tsIp"
+                  class="font-mono text-[10px] text-muted-foreground/40"
+                  title="Détection…"
                 >
-                  <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="2" y="4" width="20" height="14" rx="2" />
-                    <path d="M8 21h8M12 18v3" />
+                  …
+                </span>
+                <!-- Reports button: always available -->
+                <button
+                  type="button"
+                  @click.stop="openReports(r.id)"
+                  title="Rapports quotidiens / hebdomadaires"
+                  class="inline-flex items-center justify-center size-7 border border-border text-muted-foreground rounded-md hover:border-signal/60 hover:text-signal transition"
+                >
+                  <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 3v18h18" />
+                    <path d="M7 14l4-4 4 4 5-6" />
                   </svg>
-                  VNC
-                </a>
+                </button>
               </div>
-              <span
-                v-else-if="r.tsIp && tsReachable === false"
-                class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60"
-                title="Activez Tailscale sur votre poste"
-              >
-                Hors VPN
-              </span>
-              <span
-                v-else-if="r.tsIp"
-                class="font-mono text-[10px] text-muted-foreground/40"
-                title="Détection…"
-              >
-                …
-              </span>
-              <span v-else class="font-mono text-xs text-muted-foreground/50">—</span>
             </td>
             <td class="px-4 py-3.5 text-right">
               <span class="font-mono text-xs text-muted-foreground tabular">
@@ -361,24 +378,33 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
             {{ formatRelative(r.lastSeenIso) }}
           </span>
         </div>
-        <div v-if="r.tsIp && tsReachable === true" class="mt-2 flex items-center gap-1.5 flex-wrap">
-          <a
-            :href="`http://${r.tsIp}`"
-            target="_blank"
-            rel="noopener noreferrer"
-            @click.stop
-            class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-2.5 py-1 rounded-md"
+        <div class="mt-2 flex items-center gap-1.5 flex-wrap">
+          <template v-if="r.tsIp && tsReachable === true">
+            <a
+              :href="`http://${r.tsIp}`"
+              target="_blank"
+              rel="noopener noreferrer"
+              @click.stop
+              class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-2.5 py-1 rounded-md"
+            >
+              Web ↗
+            </a>
+            <a
+              v-if="r.vnc"
+              :href="r.vnc"
+              @click.stop
+              class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] border border-signal/50 text-signal px-2.5 py-1 rounded-md"
+            >
+              VNC
+            </a>
+          </template>
+          <button
+            type="button"
+            @click.stop="openReports(r.id)"
+            class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] border border-border text-foreground px-2.5 py-1 rounded-md"
           >
-            Web ↗
-          </a>
-          <a
-            v-if="r.vnc"
-            :href="r.vnc"
-            @click.stop
-            class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] border border-signal/50 text-signal px-2.5 py-1 rounded-md"
-          >
-            VNC
-          </a>
+            Rapports
+          </button>
         </div>
       </button>
       <div
