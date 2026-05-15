@@ -8,7 +8,9 @@ import {
   activeInterfaces,
   tailscaleIp,
   activeAlarmCount,
+  bestAccessTarget,
   type InterfaceKey,
+  type AccessTarget,
 } from '@/lib/utils'
 import { useTailscaleReachable } from '@/composables/useTailscaleReachable'
 
@@ -46,7 +48,7 @@ interface Row {
   lastSeenIso: string | null
   interfaces: InterfaceKey[]
   alarmCount: number
-  tsIp: string | null
+  access: AccessTarget | null
 }
 
 const rows = computed<Row[]>(() =>
@@ -58,7 +60,7 @@ const rows = computed<Row[]>(() =>
     lastSeenIso: d.last_connection_at,
     interfaces: activeInterfaces(d.status_payload),
     alarmCount: activeAlarmCount(d.status_payload),
-    tsIp: tailscaleIp(d.status_payload),
+    access: bestAccessTarget(d.status_payload, tsReachable.value),
   })),
 )
 
@@ -83,11 +85,11 @@ const IFC_LABEL: Record<InterfaceKey, string> = {
   tailscale: 'Tailscale',
 }
 const IFC_SHORT: Record<InterfaceKey, string> = {
-  eth0: 'E0',
-  eth1: 'E1',
-  wlan0: 'Wi',
+  eth0: 'ETH0',
+  eth1: 'ETH1',
+  wlan0: 'WIFI',
   wwan0: '4G',
-  tailscale: 'TS',
+  tailscale: 'VPN',
 }
 </script>
 
@@ -183,7 +185,7 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
             <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Name</th>
             <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]">Alarmes</th>
             <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[160px]">Réseau</th>
-            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[120px]">Tailscale</th>
+            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[140px]">Accès</th>
             <th class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[180px]">Last seen</th>
           </tr>
         </thead>
@@ -234,25 +236,25 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
             </td>
             <td class="px-4 py-3.5" @click.stop>
               <a
-                v-if="r.tsIp && tsReachable === true"
-                :href="`http://${r.tsIp}`"
+                v-if="r.access"
+                :href="`http://${r.access.ip}`"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-2.5 py-1 rounded-md hover:brightness-110 transition"
+                :title="`${IFC_LABEL[r.access.iface]} · ${r.access.ip}`"
+                :class="[
+                  'inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] px-2.5 py-1 rounded-md transition',
+                  r.access.network === 'tailscale'
+                    ? 'bg-signal text-primary-foreground hover:brightness-110'
+                    : 'border border-border text-foreground hover:border-signal/60 hover:text-signal',
+                ]"
               >
                 <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                   <path d="M15 3h6v6M10 14 21 3" />
                 </svg>
                 Ouvrir
+                <span class="opacity-70">· {{ IFC_SHORT[r.access.iface] }}</span>
               </a>
-              <span
-                v-else-if="r.tsIp"
-                class="font-mono text-[10px] text-muted-foreground/60"
-                :title="tsReachable === false ? 'Activez Tailscale pour ouvrir' : 'Détection en cours…'"
-              >
-                {{ r.tsIp }}
-              </span>
               <span v-else class="font-mono text-xs text-muted-foreground/50">—</span>
             </td>
             <td class="px-4 py-3.5 text-right">
@@ -313,15 +315,20 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
             {{ formatRelative(r.lastSeenIso) }}
           </span>
         </div>
-        <div v-if="r.tsIp && tsReachable === true" class="mt-2">
+        <div v-if="r.access" class="mt-2">
           <a
-            :href="`http://${r.tsIp}`"
+            :href="`http://${r.access.ip}`"
             target="_blank"
             rel="noopener noreferrer"
             @click.stop
-            class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-2.5 py-1 rounded-md"
+            :class="[
+              'inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] px-2.5 py-1 rounded-md',
+              r.access.network === 'tailscale'
+                ? 'bg-signal text-primary-foreground'
+                : 'border border-border text-foreground',
+            ]"
           >
-            Ouvrir Tailscale ↗
+            Ouvrir · {{ IFC_SHORT[r.access.iface] }} ↗
           </a>
         </div>
       </button>

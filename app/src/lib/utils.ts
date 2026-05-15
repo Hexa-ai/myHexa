@@ -47,6 +47,38 @@ export function tailscaleIp(payload: unknown): string | null {
   return null
 }
 
+const LAN_PRIORITY: InterfaceKey[] = ['eth1', 'eth0', 'wlan0']
+
+export interface AccessTarget {
+  ip: string
+  iface: InterfaceKey
+  network: 'tailscale' | 'lan'
+}
+
+/**
+ * Pick the best openable URL for the device given the viewer context.
+ * If `tailscaleReachable` is true and the device has a connected Tailscale IP,
+ * prefer it. Otherwise fall back to the first connected LAN interface IP.
+ */
+export function bestAccessTarget(
+  payload: unknown,
+  tailscaleReachable: boolean | null,
+): AccessTarget | null {
+  if (!payload || typeof payload !== 'object') return null
+  const net = (payload as { network?: Record<string, RawNetIfc> }).network
+  if (!net) return null
+
+  if (tailscaleReachable === true) {
+    const ts = net.tailscale
+    if (ts?.connected && ts.ip) return { ip: ts.ip, iface: 'tailscale', network: 'tailscale' }
+  }
+  for (const k of LAN_PRIORITY) {
+    const ifc = net[k]
+    if (ifc?.connected && ifc.ip) return { ip: ifc.ip, iface: k, network: 'lan' }
+  }
+  return null
+}
+
 export function activeAlarmCount(payload: unknown): number {
   if (!payload || typeof payload !== 'object') return 0
   const vars = (payload as { variables?: Array<{ category?: string; value: unknown }> }).variables
