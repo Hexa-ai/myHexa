@@ -18,13 +18,16 @@ export function useAlarmCounts() {
     if (stopped) return
     try {
       const { data, error } = await supabase.rpc('alarm_counts')
+      if (import.meta.env.DEV) {
+        console.info('[alarm_counts]', new Date().toLocaleTimeString(), { data, error })
+      }
       if (error) return
       const row = (data ?? [])[0]
       if (!row) return
       active.value = row.active_alarms ?? 0
       open.value = row.open_interventions ?? 0
-    } catch {
-      // silent — badge just doesn't update
+    } catch (e) {
+      if (import.meta.env.DEV) console.warn('[alarm_counts] throw', e)
     }
   }
 

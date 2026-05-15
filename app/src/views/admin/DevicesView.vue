@@ -14,10 +14,30 @@ import {
 import { useTailscaleReachable } from '@/composables/useTailscaleReachable'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import QRCodeBlock from '@/components/QRCodeBlock.vue'
+import { supabase } from '@/lib/supabase'
 
 const router = useRouter()
 const { devices, loading, error, load } = useDevices()
 const query = ref('')
+
+// Map<device_id, openInterventionCount>
+const openInterventionsByDevice = ref<Map<string, number>>(new Map())
+
+async function loadInterventionCounts() {
+  const { data } = await supabase
+    .from('field_interventions')
+    .select('device_id')
+    .eq('status', 'open')
+  const map = new Map<string, number>()
+  for (const row of data ?? []) {
+    map.set(row.device_id, (map.get(row.device_id) ?? 0) + 1)
+  }
+  openInterventionsByDevice.value = map
+}
+
+async function loadAll() {
+  await Promise.all([load(), loadInterventionCounts()])
+}
 
 const { reachable: tsReachable, probe: probeTs } = useTailscaleReachable()
 
@@ -54,7 +74,11 @@ const filtered = computed(() => {
 const onlineCount = computed(() => devices.value.filter((d) => isOnline(d.last_connection_at)).length)
 const offlineCount = computed(() => devices.value.length - onlineCount.value)
 const totalAlarms = computed(() =>
-  devices.value.reduce((sum, d) => sum + activeAlarmCount(d.status_payload), 0),
+  devices.value.reduce((sum, d) => {
+    const sensor = activeAlarmCount(d.status_payload)
+    const interv = openInterventionsByDevice.value.get(d.id) ?? 0
+    return sum + sensor + interv
+  }, 0),
 )
 
 interface Row {
@@ -81,7 +105,7 @@ const rows = computed<Row[]>(() => {
       // Hide interfaces / Tailscale IP / VNC when the device is offline:
       // the cached payload is stale, the device can't be reached anyway.
       interfaces: online ? activeInterfaces(d.status_payload) : [],
-      alarmCount: activeAlarmCount(d.status_payload),
+      alarmCount: activeAlarmCount(d.status_payload) + (openInterventionsByDevice.value.get(d.id) ?? 0),
       tsIp: online ? tailscaleIp(d.status_payload) : null,
       vnc: online ? vncUrl(d.vnc_host, d.vnc_port) : null,
     }
@@ -103,7 +127,7 @@ watch(
   { immediate: true },
 )
 
-useAutoRefresh(load, { intervalMs: 120_000 })
+useAutoRefresh(loadAll, { intervalMs: 120_000 })
 
 const IFC_LABEL: Record<InterfaceKey, string> = {
   eth0: 'Ethernet 0',
@@ -200,7 +224,7 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
     <div v-if="loading" class="border border-border rounded-sm bg-card/40 p-10 text-center font-mono text-sm text-muted-foreground">
       <span class="blink">▍</span> loading telemetry…
       <button
-        @click="load"
+        @click="loadAll"
         class="block mx-auto mt-4 text-[10px] uppercase tracking-wider text-muted-foreground/70 hover:text-signal transition"
       >
         Forcer le rechargement
@@ -209,7 +233,7 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
     <div v-else-if="error" class="border border-offline/40 rounded-sm bg-offline-soft p-5 font-mono text-sm text-offline flex items-center justify-between gap-3 flex-wrap">
       <span>ERR · {{ error }}</span>
       <button
-        @click="load"
+        @click="loadAll"
         class="font-mono text-[10px] uppercase tracking-wider border border-offline/40 px-2.5 py-1 rounded hover:bg-offline-soft transition"
       >
         Réessayer
