@@ -14,6 +14,8 @@ export interface DeviceWithStatus {
   latitude: number | null
   longitude: number | null
   last_connection_at: string | null
+  vnc_host: string | null
+  vnc_port: number | null
   status_payload: Record<string, unknown> | null
   status_received_at: string | null
 }
@@ -44,6 +46,8 @@ export function useDevices() {
       latitude: d.latitude,
       longitude: d.longitude,
       last_connection_at: d.last_connection_at,
+      vnc_host: d.vnc_host,
+      vnc_port: d.vnc_port,
       status_payload: d.status_payload as Record<string, unknown> | null,
       status_received_at: d.status_received_at,
     }))

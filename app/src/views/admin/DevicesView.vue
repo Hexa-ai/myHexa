@@ -8,6 +8,7 @@ import {
   activeInterfaces,
   tailscaleIp,
   activeAlarmCount,
+  vncUrl,
   type InterfaceKey,
 } from '@/lib/utils'
 import { useTailscaleReachable } from '@/composables/useTailscaleReachable'
@@ -47,6 +48,7 @@ interface Row {
   interfaces: InterfaceKey[]
   alarmCount: number
   tsIp: string | null
+  vnc: string | null
 }
 
 const rows = computed<Row[]>(() => {
@@ -58,11 +60,12 @@ const rows = computed<Row[]>(() => {
       serial: d.serial_number,
       online,
       lastSeenIso: d.last_connection_at,
-      // Hide interfaces / Tailscale IP when the device itself is offline:
+      // Hide interfaces / Tailscale IP / VNC when the device is offline:
       // the cached payload is stale, the device can't be reached anyway.
       interfaces: online ? activeInterfaces(d.status_payload) : [],
       alarmCount: activeAlarmCount(d.status_payload),
       tsIp: online ? tailscaleIp(d.status_payload) : null,
+      vnc: online ? vncUrl(d.vnc_host, d.vnc_port) : null,
     }
   })
 })
@@ -192,7 +195,7 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
             <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Name</th>
             <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]">Alarmes</th>
             <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[160px]">Réseau</th>
-            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[120px]">Accès</th>
+            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[170px]">Accès</th>
             <th class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[180px]">Last seen</th>
           </tr>
         </thead>
@@ -242,21 +245,35 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
               <span v-else class="font-mono text-xs text-muted-foreground/50">—</span>
             </td>
             <td class="px-4 py-3.5">
-              <a
-                v-if="r.tsIp && tsReachable === true"
-                :href="`http://${r.tsIp}`"
-                target="_blank"
-                rel="noopener noreferrer"
-                :title="`Tailscale · ${r.tsIp}`"
-                @click.stop
-                class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-2.5 py-1 rounded-md hover:brightness-110 transition"
-              >
-                <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                  <path d="M15 3h6v6M10 14 21 3" />
-                </svg>
-                Ouvrir
-              </a>
+              <div v-if="r.tsIp && tsReachable === true" class="flex items-center gap-1.5">
+                <a
+                  :href="`http://${r.tsIp}`"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  :title="`Web · ${r.tsIp}`"
+                  @click.stop
+                  class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-2.5 py-1 rounded-md hover:brightness-110 transition"
+                >
+                  <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <path d="M15 3h6v6M10 14 21 3" />
+                  </svg>
+                  Web
+                </a>
+                <a
+                  v-if="r.vnc"
+                  :href="r.vnc"
+                  :title="`VNC · ${r.vnc}`"
+                  @click.stop
+                  class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] border border-signal/50 text-signal px-2.5 py-1 rounded-md hover:bg-signal-soft transition"
+                >
+                  <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="4" width="20" height="14" rx="2" />
+                    <path d="M8 21h8M12 18v3" />
+                  </svg>
+                  VNC
+                </a>
+              </div>
               <span
                 v-else-if="r.tsIp && tsReachable === false"
                 class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60"
@@ -331,15 +348,23 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
             {{ formatRelative(r.lastSeenIso) }}
           </span>
         </div>
-        <div v-if="r.tsIp && tsReachable === true" class="mt-2">
+        <div v-if="r.tsIp && tsReachable === true" class="mt-2 flex items-center gap-1.5 flex-wrap">
           <a
             :href="`http://${r.tsIp}`"
             target="_blank"
             rel="noopener noreferrer"
             @click.stop
-            class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-2.5 py-1 rounded-md"
+            class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-2.5 py-1 rounded-md"
           >
-            Ouvrir ↗
+            Web ↗
+          </a>
+          <a
+            v-if="r.vnc"
+            :href="r.vnc"
+            @click.stop
+            class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] border border-signal/50 text-signal px-2.5 py-1 rounded-md"
+          >
+            VNC
           </a>
         </div>
       </button>

@@ -18,6 +18,8 @@ interface Device {
   address: string | null
   latitude: number | null
   longitude: number | null
+  vnc_host: string | null
+  vnc_port: number | null
 }
 
 interface Status {
@@ -34,12 +36,11 @@ const canEdit = computed(() => role.value === 'admin')
 
 async function onSaveLocation(address: string) {
   if (!device.value) return
-  // RLS protects the company; admin can update only own-company devices
   const { data: updated, error: updErr } = await supabase
     .from('devices')
     .update({ address })
     .eq('id', device.value.id)
-    .select('id, name, address, latitude, longitude')
+    .select('id, name, address, latitude, longitude, vnc_host, vnc_port')
     .single()
   if (updErr) {
     reportRef.value?.setLocationFeedback('error', updErr.message)
@@ -49,6 +50,25 @@ async function onSaveLocation(address: string) {
   reportRef.value?.setLocationFeedback('success', 'Adresse enregistrée.')
 }
 
+async function onSaveVnc({ host, port }: { host: string | null; port: number }) {
+  if (!device.value) return
+  const { data: updated, error: updErr } = await supabase
+    .from('devices')
+    .update({ vnc_host: host, vnc_port: port })
+    .eq('id', device.value.id)
+    .select('id, name, address, latitude, longitude, vnc_host, vnc_port')
+    .single()
+  if (updErr) {
+    reportRef.value?.setVncFeedback('error', updErr.message)
+    return
+  }
+  device.value = updated
+  reportRef.value?.setVncFeedback(
+    'success',
+    host ? 'Configuration VNC enregistrée.' : 'VNC désactivé.',
+  )
+}
+
 async function loadDetail(deviceId: string) {
   loading.value = true
   error.value = null
@@ -56,7 +76,7 @@ async function loadDetail(deviceId: string) {
   // RLS already restricts to the user's company
   const { data: d, error: dErr } = await supabase
     .from('devices')
-    .select('id, name, address, latitude, longitude')
+    .select('id, name, address, latitude, longitude, vnc_host, vnc_port')
     .eq('id', deviceId)
     .maybeSingle()
 
@@ -125,7 +145,11 @@ onMounted(() => loadDetail(String(route.params.id)))
       :status="status"
       :role="role"
       :can-edit-location="canEdit"
+      :can-edit-vnc="canEdit"
+      :vnc-host="device.vnc_host"
+      :vnc-port="device.vnc_port"
       @save-location="onSaveLocation"
+      @save-vnc="onSaveVnc"
     />
   </section>
 </template>

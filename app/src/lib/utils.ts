@@ -79,6 +79,12 @@ export function bestAccessTarget(
   return null
 }
 
+export function vncUrl(host: string | null | undefined, port: number | null | undefined): string | null {
+  if (!host) return null
+  const p = port && port > 0 ? port : 5900
+  return `vnc://${host}:${p}`
+}
+
 export function activeAlarmCount(payload: unknown): number {
   if (!payload || typeof payload !== 'object') return 0
   const vars = (payload as { variables?: Array<{ category?: string; value: unknown }> }).variables

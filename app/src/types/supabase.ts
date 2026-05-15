@@ -88,6 +88,8 @@ export type Database = {
           serial_number: string | null
           token: string | null
           updated_at: string
+          vnc_host: string | null
+          vnc_port: number
         }
         Insert: {
           address?: string | null
@@ -107,6 +109,8 @@ export type Database = {
           serial_number?: string | null
           token?: string | null
           updated_at?: string
+          vnc_host?: string | null
+          vnc_port?: number
         }
         Update: {
           address?: string | null
@@ -126,6 +130,8 @@ export type Database = {
           serial_number?: string | null
           token?: string | null
           updated_at?: string
+          vnc_host?: string | null
+          vnc_port?: number
         }
         Relationships: [
           {
@@ -272,6 +278,8 @@ export type Database = {
           serial_number: string
           status_payload: Json
           status_received_at: string
+          vnc_host: string
+          vnc_port: number
         }[]
       }
     }

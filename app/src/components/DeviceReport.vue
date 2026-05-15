@@ -52,12 +52,23 @@ const props = withDefaults(
     role?: string
     expiresAt?: string | null
     canEditLocation?: boolean
+    vncHost?: string | null
+    vncPort?: number | null
+    canEditVnc?: boolean
   }>(),
-  { role: 'viewer', expiresAt: null, canEditLocation: false },
+  {
+    role: 'viewer',
+    expiresAt: null,
+    canEditLocation: false,
+    vncHost: null,
+    vncPort: 5900,
+    canEditVnc: false,
+  },
 )
 
 const emit = defineEmits<{
   (e: 'save-location', address: string): void
+  (e: 'save-vnc', payload: { host: string | null; port: number }): void
 }>()
 
 const activeTab = ref<'data' | 'status' | 'config'>('data')
@@ -108,8 +119,13 @@ defineExpose({
     locationFeedback.value = { kind, message }
     savingLocation.value = false
   },
+  setVncFeedback(kind: 'success' | 'error', message: string) {
+    vncFeedback.value = { kind, message }
+    savingVnc.value = false
+  },
   resetSaving() {
     savingLocation.value = false
+    savingVnc.value = false
   },
 })
 
@@ -180,6 +196,35 @@ watch(
     if (ip && payload.value.network?.tailscale?.connected) probeTs(ip)
   },
 )
+
+const vncHostDraft = ref<string>('')
+const vncPortDraft = ref<number>(5900)
+const savingVnc = ref(false)
+const vncFeedback = ref<{ kind: 'success' | 'error'; message: string } | null>(null)
+
+watch(
+  () => [props.vncHost, props.vncPort] as const,
+  ([h, p]) => {
+    vncHostDraft.value = h ?? ''
+    vncPortDraft.value = p ?? 5900
+  },
+  { immediate: true },
+)
+
+const vncEnabled = computed(() => !!props.vncHost)
+const vncFullUrl = computed(() => {
+  if (!props.vncHost) return null
+  return `vnc://${props.vncHost}:${props.vncPort ?? 5900}`
+})
+
+function submitVnc() {
+  vncFeedback.value = null
+  savingVnc.value = true
+  emit('save-vnc', {
+    host: vncHostDraft.value.trim() || null,
+    port: Number(vncPortDraft.value) || 5900,
+  })
+}
 
 const copiedTailscaleIp = ref<string | null>(null)
 async function copyTailscaleIp(ip: string) {
@@ -416,6 +461,18 @@ async function copyTailscaleIp(ip: string) {
               >
                 <span class="size-1.5 rounded-full bg-muted-foreground/40" /> Hors Tailscale
               </span>
+              <a
+                v-if="tsReachable === true && vncEnabled"
+                :href="vncFullUrl!"
+                :title="vncFullUrl!"
+                class="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] border border-signal/50 text-signal px-3 py-1.5 rounded-md hover:bg-signal-soft transition"
+              >
+                <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="4" width="20" height="14" rx="2" />
+                  <path d="M8 21h8M12 18v3" />
+                </svg>
+                VNC
+              </a>
               <button
                 type="button"
                 @click="copyTailscaleIp(ifc.ip!)"
@@ -467,7 +524,96 @@ async function copyTailscaleIp(ip: string) {
         Accès en lecture seule — seuls les administrateurs peuvent modifier la configuration.
       </p>
 
-      <div v-else class="border border-border rounded-md bg-card/40 p-5">
+      <div v-else class="space-y-5">
+        <!-- VNC block -->
+        <div class="border border-border rounded-md bg-card/40 p-5">
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              Accès VNC
+            </div>
+            <a
+              v-if="vncEnabled && online && tsReachable === true"
+              :href="vncFullUrl!"
+              :title="vncFullUrl!"
+              class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-3 py-1.5 rounded-md hover:brightness-110 transition"
+            >
+              <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="4" width="20" height="14" rx="2" />
+                <path d="M8 21h8M12 18v3" />
+              </svg>
+              Ouvrir VNC
+            </a>
+          </div>
+
+          <p v-if="!vncEnabled" class="text-sm text-muted-foreground">
+            Aucun serveur VNC configuré.
+          </p>
+          <p v-else class="font-mono text-xs text-muted-foreground break-all">
+            {{ vncFullUrl }}
+          </p>
+
+          <template v-if="canEditVnc">
+            <form @submit.prevent="submitVnc" class="mt-4 space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-[1fr_120px] gap-3">
+                <div class="space-y-1.5">
+                  <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Hôte VNC (souvent l'IP Tailscale)
+                  </label>
+                  <input
+                    v-model="vncHostDraft"
+                    type="text"
+                    placeholder="100.64.x.x ou laisser vide pour désactiver"
+                    class="w-full bg-transparent border-0 border-b border-border focus:border-signal focus:outline-none px-0 py-2 text-sm font-mono placeholder:text-muted-foreground/40 transition"
+                  />
+                </div>
+                <div class="space-y-1.5">
+                  <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Port
+                  </label>
+                  <input
+                    v-model.number="vncPortDraft"
+                    type="number"
+                    min="1"
+                    max="65535"
+                    class="w-full bg-transparent border-0 border-b border-border focus:border-signal focus:outline-none px-0 py-2 text-sm font-mono transition"
+                  />
+                </div>
+              </div>
+
+              <p
+                v-if="vncFeedback"
+                :class="[
+                  'font-mono text-xs flex items-center gap-2',
+                  vncFeedback.kind === 'success' ? 'text-signal' : 'text-offline',
+                ]"
+              >
+                <span
+                  :class="[
+                    'size-1.5 rounded-full',
+                    vncFeedback.kind === 'success' ? 'bg-signal' : 'bg-offline',
+                  ]"
+                />
+                {{ vncFeedback.message }}
+              </p>
+
+              <button
+                type="submit"
+                :disabled="savingVnc"
+                class="bg-signal text-primary-foreground font-semibold px-5 py-2.5 rounded-md transition disabled:opacity-60 disabled:cursor-not-allowed hover:brightness-110"
+              >
+                <span class="font-mono text-[11px] uppercase tracking-[0.22em]">
+                  <template v-if="savingVnc">
+                    <span class="blink">▍</span> enregistrement
+                  </template>
+                  <template v-else>Enregistrer VNC</template>
+                </span>
+              </button>
+            </form>
+          </template>
+        </div>
+
+        <!-- Location block -->
+        <div class="border border-border rounded-md bg-card/40 p-5">
         <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
           Adresse enregistrée
         </div>
@@ -525,6 +671,7 @@ async function copyTailscaleIp(ip: string) {
           </form>
         </template>
         <slot v-else name="config-extra" />
+        </div>
       </div>
     </section>
 
