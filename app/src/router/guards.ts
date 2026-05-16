@@ -7,3 +7,9 @@ export const requireAuth: NavigationGuardWithThis<undefined> = (to) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
 }
+
+export const requireAdmin: NavigationGuardWithThis<undefined> = () => {
+  const auth = useAuthStore()
+  if (!auth.isAuthenticated) return { name: 'login' }
+  if (auth.recipient?.role !== 'admin') return { name: 'admin-devices' }
+}
