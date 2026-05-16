@@ -37,9 +37,13 @@ const breadcrumb = computed(() => {
     'admin-device-periodic': 'devices / rapports',
     'admin-map': 'map',
     'admin-alarms': 'alarms',
+    'admin-recipients': 'destinataires',
   }
   return map[String(route.name ?? '')] ?? String(route.name ?? '')
 })
+
+const isAdmin = computed(() => auth.recipient?.role === 'admin')
+const isRecipients = computed(() => route.name === 'admin-recipients')
 
 const sidebarOpen = ref(false)
 function closeSidebar() { sidebarOpen.value = false }
@@ -48,6 +52,7 @@ function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
 function goDevices() { router.push({ name: 'admin-devices' }); closeSidebar() }
 function goMap() { router.push({ name: 'admin-map' }); closeSidebar() }
 function goAlarms() { router.push({ name: 'admin-alarms' }); closeSidebar() }
+function goRecipients() { router.push({ name: 'admin-recipients' }); closeSidebar() }
 const isDevices = computed(() => route.name === 'admin-devices' || route.name === 'admin-device-detail' || route.name === 'admin-device-periodic')
 const isMap = computed(() => route.name === 'admin-map')
 const isAlarms = computed(() => route.name === 'admin-alarms')
@@ -168,15 +173,30 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
           </span>
         </button>
 
-        <div class="px-3 py-2.5 text-sm text-muted-foreground/40 cursor-not-allowed select-none flex items-center gap-3">
+        <button
+          v-if="isAdmin"
+          @click="goRecipients"
+          :class="[
+            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
+            isRecipients
+              ? 'text-foreground bg-secondary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+          ]"
+        >
+          <span
+            :class="[
+              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
+              isRecipients ? 'bg-signal' : 'bg-transparent',
+            ]"
+          />
           <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
             <circle cx="9" cy="7" r="4" />
             <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
           </svg>
-          <span>Recipients</span>
-          <span class="ml-auto text-[9px] uppercase tracking-widest">soon</span>
-        </div>
+          <span class="tracking-tight">Destinataires</span>
+          <span v-if="isRecipients" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
+        </button>
         <div class="px-3 py-2.5 text-sm text-muted-foreground/40 cursor-not-allowed select-none flex items-center gap-3">
           <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
             <path d="M3 3v18h18" />
