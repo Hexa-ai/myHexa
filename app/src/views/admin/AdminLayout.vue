@@ -63,8 +63,8 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
     <!-- Mobile backdrop -->
     <div
       v-if="sidebarOpen"
-      @click="closeSidebar"
       class="md:hidden fixed inset-0 bg-background/70 backdrop-blur-sm z-30"
+      @click="closeSidebar"
     />
 
     <aside
@@ -93,13 +93,13 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
       <!-- Nav -->
       <nav class="flex-1 px-3 py-4 space-y-0.5">
         <button
-          @click="goDevices"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isDevices
               ? 'text-foreground bg-secondary'
               : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
           ]"
+          @click="goDevices"
         >
           <span
             :class="[
@@ -116,13 +116,13 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
         </button>
 
         <button
-          @click="goMap"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isMap
               ? 'text-foreground bg-secondary'
               : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
           ]"
+          @click="goMap"
         >
           <span
             :class="[
@@ -139,13 +139,13 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
         </button>
 
         <button
-          @click="goAlarms"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isAlarms
               ? 'text-foreground bg-secondary'
               : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
           ]"
+          @click="goAlarms"
         >
           <span
             :class="[
@@ -175,13 +175,13 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
 
         <button
           v-if="isAdmin"
-          @click="goRecipients"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isRecipients
               ? 'text-foreground bg-secondary'
               : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
           ]"
+          @click="goRecipients"
         >
           <span
             :class="[
@@ -216,8 +216,8 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
             {{ role }}
           </span>
           <button
-            @click="handleLogout"
             class="font-mono text-[11px] uppercase tracking-wider text-muted-foreground hover:text-signal transition"
+            @click="handleLogout"
           >
             sign out ↗
           </button>
@@ -229,9 +229,9 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
       <header class="h-12 border-b border-border bg-background/60 backdrop-blur-sm flex items-center justify-between px-3 sm:px-5 md:px-6">
         <div class="flex items-center gap-2 sm:gap-2.5 text-xs font-mono text-muted-foreground min-w-0">
           <button
-            @click="toggleSidebar"
             class="md:hidden size-8 inline-flex items-center justify-center rounded-md border border-border hover:border-signal/60 text-muted-foreground hover:text-foreground transition shrink-0"
             aria-label="Menu"
+            @click="toggleSidebar"
           >
             <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
               <path d="M3 6h18M3 12h18M3 18h18" />
@@ -246,9 +246,9 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
         <div class="flex items-center gap-2 sm:gap-5 text-[11px] font-mono text-muted-foreground">
           <button
             v-if="alarms.total.value > 0"
-            @click="router.push({ name: 'admin-alarms' })"
             class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded-md transition border-2 border-offline/50 bg-offline/10 text-offline hover:bg-offline/20 alarm-flash"
             :title="`${alarms.active.value} alarmes capteur · ${alarms.open.value} interventions ouvertes`"
+            @click="router.push({ name: 'admin-alarms' })"
           >
             <span class="size-1.5 rounded-full bg-offline pulse-dot" />
             <span class="tabular">{{ alarms.total.value }}</span>
@@ -260,9 +260,9 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
           </span>
           <span class="tabular text-[10px] sm:text-[11px]">{{ clock }}</span>
           <button
-            @click="toggleTheme"
             :title="theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'"
             class="ml-1 size-7 inline-flex items-center justify-center rounded-md border border-border hover:border-signal/60 hover:text-foreground transition"
+            @click="toggleTheme"
           >
             <svg v-if="theme === 'dark'" viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="4" />

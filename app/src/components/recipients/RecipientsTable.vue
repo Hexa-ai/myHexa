@@ -64,14 +64,14 @@ function canInvite(r: Recipient): boolean {
           <td class="px-3 py-2 text-right space-x-3 whitespace-nowrap">
             <button
               v-if="canInvite(r)"
-              @click="emit('invite', r)"
               class="text-xs text-primary hover:underline"
               title="Inviter comme membre"
+              @click="emit('invite', r)"
             >
               Inviter
             </button>
-            <button @click="emit('edit', r)" class="text-xs hover:underline">Éditer</button>
-            <button @click="emit('remove', r)" class="text-xs text-red-500 hover:underline">Supprimer</button>
+            <button class="text-xs hover:underline" @click="emit('edit', r)">Éditer</button>
+            <button class="text-xs text-red-500 hover:underline" @click="emit('remove', r)">Supprimer</button>
           </td>
         </tr>
         <tr v-if="filtered.length === 0">

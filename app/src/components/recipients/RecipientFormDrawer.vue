@@ -98,7 +98,7 @@ function submit() {
         <h2 class="text-lg font-semibold">
           {{ isEdit ? 'Modifier le destinataire' : 'Ajouter un destinataire' }}
         </h2>
-        <button @click="close" class="text-muted-foreground hover:text-foreground text-xl leading-none" aria-label="Fermer">×</button>
+        <button class="text-muted-foreground hover:text-foreground text-xl leading-none" aria-label="Fermer" @click="close">×</button>
       </header>
 
       <div class="space-y-3">
@@ -126,16 +126,16 @@ function submit() {
         <div v-if="!isEdit">
           <span class="text-xs uppercase tracking-wide text-muted-foreground">Type</span>
           <div class="mt-1 flex gap-3 text-sm">
-            <label class="flex items-center gap-1"><input type="radio" value="member" v-model="type" /> Membre (invite)</label>
-            <label class="flex items-center gap-1"><input type="radio" value="external" v-model="type" /> Externe (email)</label>
+            <label class="flex items-center gap-1"><input v-model="type" type="radio" value="member" /> Membre (invite)</label>
+            <label class="flex items-center gap-1"><input v-model="type" type="radio" value="external" /> Externe (email)</label>
           </div>
         </div>
 
         <div>
           <span class="text-xs uppercase tracking-wide text-muted-foreground">Rôle</span>
           <div class="mt-1 flex gap-3 text-sm">
-            <label class="flex items-center gap-1"><input type="radio" value="viewer" v-model="role" /> Viewer</label>
-            <label class="flex items-center gap-1"><input type="radio" value="admin" v-model="role" /> Admin</label>
+            <label class="flex items-center gap-1"><input v-model="role" type="radio" value="viewer" /> Viewer</label>
+            <label class="flex items-center gap-1"><input v-model="role" type="radio" value="admin" /> Admin</label>
           </div>
         </div>
 
@@ -148,11 +148,11 @@ function submit() {
       <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
 
       <footer class="flex justify-end gap-2 pt-2">
-        <button @click="close" class="px-3 py-2 text-sm border border-border rounded-md">Annuler</button>
+        <button class="px-3 py-2 text-sm border border-border rounded-md" @click="close">Annuler</button>
         <button
-          @click="submit"
           :disabled="submitting"
           class="px-3 py-2 text-sm bg-primary text-primary-foreground rounded-md disabled:opacity-60"
+          @click="submit"
         >
           {{ isEdit ? 'Enregistrer' : (type === 'member' ? 'Créer + envoyer l\'invite' : 'Créer') }}
         </button>
