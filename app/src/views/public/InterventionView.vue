@@ -112,8 +112,8 @@ function submitAnother() {
       <span class="text-signal">⬢</span> Hexa.ai · intervention
     </div>
     <button
-      @click="toggleTheme"
       class="absolute top-5 right-6 size-8 inline-flex items-center justify-center rounded-md border border-border hover:border-signal/60 text-muted-foreground hover:text-foreground transition"
+      @click="toggleTheme"
     >
       <svg v-if="theme === 'dark'" viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="4" />
@@ -154,8 +154,8 @@ function submitAnother() {
           Merci, votre rapport a été transmis à l'équipe.
         </p>
         <button
-          @click="submitAnother"
           class="font-mono text-[11px] uppercase tracking-[0.22em] border border-signal/40 text-signal px-4 py-2 rounded-md hover:bg-signal-soft transition"
+          @click="submitAnother"
         >
           Nouveau rapport
         </button>
@@ -163,8 +163,8 @@ function submitAnother() {
 
       <form
         v-else
-        @submit.prevent="handleSubmit"
         class="border border-border rounded-lg bg-card/70 backdrop-blur-sm p-6 space-y-5"
+        @submit.prevent="handleSubmit"
       >
         <div class="space-y-1.5">
           <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Nom *</label>
@@ -195,13 +195,13 @@ function submitAnother() {
               v-for="c in CATEGORIES"
               :key="c.value"
               type="button"
-              @click="category = c.value"
               :class="[
                 'font-mono text-[10px] uppercase tracking-[0.18em] px-3 py-2 rounded-md border transition',
                 category === c.value
                   ? 'bg-signal text-primary-foreground border-transparent'
                   : 'border-border text-muted-foreground hover:text-foreground hover:border-signal/40',
               ]"
+              @click="category = c.value"
             >
               {{ c.label }}
             </button>
@@ -215,11 +215,11 @@ function submitAnother() {
               v-for="s in SEVERITIES"
               :key="s"
               type="button"
-              @click="severity = s"
               :class="[
                 'font-mono text-[11px] uppercase tracking-[0.18em] px-3 py-2.5 rounded-md border-2 transition inline-flex items-center justify-center gap-1.5',
                 severityButtonClass(s, severity === s),
               ]"
+              @click="severity = s"
             >
               <span class="text-sm leading-none">{{ SEVERITY_ICON[s] }}</span>
               {{ SEVERITY_LABEL[s] }}
@@ -258,9 +258,9 @@ function submitAnother() {
               <img :src="p.preview" class="absolute inset-0 w-full h-full object-cover" />
               <button
                 type="button"
-                @click="removePhoto(i)"
                 class="absolute top-1 right-1 size-5 inline-flex items-center justify-center rounded-full bg-background/80 backdrop-blur text-foreground border border-border hover:text-offline hover:border-offline/60 transition"
                 aria-label="Retirer"
+                @click="removePhoto(i)"
               >
                 <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                   <path d="M18 6 6 18M6 6l12 12" />

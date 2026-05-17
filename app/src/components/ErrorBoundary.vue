@@ -25,8 +25,8 @@ function reload() {
         {{ err.message }}
       </p>
       <button
-        @click="reload"
         class="font-mono text-[11px] uppercase tracking-[0.22em] bg-signal text-primary-foreground px-5 py-2.5 rounded-md hover:brightness-110 transition glow-signal"
+        @click="reload"
       >
         Recharger ↻
       </button>

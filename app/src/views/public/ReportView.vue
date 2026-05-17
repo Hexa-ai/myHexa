@@ -70,9 +70,9 @@ onMounted(async () => {
         <span class="text-foreground">report</span>
       </div>
       <button
-        @click="toggleTheme"
         :title="theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'"
         class="size-7 inline-flex items-center justify-center rounded-md border border-border hover:border-signal/60 text-muted-foreground hover:text-foreground transition"
+        @click="toggleTheme"
       >
         <svg v-if="theme === 'dark'" viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="4" />

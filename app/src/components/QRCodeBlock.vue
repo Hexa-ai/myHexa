@@ -82,15 +82,15 @@ function downloadPng() {
     <div class="flex items-center gap-2">
       <button
         type="button"
-        @click="downloadPng"
         class="font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-3 py-1.5 rounded-md hover:brightness-110 transition"
+        @click="downloadPng"
       >
         PNG
       </button>
       <button
         type="button"
-        @click="downloadSvg"
         class="font-mono text-[10px] uppercase tracking-[0.18em] border border-border text-foreground px-3 py-1.5 rounded-md hover:border-signal/60 hover:text-signal transition"
+        @click="downloadSvg"
       >
         SVG
       </button>

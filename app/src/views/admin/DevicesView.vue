@@ -224,8 +224,8 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
     <div v-if="loading" class="border border-border rounded-sm bg-card/40 p-10 text-center font-mono text-sm text-muted-foreground">
       <span class="blink">▍</span> loading telemetry…
       <button
-        @click="loadAll"
         class="block mx-auto mt-4 text-[10px] uppercase tracking-wider text-muted-foreground/70 hover:text-signal transition"
+        @click="loadAll"
       >
         Forcer le rechargement
       </button>
@@ -233,8 +233,8 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
     <div v-else-if="error" class="border border-offline/40 rounded-sm bg-offline-soft p-5 font-mono text-sm text-offline flex items-center justify-between gap-3 flex-wrap">
       <span>ERR · {{ error }}</span>
       <button
-        @click="loadAll"
         class="font-mono text-[10px] uppercase tracking-wider border border-offline/40 px-2.5 py-1 rounded hover:bg-offline-soft transition"
+        @click="loadAll"
       >
         Réessayer
       </button>
@@ -257,9 +257,9 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
           <tr
             v-for="(r, i) in rows"
             :key="r.id"
-            @click="openDevice(r.id)"
             class="group border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition-colors fade-up"
             :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
+            @click="openDevice(r.id)"
           >
             <td class="px-4 py-3.5">
               <span class="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider">
@@ -313,8 +313,8 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
                     target="_blank"
                     rel="noopener noreferrer"
                     :title="`Web · ${r.tsIp}`"
-                    @click.stop
                     class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-2.5 py-1 rounded-md hover:brightness-110 transition"
+                    @click.stop
                   >
                     <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
@@ -326,8 +326,8 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
                     v-if="r.vnc"
                     :href="r.vnc"
                     :title="`VNC · ${r.vnc}`"
-                    @click.stop
                     class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] border border-signal/50 text-signal px-2.5 py-1 rounded-md hover:bg-signal-soft transition"
+                    @click.stop
                   >
                     <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect x="2" y="4" width="20" height="14" rx="2" />
@@ -353,9 +353,9 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
                 <!-- Reports button: always available -->
                 <button
                   type="button"
-                  @click.stop="openReports(r.id)"
                   title="Rapports quotidiens / hebdomadaires"
                   class="inline-flex items-center justify-center size-7 border border-border text-muted-foreground rounded-md hover:border-signal/60 hover:text-signal transition"
+                  @click.stop="openReports(r.id)"
                 >
                   <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M3 3v18h18" />
@@ -365,9 +365,9 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
                 <!-- QR intervention button -->
                 <button
                   type="button"
-                  @click.stop="openQrModal(r.id, r.name)"
                   title="QR intervention terrain"
                   class="inline-flex items-center justify-center size-7 border border-border text-muted-foreground rounded-md hover:border-signal/60 hover:text-signal transition"
+                  @click.stop="openQrModal(r.id, r.name)"
                 >
                   <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -401,9 +401,9 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
       <button
         v-for="(r, i) in rows"
         :key="r.id"
-        @click="openDevice(r.id)"
         class="w-full text-left border border-border rounded-md bg-card/40 px-4 py-3.5 hover:bg-secondary/40 transition-colors fade-up"
         :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
+        @click="openDevice(r.id)"
       >
         <div class="flex items-center justify-between gap-3 mb-1.5">
           <span class="font-medium tracking-tight truncate">{{ r.name || '—' }}</span>
@@ -448,24 +448,24 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
               :href="`http://${r.tsIp}`"
               target="_blank"
               rel="noopener noreferrer"
-              @click.stop
               class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-2.5 py-1 rounded-md"
+              @click.stop
             >
               Web ↗
             </a>
             <a
               v-if="r.vnc"
               :href="r.vnc"
-              @click.stop
               class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] border border-signal/50 text-signal px-2.5 py-1 rounded-md"
+              @click.stop
             >
               VNC
             </a>
           </template>
           <button
             type="button"
-            @click.stop="openReports(r.id)"
             class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] border border-border text-foreground px-2.5 py-1 rounded-md"
+            @click.stop="openReports(r.id)"
           >
             Rapports
           </button>
@@ -483,14 +483,14 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
     <Teleport to="body">
       <div
         v-if="qrModalDevice"
-        @click.self="closeQrModal"
         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm fade-up"
+        @click.self="closeQrModal"
       >
         <div class="relative border border-border rounded-lg bg-card p-6 max-w-md w-full">
           <button
-            @click="closeQrModal"
             class="absolute top-3 right-3 size-7 inline-flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-signal/60 transition"
             aria-label="Fermer"
+            @click="closeQrModal"
           >
             <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
               <path d="M18 6 6 18M6 6l12 12" />

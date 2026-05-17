@@ -300,9 +300,9 @@ onBeforeUnmount(() => {
     <div class="absolute top-2 right-2 z-10 flex gap-1">
       <button
         type="button"
-        @click="resetZoomLocal"
         title="Réinitialiser le zoom"
         class="size-7 inline-flex items-center justify-center rounded border border-border bg-card/80 backdrop-blur-sm text-muted-foreground hover:text-signal hover:border-signal/60 transition"
+        @click="resetZoomLocal"
       >
         <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 12a9 9 0 1 0 9-9" />
@@ -311,9 +311,9 @@ onBeforeUnmount(() => {
       </button>
       <button
         type="button"
-        @click="toggleFullscreen"
         :title="isFs ? 'Quitter le plein écran' : 'Plein écran'"
         class="size-7 inline-flex items-center justify-center rounded border border-border bg-card/80 backdrop-blur-sm text-muted-foreground hover:text-signal hover:border-signal/60 transition"
+        @click="toggleFullscreen"
       >
         <svg v-if="!isFs" viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6" />

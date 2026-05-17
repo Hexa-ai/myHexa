@@ -118,11 +118,11 @@ const typeBadgeClass = (cat?: string) => {
       <button
         v-for="t in (['daily', 'weekly'] as const)"
         :key="t"
-        @click="emit('change-type', t)"
         :class="[
           'font-mono text-[11px] uppercase tracking-[0.18em] px-4 py-1.5 rounded transition whitespace-nowrap',
           type === t ? 'bg-signal text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
         ]"
+        @click="emit('change-type', t)"
       >
         {{ t === 'daily' ? 'Rapport quotidien' : 'Rapport hebdomadaire' }}
       </button>
@@ -133,8 +133,8 @@ const typeBadgeClass = (cat?: string) => {
       <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Période</label>
       <select
         :value="periodStart ?? ''"
-        @change="onPeriodSelect"
         class="bg-card border border-border rounded-md px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-signal/60 transition"
+        @change="onPeriodSelect"
       >
         <option
           v-for="p in periods"

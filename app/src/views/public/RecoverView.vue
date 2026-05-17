@@ -47,9 +47,9 @@ async function handleSubmit() {
       <span class="text-signal">⬢</span> Hexa.ai · myHexa edge
     </div>
     <button
-      @click="toggleTheme"
       :title="theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'"
       class="absolute top-5 right-6 size-8 inline-flex items-center justify-center rounded-md border border-border hover:border-signal/60 text-muted-foreground hover:text-foreground transition"
+      @click="toggleTheme"
     >
       <svg v-if="theme === 'dark'" viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="4" />
@@ -101,8 +101,8 @@ async function handleSubmit() {
       <!-- Form -->
       <form
         v-else
-        @submit.prevent="handleSubmit"
         class="border border-border rounded-lg bg-card/70 backdrop-blur-sm p-7 space-y-5"
+        @submit.prevent="handleSubmit"
       >
         <div class="space-y-1.5">
           <label for="email" class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Email</label>

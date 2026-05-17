@@ -289,13 +289,13 @@ async function copyTailscaleIp(ip: string) {
         <button
           v-for="tab in (['data', 'status', 'config'] as const)"
           :key="tab"
-          @click="activeTab = tab"
           :class="[
             'font-mono text-[10px] sm:text-[11px] uppercase tracking-[0.18em] px-3 sm:px-4 py-1.5 rounded transition whitespace-nowrap',
             activeTab === tab
               ? 'bg-signal text-primary-foreground'
               : 'text-muted-foreground hover:text-foreground',
           ]"
+          @click="activeTab = tab"
         >
           {{ tab === 'data' ? 'Données' : tab === 'status' ? 'État' : 'Configuration' }}
         </button>
@@ -501,8 +501,8 @@ async function copyTailscaleIp(ip: string) {
               </a>
               <button
                 type="button"
-                @click="copyTailscaleIp(ifc.ip!)"
                 class="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] border border-border text-foreground px-3 py-1.5 rounded-md hover:border-signal/60 hover:text-signal transition"
+                @click="copyTailscaleIp(ifc.ip!)"
               >
                 <template v-if="copiedTailscaleIp === ifc.ip">
                   ✓ Copié
@@ -602,7 +602,7 @@ async function copyTailscaleIp(ip: string) {
           </p>
 
           <template v-if="canEditVnc">
-            <form @submit.prevent="submitVnc" class="mt-4 space-y-3">
+            <form class="mt-4 space-y-3" @submit.prevent="submitVnc">
               <div class="grid grid-cols-1 sm:grid-cols-[1fr_120px] gap-3">
                 <div class="space-y-1.5">
                   <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -671,7 +671,7 @@ async function copyTailscaleIp(ip: string) {
         </div>
 
         <template v-if="canEditLocation">
-          <form @submit.prevent="submitAddress" class="space-y-3">
+          <form class="space-y-3" @submit.prevent="submitAddress">
             <div class="space-y-1.5">
               <label
                 for="address-input"

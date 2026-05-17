@@ -125,8 +125,8 @@ useAutoRefresh(loadDetail, { intervalMs: 120_000 })
 <template>
   <section class="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 max-w-[1200px] mx-auto">
     <button
-      @click="router.push({ name: 'admin-devices' })"
       class="mb-6 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground hover:text-signal transition"
+      @click="router.push({ name: 'admin-devices' })"
     >
       ← Retour à la flotte
     </button>
