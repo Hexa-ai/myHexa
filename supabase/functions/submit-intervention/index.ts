@@ -19,8 +19,10 @@ const supabase = createClient(
 
 const VALID_CATEGORIES = ['intervention', 'incident', 'controle', 'autre'] as const
 const VALID_SEVERITIES = ['info', 'warning', 'error'] as const
+const VALID_KINDS = ['signalement', 'intervention'] as const
 type Category = (typeof VALID_CATEGORIES)[number]
 type Severity = (typeof VALID_SEVERITIES)[number]
+type Kind = (typeof VALID_KINDS)[number]
 const BUCKET = 'intervention-photos'
 const MAX_PHOTOS = 5
 const MAX_PHOTO_BYTES = 4 * 1024 * 1024 // 4 MB after client-side compression
@@ -66,13 +68,19 @@ Deno.serve(async (req) => {
   const deviceId = body.deviceId as string | undefined
   const technicianName = (body.technicianName as string | undefined)?.trim()
   const technicianContact = (body.technicianContact as string | undefined)?.trim() || null
+  const technicianPhone = (body.technicianPhone as string | undefined)?.trim() || null
   const category = body.category as Category | undefined
   const severity = body.severity as Severity | undefined
+  const kind = (body.kind as Kind | undefined) ?? 'intervention'
   const message = (body.message as string | undefined)?.trim() || null
   const photos = Array.isArray(body.photos) ? (body.photos as PhotoInput[]) : []
 
   if (!deviceId) return fail('MISSING_DEVICE', 'Équipement non spécifié', 400)
-  if (!technicianName) return fail('MISSING_NAME', 'Nom du technicien requis', 400)
+  if (!technicianName) return fail('MISSING_NAME', 'Nom requis', 400)
+  if (!VALID_KINDS.includes(kind)) return fail('INVALID_KIND', 'Type invalide', 400)
+  if (!technicianContact && !technicianPhone) {
+    return fail('MISSING_CONTACT', 'Email ou téléphone requis', 400)
+  }
   if (!category || !VALID_CATEGORIES.includes(category)) {
     return fail('INVALID_CATEGORY', 'Catégorie invalide', 400)
   }
@@ -137,8 +145,10 @@ Deno.serve(async (req) => {
       device_id: device.id,
       technician_name: technicianName,
       technician_contact: technicianContact,
+      technician_phone: technicianPhone,
       category,
       severity,
+      kind,
       message,
       photo_paths: uploadedPaths,
     })
