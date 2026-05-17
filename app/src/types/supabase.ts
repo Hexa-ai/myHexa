@@ -150,8 +150,10 @@ export type Database = {
           created_at: string
           technician_name: string
           technician_contact: string | null
+          technician_phone: string | null
           category: 'intervention' | 'incident' | 'controle' | 'autre'
           severity: 'info' | 'warning' | 'error'
+          kind: 'signalement' | 'intervention'
           message: string | null
           status: 'open' | 'resolved'
           resolved_at: string | null
@@ -164,8 +166,10 @@ export type Database = {
           created_at?: string
           technician_name: string
           technician_contact?: string | null
+          technician_phone?: string | null
           category: 'intervention' | 'incident' | 'controle' | 'autre'
           severity: 'info' | 'warning' | 'error'
+          kind?: 'signalement' | 'intervention'
           message?: string | null
           status?: 'open' | 'resolved'
           resolved_at?: string | null
@@ -177,8 +181,10 @@ export type Database = {
           created_at?: string
           technician_name?: string
           technician_contact?: string | null
+          technician_phone?: string | null
           category?: 'intervention' | 'incident' | 'controle' | 'autre'
           severity?: 'info' | 'warning' | 'error'
+          kind?: 'signalement' | 'intervention'
           message?: string | null
           status?: 'open' | 'resolved'
           resolved_at?: string | null
