@@ -39,11 +39,35 @@ const interventionUrl = computed(() => {
   return `${window.location.origin}/intervention?d=${device.value.id}`
 })
 
+async function geocodeAddress(address: string): Promise<{ lat: number; lng: number; displayName: string } | null> {
+  const url = new URL('https://nominatim.openstreetmap.org/search')
+  url.searchParams.set('q', address)
+  url.searchParams.set('format', 'json')
+  url.searchParams.set('limit', '1')
+  try {
+    const r = await fetch(url, { headers: { Accept: 'application/json' } })
+    if (!r.ok) return null
+    const arr = (await r.json()) as Array<{ lat: string; lon: string; display_name?: string }>
+    if (!Array.isArray(arr) || arr.length === 0) return null
+    const lat = parseFloat(arr[0].lat)
+    const lng = parseFloat(arr[0].lon)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+    return { lat, lng, displayName: arr[0].display_name ?? address }
+  } catch {
+    return null
+  }
+}
+
 async function onSaveLocation(address: string) {
   if (!device.value) return
+  const geo = await geocodeAddress(address)
+  if (!geo) {
+    reportRef.value?.setLocationFeedback('error', 'Adresse introuvable.')
+    return
+  }
   const { data: updated, error: updErr } = await supabase
     .from('devices')
-    .update({ address })
+    .update({ address: geo.displayName, latitude: geo.lat, longitude: geo.lng })
     .eq('id', device.value.id)
     .select('id, name, address, latitude, longitude, vnc_host, vnc_port')
     .single()
@@ -52,7 +76,7 @@ async function onSaveLocation(address: string) {
     return
   }
   device.value = updated
-  reportRef.value?.setLocationFeedback('success', 'Adresse enregistrée.')
+  reportRef.value?.setLocationFeedback('success', 'Adresse géocodée et enregistrée.')
 }
 
 async function onSaveVnc({ host, port }: { host: string | null; port: number }) {

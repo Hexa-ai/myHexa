@@ -436,12 +436,12 @@ function openDevice(id: string) {
         <table class="w-full text-sm min-w-[760px]">
           <thead>
             <tr class="border-b border-border bg-card/80">
-              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]">Source</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[140px]">Date</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]">Sévérité</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Device</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]">Source</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Sujet</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Détail</th>
-              <th class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[160px]">Depuis</th>
             </tr>
           </thead>
           <tbody>
@@ -451,6 +451,18 @@ function openDevice(id: string) {
               class="border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition"
               @click="row.kind === 'alarm' ? openDevice(row.device_id) : openDetail(row.intervention)"
             >
+              <td class="px-4 py-3 font-mono text-xs text-muted-foreground tabular whitespace-nowrap">
+                {{ row.ts ? formatRelative(row.ts) : '—' }}
+              </td>
+              <td class="px-4 py-3">
+                <span
+                  :class="['inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', typeClass(row.severity)]"
+                >
+                  <span v-if="row.severity" class="text-xs leading-none">{{ SEVERITY_ICON[row.severity as 'info' | 'warning' | 'error'] || '' }}</span>
+                  {{ row.severity || '—' }}
+                </span>
+              </td>
+              <td class="px-4 py-3 font-medium">{{ row.device_name || '—' }}</td>
               <td class="px-4 py-3">
                 <span
                   v-if="row.kind === 'alarm'"
@@ -468,15 +480,6 @@ function openDevice(id: string) {
                   Interv.
                 </span>
               </td>
-              <td class="px-4 py-3">
-                <span
-                  :class="['inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', typeClass(row.severity)]"
-                >
-                  <span v-if="row.severity" class="text-xs leading-none">{{ SEVERITY_ICON[row.severity as 'info' | 'warning' | 'error'] || '' }}</span>
-                  {{ row.severity || '—' }}
-                </span>
-              </td>
-              <td class="px-4 py-3 font-medium">{{ row.device_name || '—' }}</td>
               <td class="px-4 py-3 font-mono text-xs">{{ row.title }}</td>
               <td class="px-4 py-3 text-muted-foreground text-xs max-w-[320px]">
                 <div class="line-clamp-2">{{ row.subtitle || '—' }}</div>
@@ -491,9 +494,6 @@ function openDevice(id: string) {
                   </svg>
                   {{ row.intervention.photo_paths.length }} photo{{ row.intervention.photo_paths.length > 1 ? 's' : '' }}
                 </div>
-              </td>
-              <td class="px-4 py-3 text-right font-mono text-xs text-muted-foreground tabular">
-                {{ row.ts ? formatRelative(row.ts) : '—' }}
               </td>
             </tr>
           </tbody>
@@ -525,7 +525,7 @@ function openDevice(id: string) {
         <table class="w-full text-sm min-w-[720px]">
           <thead>
             <tr class="border-b border-border bg-card/60">
-              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[140px]">Horodatage</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[140px]">Date</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]">Type</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Device</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Variable</th>
@@ -612,8 +612,8 @@ function openDevice(id: string) {
             <tr class="border-b border-border bg-card/60">
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[140px]">Date</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]">Sévérité</th>
-              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[120px]">Catégorie</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Device</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[120px]">Catégorie</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Technicien</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Message</th>
               <th class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[150px]">Statut</th>
@@ -637,7 +637,6 @@ function openDevice(id: string) {
                   {{ row.severity }}
                 </span>
               </td>
-              <td class="px-4 py-3 font-mono text-xs text-muted-foreground">{{ row.category }}</td>
               <td class="px-4 py-3" @click.stop>
                 <button
                   class="font-medium hover:text-signal transition text-left"
@@ -646,6 +645,7 @@ function openDevice(id: string) {
                   {{ deviceNameById.get(row.device_id) || '—' }}
                 </button>
               </td>
+              <td class="px-4 py-3 font-mono text-xs text-muted-foreground">{{ row.category }}</td>
               <td class="px-4 py-3">
                 <div class="font-medium">{{ row.technician_name }}</div>
                 <div v-if="row.technician_contact" class="font-mono text-[11px] text-muted-foreground">
@@ -703,7 +703,7 @@ function openDevice(id: string) {
           </button>
 
           <div class="p-6 space-y-5">
-            <div class="flex items-center gap-2 flex-wrap">
+            <div class="flex items-center gap-2 flex-wrap pr-12">
               <span
                 :class="['inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', typeClass(detailRow.severity)]"
               >
@@ -715,7 +715,7 @@ function openDevice(id: string) {
               </span>
               <span
                 :class="[
-                  'font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded ml-auto',
+                  'font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded',
                   detailRow.status === 'open' ? 'bg-amber/15 text-amber' : 'bg-signal-soft text-signal',
                 ]"
               >

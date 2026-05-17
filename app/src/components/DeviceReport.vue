@@ -346,11 +346,11 @@ async function copyTailscaleIp(ip: string) {
           Aucune alarme active.
         </div>
         <div v-else class="border border-offline/40 rounded-md bg-card/60 overflow-x-auto">
-          <table class="w-full text-sm min-w-[480px]">
+          <table class="w-full text-sm">
             <tbody>
               <tr v-for="(a, i) in activeAlarms" :key="i" class="border-b border-border/50 last:border-0">
                 <td class="px-4 py-3 font-medium">{{ a.name }}</td>
-                <td class="px-4 py-3 text-muted-foreground text-xs">{{ a.description }}</td>
+                <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">{{ a.description }}</td>
                 <td class="px-4 py-3 text-right font-mono text-xs text-offline tabular">
                   {{ formatValue(a.value, a.unit) }}
                 </td>
@@ -363,11 +363,11 @@ async function copyTailscaleIp(ip: string) {
       <div v-if="measures.length">
         <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Mesures</h2>
         <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
-          <table class="w-full text-sm min-w-[480px]">
+          <table class="w-full text-sm">
             <tbody>
               <tr v-for="(m, i) in measures" :key="i" class="border-b border-border/50 last:border-0">
                 <td class="px-4 py-3 font-medium">{{ m.name }}</td>
-                <td class="px-4 py-3 text-muted-foreground text-xs">{{ m.description }}</td>
+                <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">{{ m.description }}</td>
                 <td class="px-4 py-3 text-right font-mono text-xs tabular">{{ formatValue(m.value, m.unit) }}</td>
               </tr>
             </tbody>
@@ -378,11 +378,11 @@ async function copyTailscaleIp(ip: string) {
       <div v-if="counters.length">
         <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Compteurs</h2>
         <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
-          <table class="w-full text-sm min-w-[480px]">
+          <table class="w-full text-sm">
             <tbody>
               <tr v-for="(c, i) in counters" :key="i" class="border-b border-border/50 last:border-0">
                 <td class="px-4 py-3 font-medium">{{ c.name }}</td>
-                <td class="px-4 py-3 text-muted-foreground text-xs">{{ c.description }}</td>
+                <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">{{ c.description }}</td>
                 <td class="px-4 py-3 text-right font-mono text-xs tabular">{{ formatValue(c.value, c.unit) }}</td>
               </tr>
             </tbody>
@@ -393,11 +393,11 @@ async function copyTailscaleIp(ip: string) {
       <div v-if="states.length">
         <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">États</h2>
         <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
-          <table class="w-full text-sm min-w-[480px]">
+          <table class="w-full text-sm">
             <tbody>
               <tr v-for="(s, i) in states" :key="i" class="border-b border-border/50 last:border-0">
                 <td class="px-4 py-3 font-medium">{{ s.name }}</td>
-                <td class="px-4 py-3 text-muted-foreground text-xs">{{ s.description }}</td>
+                <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">{{ s.description }}</td>
                 <td class="px-4 py-3 text-right font-mono text-xs tabular">{{ formatValue(s.value, s.unit) }}</td>
               </tr>
             </tbody>
@@ -523,7 +523,7 @@ async function copyTailscaleIp(ip: string) {
       <div v-if="payload.services && Object.keys(payload.services).length">
         <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Services</h2>
         <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
-          <table class="w-full text-sm min-w-[480px]">
+          <table class="w-full text-sm">
             <tbody>
               <tr v-for="(svc, name) in payload.services" :key="name" class="border-b border-border/50 last:border-0">
                 <td class="px-4 py-2.5 font-mono text-xs">{{ name }}</td>

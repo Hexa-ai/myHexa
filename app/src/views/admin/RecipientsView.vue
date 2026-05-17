@@ -115,7 +115,12 @@ async function handleResend(r: Recipient) {
 
     <input
       v-model="search"
+      type="search"
       placeholder="Rechercher (nom, email)"
+      autocomplete="off"
+      data-lpignore="true"
+      data-1p-ignore="true"
+      data-form-type="other"
       class="w-full sm:max-w-xs border border-border bg-secondary/30 rounded-md px-3 py-2 text-sm"
     />
 
