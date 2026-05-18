@@ -37,12 +37,14 @@ const breadcrumb = computed(() => {
     'admin-device-periodic': 'devices / rapports',
     'admin-map': 'map',
     'admin-alarms': 'alarms',
+    'admin-interventions': 'interventions',
     'admin-recipients': 'destinataires',
   }
   return map[String(route.name ?? '')] ?? String(route.name ?? '')
 })
 
 const isAdmin = computed(() => auth.recipient?.role === 'admin')
+const isInterventions = computed(() => route.name === 'admin-interventions')
 const isRecipients = computed(() => route.name === 'admin-recipients')
 
 const sidebarOpen = ref(false)
@@ -52,6 +54,7 @@ function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
 function goDevices() { router.push({ name: 'admin-devices' }); closeSidebar() }
 function goMap() { router.push({ name: 'admin-map' }); closeSidebar() }
 function goAlarms() { router.push({ name: 'admin-alarms' }); closeSidebar() }
+function goInterventions() { router.push({ name: 'admin-interventions' }); closeSidebar() }
 function goRecipients() { router.push({ name: 'admin-recipients' }); closeSidebar() }
 const isDevices = computed(() => route.name === 'admin-devices' || route.name === 'admin-device-detail' || route.name === 'admin-device-periodic')
 const isMap = computed(() => route.name === 'admin-map')
@@ -171,6 +174,28 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
           >
             ●
           </span>
+        </button>
+
+        <button
+          :class="[
+            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
+            isInterventions
+              ? 'text-foreground bg-secondary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+          ]"
+          @click="goInterventions"
+        >
+          <span
+            :class="[
+              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
+              isInterventions ? 'bg-signal' : 'bg-transparent',
+            ]"
+          />
+          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+          </svg>
+          <span class="tracking-tight">Interventions</span>
+          <span v-if="isInterventions" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
         </button>
 
         <button

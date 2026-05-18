@@ -7,6 +7,7 @@ import DeviceDetailView from '@/views/admin/DeviceDetailView.vue'
 import DevicePeriodicView from '@/views/admin/DevicePeriodicView.vue'
 import FleetMapView from '@/views/admin/FleetMapView.vue'
 import AlarmsView from '@/views/admin/AlarmsView.vue'
+import InterventionsView from '@/views/admin/InterventionsView.vue'
 import RecipientsView from '@/views/admin/RecipientsView.vue'
 import ReportView from '@/views/public/ReportView.vue'
 import PeriodicReportView from '@/views/public/PeriodicReportView.vue'
@@ -40,6 +41,7 @@ export const router = createRouter({
         { path: 'devices/:id/periodic', name: 'admin-device-periodic', component: DevicePeriodicView },
         { path: 'map', name: 'admin-map', component: FleetMapView },
         { path: 'alarms', name: 'admin-alarms', component: AlarmsView },
+        { path: 'interventions', name: 'admin-interventions', component: InterventionsView },
         {
           path: 'recipients',
           name: 'admin-recipients',
