@@ -112,6 +112,7 @@ onMounted(() => { fetchCompanies(); load() })
             <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Compagnie</th>
             <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[160px]">Dernière connexion</th>
             <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]">Statut</th>
+            <th class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[80px]">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -135,9 +136,17 @@ onMounted(() => { fetchCompanies(); load() })
                 {{ isOnline(d) ? 'Online' : 'Offline' }}
               </span>
             </td>
+            <td class="px-4 py-3 text-right">
+              <router-link
+                :to="{ name: 'staff-device-edit', params: { id: d.id } }"
+                class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-signal transition"
+              >
+                ✎ éditer
+              </router-link>
+            </td>
           </tr>
           <tr v-if="!filtered.length && !loading">
-            <td colspan="5" class="px-4 py-8 text-center text-muted-foreground text-sm">Aucun device</td>
+            <td colspan="6" class="px-4 py-8 text-center text-muted-foreground text-sm">Aucun device</td>
           </tr>
         </tbody>
       </table>

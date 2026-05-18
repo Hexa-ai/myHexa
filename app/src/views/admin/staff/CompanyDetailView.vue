@@ -165,6 +165,7 @@ watch(id, load)
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-2">Nom</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-2">MAC eth0</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-2">Dernière connexion</th>
+              <th class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-2 w-[80px]">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -172,9 +173,17 @@ watch(id, load)
               <td class="px-4 py-2 font-medium">{{ d.name }}</td>
               <td class="px-4 py-2 font-mono text-xs text-muted-foreground">{{ d.mac_eth0 ?? '—' }}</td>
               <td class="px-4 py-2 font-mono text-xs text-muted-foreground">{{ fmtDate(d.last_connection_at) }}</td>
+              <td class="px-4 py-2 text-right">
+                <router-link
+                  :to="{ name: 'staff-device-edit', params: { id: d.id } }"
+                  class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-signal transition"
+                >
+                  ✎ éditer
+                </router-link>
+              </td>
             </tr>
             <tr v-if="!devices.length">
-              <td colspan="3" class="px-4 py-6 text-center text-muted-foreground text-sm">Aucun device</td>
+              <td colspan="4" class="px-4 py-6 text-center text-muted-foreground text-sm">Aucun device</td>
             </tr>
           </tbody>
         </table>

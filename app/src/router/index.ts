@@ -13,6 +13,7 @@ import StaffCompaniesView from '@/views/admin/staff/CompaniesView.vue'
 import StaffCompanyDetailView from '@/views/admin/staff/CompanyDetailView.vue'
 import StaffDevicesView from '@/views/admin/staff/DevicesView.vue'
 import StaffDeviceNewView from '@/views/admin/staff/DeviceNewView.vue'
+import StaffDeviceEditView from '@/views/admin/staff/DeviceEditView.vue'
 import ReportView from '@/views/public/ReportView.vue'
 import PeriodicReportView from '@/views/public/PeriodicReportView.vue'
 import InterventionView from '@/views/public/InterventionView.vue'
@@ -57,6 +58,7 @@ export const router = createRouter({
         { path: 'staff/companies/:id', name: 'staff-company-detail', component: StaffCompanyDetailView, beforeEnter: requireStaff },
         { path: 'staff/devices', name: 'staff-devices', component: StaffDevicesView, beforeEnter: requireStaff },
         { path: 'staff/devices/new', name: 'staff-device-new', component: StaffDeviceNewView, beforeEnter: requireStaff },
+        { path: 'staff/devices/:id/edit', name: 'staff-device-edit', component: StaffDeviceEditView, beforeEnter: requireStaff },
         { path: '', redirect: { name: 'admin-devices' } },
       ],
     },
