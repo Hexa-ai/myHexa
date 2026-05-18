@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { submitIntervention, type InterventionPhotoInput } from '@/lib/api'
+import { submitIntervention, type InterventionKind, type InterventionPhotoInput } from '@/lib/api'
 import { useTheme } from '@/composables/useTheme'
 import { severityButtonClass, SEVERITY_ICON, SEVERITY_LABEL, type Severity } from '@/lib/utils'
 import { compressImage } from '@/lib/image'
+import KindPicker from '@/components/intervention/KindPicker.vue'
 
 const MAX_PHOTOS = 5
 
@@ -13,14 +14,16 @@ const { theme, toggle: toggleTheme } = useTheme()
 
 const deviceId = computed(() => String(route.query.d ?? ''))
 
+const kind = ref<InterventionKind | null>(null)
 const technicianName = ref('')
-const technicianContact = ref('')
+const technicianEmail = ref('')
+const technicianPhone = ref('')
 const category = ref<'intervention' | 'incident' | 'controle' | 'autre'>('intervention')
-const severity = ref<'info' | 'warning' | 'error'>('info')
+const severity = ref<'info' | 'warning' | 'error'>('warning')
 const message = ref('')
 
 const submitting = ref(false)
-const submitted = ref<string | null>(null) // intervention id
+const submitted = ref<string | null>(null)
 const error = ref<string | null>(null)
 
 interface PhotoSlot {
@@ -34,7 +37,7 @@ const compressing = ref(0)
 async function onPhotoSelect(e: Event) {
   const input = e.target as HTMLInputElement
   const files = Array.from(input.files ?? [])
-  input.value = '' // allow selecting the same file twice
+  input.value = ''
   const available = MAX_PHOTOS - photoSlots.value.length
   if (available <= 0) {
     error.value = `Maximum ${MAX_PHOTOS} photos.`
@@ -67,26 +70,73 @@ function removePhoto(idx: number) {
 
 const CATEGORIES = [
   { value: 'intervention', label: 'Intervention' },
-  { value: 'incident', label: 'Incident' },
   { value: 'controle', label: 'Contrôle' },
   { value: 'autre', label: 'Autre' },
 ] as const
 const SEVERITIES: readonly Severity[] = ['info', 'warning', 'error'] as const
+
+const isSignalement = computed(() => kind.value === 'signalement')
+const headerTitle = computed(() =>
+  isSignalement.value ? 'Signaler une anomalie' : 'Consigner une intervention',
+)
+const headerSubtitle = computed(() =>
+  isSignalement.value
+    ? "Décrivez l'anomalie observée sur cet équipement."
+    : "Renseignez les détails de votre passage sur cet équipement.",
+)
+const submitLabel = computed(() => (isSignalement.value ? 'Envoyer le signalement' : 'Envoyer le rapport'))
+const successLabel = computed(() =>
+  isSignalement.value ? '✓ Signalement enregistré' : '✓ Intervention enregistrée',
+)
+const successText = computed(() =>
+  isSignalement.value
+    ? 'Merci, votre signalement a été transmis à l\'équipe.'
+    : 'Merci, votre rapport a été transmis à l\'équipe.',
+)
+const successAgainLabel = computed(() => (isSignalement.value ? 'Nouveau signalement' : 'Nouveau rapport'))
+
+function resetForm() {
+  technicianName.value = ''
+  technicianEmail.value = ''
+  technicianPhone.value = ''
+  category.value = 'intervention'
+  severity.value = 'warning'
+  message.value = ''
+  photoSlots.value = []
+  error.value = null
+}
+
+function backToPicker() {
+  kind.value = null
+  submitted.value = null
+  resetForm()
+}
 
 async function handleSubmit() {
   if (!deviceId.value) {
     error.value = 'Lien invalide.'
     return
   }
+  if (!kind.value) return
+  if (!technicianName.value.trim()) {
+    error.value = 'Nom requis.'
+    return
+  }
+  if (!technicianEmail.value.trim() && !technicianPhone.value.trim()) {
+    error.value = 'Email ou téléphone requis.'
+    return
+  }
   submitting.value = true
   error.value = null
   const res = await submitIntervention({
     deviceId: deviceId.value,
-    technicianName: technicianName.value,
-    technicianContact: technicianContact.value || null,
-    category: category.value,
-    severity: severity.value,
-    message: message.value || null,
+    kind: kind.value,
+    technicianName: technicianName.value.trim(),
+    technicianContact: technicianEmail.value.trim() || null,
+    technicianPhone: technicianPhone.value.trim() || null,
+    category: isSignalement.value ? 'incident' : category.value,
+    severity: isSignalement.value ? severity.value : 'info',
+    message: message.value.trim() || null,
     photos: photoSlots.value.map((s) => s.data),
   })
   submitting.value = false
@@ -99,8 +149,7 @@ async function handleSubmit() {
 
 function submitAnother() {
   submitted.value = null
-  message.value = ''
-  photoSlots.value = []
+  resetForm()
 }
 </script>
 
@@ -109,7 +158,7 @@ function submitAnother() {
     <div class="absolute inset-0 hex-grid" />
 
     <div class="absolute top-6 left-6 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground flex items-center gap-2">
-      <span class="text-signal">⬢</span> Hexa.ai · intervention
+      <span class="text-signal">⬢</span> Hexa.ai
     </div>
     <button
       class="absolute top-5 right-6 size-8 inline-flex items-center justify-center rounded-md border border-border hover:border-signal/60 text-muted-foreground hover:text-foreground transition"
@@ -132,40 +181,67 @@ function submitAnother() {
           class="h-12 w-[180px] object-contain mb-5 select-none"
           draggable="false"
         />
-        <div class="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-2">
-          Rapport d'intervention
-        </div>
-        <h1 class="text-2xl font-semibold tracking-tight">
-          Signaler une <span class="text-signal">intervention</span>
-        </h1>
-        <p v-if="!submitted" class="mt-2 text-sm text-muted-foreground">
-          Remplissez ce formulaire pour journaliser votre passage sur cet équipement.
-        </p>
       </div>
 
+      <!-- Step 1: choose kind -->
+      <KindPicker v-if="!kind" @select="kind = $event" />
+
+      <!-- Step 2: success screen -->
       <div
-        v-if="submitted"
+        v-else-if="submitted"
         class="border border-signal/40 rounded-lg bg-signal-soft p-7 text-center"
       >
         <div class="font-mono text-[10px] uppercase tracking-[0.3em] text-signal mb-3">
-          ✓ Intervention enregistrée
+          {{ successLabel }}
         </div>
-        <p class="text-sm mb-5">
-          Merci, votre rapport a été transmis à l'équipe.
-        </p>
-        <button
-          class="font-mono text-[11px] uppercase tracking-[0.22em] border border-signal/40 text-signal px-4 py-2 rounded-md hover:bg-signal-soft transition"
-          @click="submitAnother"
-        >
-          Nouveau rapport
-        </button>
+        <p class="text-sm mb-5">{{ successText }}</p>
+        <div class="flex flex-col sm:flex-row gap-2 justify-center">
+          <button
+            class="font-mono text-[11px] uppercase tracking-[0.22em] border border-signal/40 text-signal px-4 py-2 rounded-md hover:bg-signal-soft transition"
+            @click="submitAnother"
+          >
+            {{ successAgainLabel }}
+          </button>
+          <button
+            class="font-mono text-[11px] uppercase tracking-[0.22em] border border-border text-muted-foreground hover:text-foreground px-4 py-2 rounded-md transition"
+            @click="backToPicker"
+          >
+            Changer de type
+          </button>
+        </div>
       </div>
 
+      <!-- Step 2: form -->
       <form
         v-else
         class="border border-border rounded-lg bg-card/70 backdrop-blur-sm p-6 space-y-5"
         @submit.prevent="handleSubmit"
       >
+        <div class="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground hover:text-foreground transition inline-flex items-center gap-1"
+            @click="backToPicker"
+          >
+            ← Retour
+          </button>
+          <span
+            :class="[
+              'font-mono text-[10px] uppercase tracking-[0.22em] px-2 py-0.5 rounded border',
+              isSignalement
+                ? 'border-offline/40 text-offline bg-offline/5'
+                : 'border-signal/40 text-signal bg-signal/5',
+            ]"
+          >
+            {{ isSignalement ? 'Anomalie' : 'Intervention' }}
+          </span>
+        </div>
+
+        <div class="space-y-1">
+          <h1 class="text-xl font-semibold tracking-tight">{{ headerTitle }}</h1>
+          <p class="text-sm text-muted-foreground">{{ headerSubtitle }}</p>
+        </div>
+
         <div class="space-y-1.5">
           <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Nom *</label>
           <input
@@ -178,19 +254,54 @@ function submitAnother() {
           />
         </div>
 
-        <div class="space-y-1.5">
-          <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Téléphone ou email</label>
-          <input
-            v-model="technicianContact"
-            type="text"
-            placeholder="06 12 34 56 78 ou tech@exemple.fr"
-            class="w-full bg-transparent border-0 border-b border-border focus:border-signal focus:outline-none px-0 py-2 text-sm font-mono transition"
-          />
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="space-y-1.5">
+            <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Email *</label>
+            <input
+              v-model="technicianEmail"
+              type="email"
+              placeholder="vous@exemple.fr"
+              class="w-full bg-transparent border-0 border-b border-border focus:border-signal focus:outline-none px-0 py-2 text-sm font-mono transition"
+            />
+          </div>
+          <div class="space-y-1.5">
+            <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Téléphone *</label>
+            <input
+              v-model="technicianPhone"
+              type="tel"
+              placeholder="06 12 34 56 78"
+              class="w-full bg-transparent border-0 border-b border-border focus:border-signal focus:outline-none px-0 py-2 text-sm font-mono transition"
+            />
+          </div>
+        </div>
+        <p class="font-mono text-[10px] text-muted-foreground/70 -mt-3">
+          * Email ou téléphone : au moins un des deux.
+        </p>
+
+        <!-- Severity: signalement only -->
+        <div v-if="isSignalement" class="space-y-1.5">
+          <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Gravité</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button
+              v-for="s in SEVERITIES"
+              :key="s"
+              type="button"
+              :class="[
+                'font-mono text-[11px] uppercase tracking-[0.18em] px-3 py-2.5 rounded-md border-2 transition inline-flex items-center justify-center gap-1.5',
+                severityButtonClass(s, severity === s),
+              ]"
+              @click="severity = s"
+            >
+              <span class="text-sm leading-none">{{ SEVERITY_ICON[s] }}</span>
+              {{ SEVERITY_LABEL[s] }}
+            </button>
+          </div>
         </div>
 
-        <div class="space-y-1.5">
+        <!-- Category: intervention only -->
+        <div v-else class="space-y-1.5">
           <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Catégorie</label>
-          <div class="grid grid-cols-2 gap-2">
+          <div class="grid grid-cols-3 gap-2">
             <button
               v-for="c in CATEGORIES"
               :key="c.value"
@@ -209,36 +320,16 @@ function submitAnother() {
         </div>
 
         <div class="space-y-1.5">
-          <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Sévérité</label>
-          <div class="grid grid-cols-3 gap-2">
-            <button
-              v-for="s in SEVERITIES"
-              :key="s"
-              type="button"
-              :class="[
-                'font-mono text-[11px] uppercase tracking-[0.18em] px-3 py-2.5 rounded-md border-2 transition inline-flex items-center justify-center gap-1.5',
-                severityButtonClass(s, severity === s),
-              ]"
-              @click="severity = s"
-            >
-              <span class="text-sm leading-none">{{ SEVERITY_ICON[s] }}</span>
-              {{ SEVERITY_LABEL[s] }}
-            </button>
-          </div>
-        </div>
-
-        <div class="space-y-1.5">
           <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Commentaire</label>
           <textarea
             v-model="message"
             rows="4"
             maxlength="4000"
-            placeholder="Décrivez l'intervention…"
+            :placeholder="isSignalement ? 'Décrivez l\'anomalie…' : 'Décrivez l\'intervention…'"
             class="w-full bg-transparent border border-border rounded-md focus:border-signal focus:outline-none px-3 py-2 text-sm font-mono transition resize-y"
           />
         </div>
 
-        <!-- Photos -->
         <div class="space-y-2">
           <div class="flex items-center justify-between">
             <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -307,7 +398,7 @@ function submitAnother() {
         >
           <span class="font-mono text-[11px] uppercase tracking-[0.22em]">
             <template v-if="submitting"><span class="blink">▍</span> envoi…</template>
-            <template v-else>Envoyer le rapport</template>
+            <template v-else>{{ submitLabel }}</template>
           </span>
         </button>
       </form>

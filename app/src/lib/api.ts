@@ -91,10 +91,14 @@ export interface InterventionPhotoInput {
   dataBase64: string
 }
 
+export type InterventionKind = 'signalement' | 'intervention'
+
 export interface SubmitInterventionInput {
   deviceId: string
+  kind: InterventionKind
   technicianName: string
   technicianContact?: string | null
+  technicianPhone?: string | null
   category: 'intervention' | 'incident' | 'controle' | 'autre'
   severity: 'info' | 'warning' | 'error'
   message?: string | null
