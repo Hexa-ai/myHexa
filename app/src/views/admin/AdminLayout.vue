@@ -164,7 +164,7 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
           <span
             v-if="alarms.total.value > 0"
             class="ml-auto font-mono text-[10px] font-semibold tabular px-1.5 py-0.5 rounded bg-offline text-background alarm-flash"
-            :title="`${alarms.active.value} alarmes · ${alarms.open.value} interventions`"
+            :title="`${alarms.active.value} alarmes · ${alarms.open.value} ouvertes (signalements + interventions)`"
           >
             {{ alarms.total.value }}
           </span>
@@ -272,7 +272,7 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
           <button
             v-if="alarms.total.value > 0"
             class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded-md transition border-2 border-offline/50 bg-offline/10 text-offline hover:bg-offline/20 alarm-flash"
-            :title="`${alarms.active.value} alarmes capteur · ${alarms.open.value} interventions ouvertes`"
+            :title="`${alarms.active.value} alarmes capteur · ${alarms.open.value} ouvertes (signalements + interventions)`"
             @click="router.push({ name: 'admin-alarms' })"
           >
             <span class="size-1.5 rounded-full bg-offline pulse-dot" />
