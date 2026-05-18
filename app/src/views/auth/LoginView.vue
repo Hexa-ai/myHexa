@@ -13,9 +13,13 @@ const route = useRoute()
 const email = ref('')
 const password = ref('')
 
+function defaultRoute() {
+  return auth.isHexaStaff ? '/admin/staff/companies' : '/admin'
+}
+
 onMounted(() => {
   if (auth.isAuthenticated) {
-    const redirect = (route.query.redirect as string) || '/admin'
+    const redirect = (route.query.redirect as string) || defaultRoute()
     router.replace(redirect)
   }
 })
@@ -23,7 +27,10 @@ onMounted(() => {
 async function handleSubmit() {
   const ok = await auth.signIn(email.value, password.value)
   if (!ok) return
-  const redirect = (route.query.redirect as string) || '/admin'
+  // Le recipient est chargé async via onAuthStateChange — petit délai pour
+  // laisser le store se peupler avant de calculer la destination.
+  await new Promise((r) => setTimeout(r, 150))
+  const redirect = (route.query.redirect as string) || defaultRoute()
   router.push(redirect)
 }
 </script>
