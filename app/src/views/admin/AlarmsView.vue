@@ -60,7 +60,7 @@ type AlarmType = (typeof TYPE_OPTIONS)[number]
 
 const selectedDevice = ref<'all' | string>('all')
 const selectedTypes = ref<Set<AlarmType>>(new Set(TYPE_OPTIONS))
-const mode = ref<'live' | 'history' | 'interventions'>('live')
+const mode = ref<'live' | 'history' | 'signalements'>('live')
 
 // ------------------------------ Interventions --------------------------------
 
@@ -90,6 +90,7 @@ async function loadInterventions() {
     const { data, error: err } = await supabase
       .from('field_interventions')
       .select('id, device_id, created_at, technician_name, technician_contact, category, severity, message, status, resolved_at, photo_paths')
+      .eq('kind', 'signalement')
       .order('created_at', { ascending: false })
     if (err) {
       interventionsError.value = err.message
@@ -254,13 +255,6 @@ interface LiveInterventionRow {
 }
 type LiveRow = LiveAlarmRow | LiveInterventionRow
 
-const CATEGORY_LABEL: Record<InterventionRow['category'], string> = {
-  intervention: 'Intervention',
-  incident: 'Incident',
-  controle: 'Contrôle',
-  autre: 'Autre',
-}
-
 const filteredLive = computed<LiveRow[]>(() => {
   const alarms: LiveAlarmRow[] = filteredActive.value.map((a) => ({
     kind: 'alarm',
@@ -279,7 +273,7 @@ const filteredLive = computed<LiveRow[]>(() => {
       device_id: r.device_id,
       device_name: deviceNameById.value.get(r.device_id) ?? null,
       severity: r.severity,
-      title: `${CATEGORY_LABEL[r.category]} · ${r.technician_name}`,
+      title: r.technician_name,
       subtitle: r.message,
       ts: r.created_at,
     }))
@@ -399,11 +393,11 @@ function openDevice(id: string) {
         <button
           :class="[
             'font-mono text-[10px] uppercase tracking-[0.18em] px-3 py-1.5 rounded transition whitespace-nowrap',
-            mode === 'interventions' ? 'bg-signal text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+            mode === 'signalements' ? 'bg-signal text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
           ]"
-          @click="mode = 'interventions'"
+          @click="mode = 'signalements'"
         >
-          Interventions · {{ kpiInterventions }}
+          Signalements · {{ kpiInterventions }}
         </button>
       </nav>
     </div>
@@ -426,7 +420,7 @@ function openDevice(id: string) {
         v-else-if="filteredLive.length === 0"
         class="border border-border rounded-md bg-card/40 p-6 text-sm text-muted-foreground"
       >
-        Aucune alarme ni intervention ouverte ne correspond aux filtres.
+        Aucune alarme ni signalement ouvert ne correspond aux filtres.
       </div>
       <div
         v-else
@@ -477,7 +471,7 @@ function openDevice(id: string) {
                   <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
                   </svg>
-                  Interv.
+                  Signalement
                 </span>
               </td>
               <td class="px-4 py-3 font-mono text-xs">{{ row.title }}</td>
@@ -592,7 +586,7 @@ function openDevice(id: string) {
         v-if="interventionsLoading && !interventions.length"
         class="border border-border rounded-md bg-card/40 p-8 text-center font-mono text-sm text-muted-foreground"
       >
-        <span class="blink">▍</span> chargement des interventions…
+        <span class="blink">▍</span> chargement des signalements…
       </div>
       <div
         v-else-if="interventionsError"
@@ -604,7 +598,7 @@ function openDevice(id: string) {
         v-else-if="filteredInterventions.length === 0"
         class="border border-border rounded-md bg-card/40 p-6 text-sm text-muted-foreground"
       >
-        Aucune intervention terrain pour ces filtres.
+        Aucun signalement pour ces filtres.
       </div>
       <div v-else class="border border-border rounded-md bg-card/40 overflow-x-auto fade-up" style="animation-delay: 100ms">
         <table class="w-full text-sm min-w-[840px]">
@@ -613,8 +607,7 @@ function openDevice(id: string) {
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[140px]">Date</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]">Sévérité</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Device</th>
-              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[120px]">Catégorie</th>
-              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Technicien</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Signalé par</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Message</th>
               <th class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[150px]">Statut</th>
             </tr>
@@ -645,7 +638,6 @@ function openDevice(id: string) {
                   {{ deviceNameById.get(row.device_id) || '—' }}
                 </button>
               </td>
-              <td class="px-4 py-3 font-mono text-xs text-muted-foreground">{{ row.category }}</td>
               <td class="px-4 py-3">
                 <div class="font-medium">{{ row.technician_name }}</div>
                 <div v-if="row.technician_contact" class="font-mono text-[11px] text-muted-foreground">
@@ -709,9 +701,6 @@ function openDevice(id: string) {
               >
                 <span class="text-xs leading-none">{{ SEVERITY_ICON[detailRow.severity] }}</span>
                 {{ detailRow.severity }}
-              </span>
-              <span class="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                {{ detailRow.category }}
               </span>
               <span
                 :class="[
