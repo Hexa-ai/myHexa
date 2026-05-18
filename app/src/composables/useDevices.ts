@@ -1,5 +1,6 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { useAuthStore } from '@/stores/auth'
 import type { Database } from '@/types/supabase'
 
 type Row = Database['public']['Functions']['devices_with_latest_status']['Returns'][number]
@@ -21,7 +22,16 @@ export interface DeviceWithStatus {
 }
 
 export function useDevices() {
-  const devices = ref<DeviceWithStatus[]>([])
+  const auth = useAuthStore()
+  const allDevices = ref<DeviceWithStatus[]>([])
+  // Filtre client-side : si un staff a sélectionné une compagnie via "act as",
+  // on n'affiche que les devices de cette compagnie. Pour un non-staff, la RLS
+  // limite déjà à sa propre compagnie côté DB.
+  const devices = computed<DeviceWithStatus[]>(() => {
+    const eff = auth.effectiveCompanyId
+    if (auth.isHexaStaff && eff) return allDevices.value.filter((d) => d.company_id === eff)
+    return allDevices.value
+  })
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -29,7 +39,7 @@ export function useDevices() {
     // Soft-refresh: only show the spinner on the initial fetch. Subsequent
     // refreshes (auto-refresh, manual retry with data already in place) keep
     // the existing table visible.
-    if (devices.value.length === 0) loading.value = true
+    if (allDevices.value.length === 0) loading.value = true
     error.value = null
     try {
       const { data, error: err } = await supabase
@@ -39,7 +49,7 @@ export function useDevices() {
         error.value = err.message
         return
       }
-      devices.value = (data ?? []).map((d: Row) => ({
+      allDevices.value = (data ?? []).map((d: Row) => ({
         id: d.id,
         company_id: d.company_id,
         name: d.name,

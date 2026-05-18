@@ -25,13 +25,13 @@ export function useRecipients() {
   const externals = computed(() => items.value.filter((r) => r.auth_user_id === null))
 
   async function fetchAll() {
-    if (!auth.companyId) return
+    if (!auth.effectiveCompanyId) return
     loading.value = true
     error.value = null
     const { data, error: err } = await supabase
       .from('recipients')
       .select('*')
-      .eq('company_id', auth.companyId)
+      .eq('company_id', auth.effectiveCompanyId)
       .order('name', { ascending: true })
     loading.value = false
     if (err) {

@@ -16,11 +16,11 @@ const editing = ref<Recipient | null>(null)
 const flash = ref<string | null>(null)
 
 async function loadDevices() {
-  if (!auth.companyId) return
+  if (!auth.effectiveCompanyId) return
   const { data } = await supabase
     .from('devices')
     .select('id, name')
-    .eq('company_id', auth.companyId)
+    .eq('company_id', auth.effectiveCompanyId)
     .order('name', { ascending: true })
   devices.value = data ?? []
 }

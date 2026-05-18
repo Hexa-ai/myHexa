@@ -4,6 +4,7 @@ import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useTheme } from '@/composables/useTheme'
 import { useAlarmCounts, ALARM_COUNTS_KEY } from '@/composables/useAlarmCounts'
+import StaffBar from '@/components/staff/StaffBar.vue'
 
 const { theme, toggle: toggleTheme } = useTheme()
 const alarms = useAlarmCounts()
@@ -40,6 +41,10 @@ const breadcrumb = computed(() => {
     'admin-alarms': 'alarms',
     'admin-interventions': 'interventions',
     'admin-recipients': 'destinataires',
+    'staff-companies': 'staff / companies',
+    'staff-company-detail': 'staff / company',
+    'staff-devices': 'staff / devices',
+    'staff-device-new': 'staff / new device',
   }
   return map[String(route.name ?? '')] ?? String(route.name ?? '')
 })
@@ -73,9 +78,11 @@ function goMap() { router.push({ name: 'admin-map' }); closeSidebar() }
 function goAlarms() { router.push({ name: 'admin-alarms' }); closeSidebar() }
 function goInterventions() { router.push({ name: 'admin-interventions' }); closeSidebar() }
 function goRecipients() { router.push({ name: 'admin-recipients' }); closeSidebar() }
+function goStaff() { router.push({ name: 'staff-companies' }); closeSidebar() }
 const isDevices = computed(() => route.name === 'admin-devices' || route.name === 'admin-device-detail' || route.name === 'admin-device-periodic')
 const isMap = computed(() => route.name === 'admin-map')
 const isAlarms = computed(() => route.name === 'admin-alarms')
+const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
 </script>
 
 <template>
@@ -259,6 +266,31 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
           <span>Reports</span>
           <span class="ml-auto text-[9px] uppercase tracking-widest">soon</span>
         </div>
+
+        <div v-if="auth.isHexaStaff" class="my-3 border-t border-border" />
+
+        <button
+          v-if="auth.isHexaStaff"
+          :class="[
+            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
+            isStaff
+              ? 'text-foreground bg-secondary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+          ]"
+          @click="goStaff"
+        >
+          <span
+            :class="[
+              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
+              isStaff ? 'bg-signal' : 'bg-transparent',
+            ]"
+          />
+          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path d="M12 2 4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6l-8-4Z" />
+          </svg>
+          <span class="tracking-tight">Staff</span>
+          <span v-if="isStaff" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
+        </button>
       </nav>
 
       <!-- Session -->
@@ -280,6 +312,7 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
     </aside>
 
     <div class="flex-1 flex flex-col min-w-0">
+      <StaffBar v-if="auth.isHexaStaff" />
       <header class="h-12 border-b border-border bg-background/60 backdrop-blur-sm flex items-center justify-between px-3 sm:px-5 md:px-6">
         <div class="flex items-center gap-2 sm:gap-2.5 text-xs font-mono text-muted-foreground min-w-0">
           <button

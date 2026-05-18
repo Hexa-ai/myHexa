@@ -33,14 +33,14 @@ const statusFilter = ref<'open' | 'resolved' | 'all'>('open')
 const deviceNameById = ref<Map<string, string>>(new Map())
 
 async function load() {
-  if (!auth.companyId) return
+  if (!auth.effectiveCompanyId) return
   loading.value = true
   error.value = null
 
   const { data: devs, error: devErr } = await supabase
     .from('devices')
     .select('id, name')
-    .eq('company_id', auth.companyId)
+    .eq('company_id', auth.effectiveCompanyId)
   if (devErr) {
     loading.value = false
     error.value = devErr.message
@@ -148,7 +148,7 @@ function openLightbox(i: number) { detailLightbox.value = i }
 function closeLightbox() { detailLightbox.value = null }
 
 onMounted(load)
-watch(() => auth.companyId, load)
+watch(() => auth.effectiveCompanyId, load)
 useAutoRefresh(load, { intervalMs: 60_000 })
 </script>
 
