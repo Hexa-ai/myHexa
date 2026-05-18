@@ -13,3 +13,9 @@ export const requireAdmin: NavigationGuardWithThis<undefined> = () => {
   if (!auth.isAuthenticated) return { name: 'login' }
   if (auth.recipient?.role !== 'admin') return { name: 'admin-devices' }
 }
+
+export const requireStaff: NavigationGuardWithThis<undefined> = () => {
+  const auth = useAuthStore()
+  if (!auth.isAuthenticated) return { name: 'login' }
+  if (!auth.isHexaStaff) return { name: 'admin-devices' }
+}
