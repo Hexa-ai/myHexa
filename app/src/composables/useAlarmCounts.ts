@@ -39,7 +39,9 @@ export function useAlarmCounts() {
       active.value = row.active_alarms ?? 0
       openSignalements.value = row.open_signalements ?? 0
       openInterventions.value = row.open_interventions ?? 0
-      maxSeverity.value = row.max_severity ?? null
+      const sev = row.max_severity
+      maxSeverity.value =
+        sev === 'error' || sev === 'warning' || sev === 'info' ? sev : null
     } catch (e) {
       if (import.meta.env.DEV) console.warn('[alarm_counts] throw', e)
     }

@@ -7,7 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
-  __InternalSupabase: { PostgrestVersion: '14.5' }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   public: {
     Tables: {
       companies: {
@@ -17,6 +21,7 @@ export type Database = {
           contact_name: string | null
           created_at: string
           id: string
+          is_hexa_internal: boolean
           latitude: number | null
           longitude: number | null
           max_daily_reports: number
@@ -31,6 +36,7 @@ export type Database = {
           contact_name?: string | null
           created_at?: string
           id?: string
+          is_hexa_internal?: boolean
           latitude?: number | null
           longitude?: number | null
           max_daily_reports?: number
@@ -45,6 +51,7 @@ export type Database = {
           contact_name?: string | null
           created_at?: string
           id?: string
+          is_hexa_internal?: boolean
           latitude?: number | null
           longitude?: number | null
           max_daily_reports?: number
@@ -56,16 +63,28 @@ export type Database = {
         Relationships: []
       }
       connectivity_alerts: {
-        Row: { device_id: string; last_notified_at: string; state: string }
-        Insert: { device_id: string; last_notified_at?: string; state: string }
-        Update: { device_id?: string; last_notified_at?: string; state?: string }
+        Row: {
+          device_id: string
+          last_notified_at: string
+          state: string
+        }
+        Insert: {
+          device_id: string
+          last_notified_at?: string
+          state: string
+        }
+        Update: {
+          device_id?: string
+          last_notified_at?: string
+          state?: string
+        }
         Relationships: [
           {
-            foreignKeyName: 'connectivity_alerts_device_id_fkey'
-            columns: ['device_id']
+            foreignKeyName: "connectivity_alerts_device_id_fkey"
+            columns: ["device_id"]
             isOneToOne: true
-            referencedRelation: 'devices'
-            referencedColumns: ['id']
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -135,68 +154,77 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'devices_company_id_fkey'
-            columns: ['company_id']
+            foreignKeyName: "devices_company_id_fkey"
+            columns: ["company_id"]
             isOneToOne: false
-            referencedRelation: 'companies'
-            referencedColumns: ['id']
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
           },
         ]
       }
       field_interventions: {
         Row: {
-          id: string
-          device_id: string
+          category: string
           created_at: string
-          technician_name: string
-          technician_contact: string | null
-          technician_phone: string | null
-          category: 'intervention' | 'incident' | 'controle' | 'autre'
-          severity: 'info' | 'warning' | 'error'
-          kind: 'signalement' | 'intervention'
+          device_id: string
+          id: string
+          kind: string
           message: string | null
-          status: 'open' | 'resolved'
+          photo_paths: string[]
           resolved_at: string | null
           resolved_by_recipient_id: string | null
-          photo_paths: string[]
+          severity: string
+          status: string
+          technician_contact: string | null
+          technician_name: string
+          technician_phone: string | null
         }
         Insert: {
-          id?: string
-          device_id: string
+          category: string
           created_at?: string
-          technician_name: string
-          technician_contact?: string | null
-          technician_phone?: string | null
-          category: 'intervention' | 'incident' | 'controle' | 'autre'
-          severity: 'info' | 'warning' | 'error'
-          kind?: 'signalement' | 'intervention'
+          device_id: string
+          id?: string
+          kind?: string
           message?: string | null
-          status?: 'open' | 'resolved'
+          photo_paths?: string[]
           resolved_at?: string | null
           resolved_by_recipient_id?: string | null
+          severity: string
+          status?: string
+          technician_contact?: string | null
+          technician_name: string
+          technician_phone?: string | null
         }
         Update: {
-          id?: string
-          device_id?: string
+          category?: string
           created_at?: string
-          technician_name?: string
-          technician_contact?: string | null
-          technician_phone?: string | null
-          category?: 'intervention' | 'incident' | 'controle' | 'autre'
-          severity?: 'info' | 'warning' | 'error'
-          kind?: 'signalement' | 'intervention'
+          device_id?: string
+          id?: string
+          kind?: string
           message?: string | null
-          status?: 'open' | 'resolved'
+          photo_paths?: string[]
           resolved_at?: string | null
           resolved_by_recipient_id?: string | null
+          severity?: string
+          status?: string
+          technician_contact?: string | null
+          technician_name?: string
+          technician_phone?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: 'field_interventions_device_id_fkey'
-            columns: ['device_id']
+            foreignKeyName: "field_interventions_device_id_fkey"
+            columns: ["device_id"]
             isOneToOne: false
-            referencedRelation: 'devices'
-            referencedColumns: ['id']
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "field_interventions_resolved_by_recipient_id_fkey"
+            columns: ["resolved_by_recipient_id"]
+            isOneToOne: false
+            referencedRelation: "recipients"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -239,11 +267,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'recipients_company_id_fkey'
-            columns: ['company_id']
+            foreignKeyName: "recipients_company_id_fkey"
+            columns: ["company_id"]
             isOneToOne: false
-            referencedRelation: 'companies'
-            referencedColumns: ['id']
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -271,11 +299,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'report_tokens_recipient_id_fkey'
-            columns: ['recipient_id']
+            foreignKeyName: "report_tokens_recipient_id_fkey"
+            columns: ["recipient_id"]
             isOneToOne: false
-            referencedRelation: 'recipients'
-            referencedColumns: ['id']
+            referencedRelation: "recipients"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -287,7 +315,7 @@ export type Database = {
           period_end: string | null
           period_start: string | null
           received_at: string
-          type: Database['public']['Enums']['report_type']
+          type: Database["public"]["Enums"]["report_type"]
         }
         Insert: {
           device_id: string
@@ -296,7 +324,7 @@ export type Database = {
           period_end?: string | null
           period_start?: string | null
           received_at?: string
-          type: Database['public']['Enums']['report_type']
+          type: Database["public"]["Enums"]["report_type"]
         }
         Update: {
           device_id?: string
@@ -305,43 +333,46 @@ export type Database = {
           period_end?: string | null
           period_start?: string | null
           received_at?: string
-          type?: Database['public']['Enums']['report_type']
+          type?: Database["public"]["Enums"]["report_type"]
         }
         Relationships: [
           {
-            foreignKeyName: 'reports_device_id_fkey'
-            columns: ['device_id']
+            foreignKeyName: "reports_device_id_fkey"
+            columns: ["device_id"]
             isOneToOne: false
-            referencedRelation: 'devices'
-            referencedColumns: ['id']
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
           },
         ]
       }
     }
-    Views: { [_ in never]: never }
+    Views: {
+      [_ in never]: never
+    }
     Functions: {
       alarm_counts: {
         Args: never
         Returns: {
           active_alarms: number
-          open_signalements: number
+          max_severity: string
           open_interventions: number
-          max_severity: 'error' | 'warning' | 'info' | null
+          open_signalements: number
         }[]
       }
       alarm_history: {
         Args: never
         Returns: {
+          description: string
           device_id: string
-          device_name: string | null
-          ts: string | null
-          variable_name: string | null
-          description: string | null
-          type_alarm: string | null
-          state_label: string | null
+          device_name: string
+          state_label: string
+          ts: string
+          type_alarm: string
+          variable_name: string
         }[]
       }
       current_recipient_company_id: { Args: never; Returns: string }
+      current_recipient_is_admin: { Args: never; Returns: boolean }
       devices_with_latest_status: {
         Args: never
         Returns: {
@@ -360,8 +391,139 @@ export type Database = {
           vnc_port: number
         }[]
       }
+      is_hexa_staff: { Args: never; Returns: boolean }
+      is_hexa_staff_admin: { Args: never; Returns: boolean }
     }
-    Enums: { report_type: 'status' | 'daily' | 'weekly' }
-    CompositeTypes: { [_ in never]: never }
+    Enums: {
+      report_type: "status" | "daily" | "weekly"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
 }
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      report_type: ["status", "daily", "weekly"],
+    },
+  },
+} as const
