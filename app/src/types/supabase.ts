@@ -324,7 +324,9 @@ export type Database = {
         Args: never
         Returns: {
           active_alarms: number
+          open_signalements: number
           open_interventions: number
+          max_severity: 'error' | 'warning' | 'info' | null
         }[]
       }
       alarm_history: {

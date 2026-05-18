@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, provide, ref } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useTheme } from '@/composables/useTheme'
-import { useAlarmCounts } from '@/composables/useAlarmCounts'
+import { useAlarmCounts, ALARM_COUNTS_KEY } from '@/composables/useAlarmCounts'
 
 const { theme, toggle: toggleTheme } = useTheme()
 const alarms = useAlarmCounts()
+provide(ALARM_COUNTS_KEY, alarms)
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -44,6 +45,22 @@ const breadcrumb = computed(() => {
 })
 
 const isAdmin = computed(() => auth.recipient?.role === 'admin')
+
+// Couleur du chip "à traiter" en fonction de la gravité max (alarmes + signalements).
+// error → rouge (offline), warning → ambre, info → bleu (signal).
+const urgentChipClass = computed(() => {
+  const sev = alarms.maxSeverity.value
+  if (sev === 'warning') return 'border-amber/50 bg-amber/10 text-amber hover:bg-amber/20'
+  if (sev === 'info') return 'border-signal/50 bg-signal/10 text-signal hover:bg-signal/20'
+  // error ou null/fallback : rouge clignotant
+  return 'border-offline/50 bg-offline/10 text-offline hover:bg-offline/20 alarm-flash'
+})
+const urgentDotClass = computed(() => {
+  const sev = alarms.maxSeverity.value
+  if (sev === 'warning') return 'bg-amber'
+  if (sev === 'info') return 'bg-signal'
+  return 'bg-offline'
+})
 const isInterventions = computed(() => route.name === 'admin-interventions')
 const isRecipients = computed(() => route.name === 'admin-recipients')
 
@@ -162,11 +179,11 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
           </svg>
           <span class="tracking-tight">Alarmes</span>
           <span
-            v-if="alarms.total.value > 0"
+            v-if="alarms.urgent.value > 0"
             class="ml-auto font-mono text-[10px] font-semibold tabular px-1.5 py-0.5 rounded bg-offline text-background alarm-flash"
-            :title="`${alarms.active.value} alarmes · ${alarms.open.value} ouvertes (signalements + interventions)`"
+            :title="`${alarms.active.value} alarmes capteur · ${alarms.openSignalements.value} signalements ouverts`"
           >
-            {{ alarms.total.value }}
+            {{ alarms.urgent.value }}
           </span>
           <span
             v-else-if="isAlarms"
@@ -195,7 +212,19 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
             <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
           </svg>
           <span class="tracking-tight">Interventions</span>
-          <span v-if="isInterventions" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
+          <span
+            v-if="alarms.openInterventions.value > 0"
+            class="ml-auto font-mono text-[10px] font-semibold tabular px-1.5 py-0.5 rounded bg-signal/15 text-signal border border-signal/30"
+            :title="`${alarms.openInterventions.value} interventions ouvertes`"
+          >
+            {{ alarms.openInterventions.value }}
+          </span>
+          <span
+            v-else-if="isInterventions"
+            class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal"
+          >
+            ●
+          </span>
         </button>
 
         <button
@@ -270,14 +299,29 @@ const isAlarms = computed(() => route.name === 'admin-alarms')
         </div>
         <div class="flex items-center gap-2 sm:gap-5 text-[11px] font-mono text-muted-foreground">
           <button
-            v-if="alarms.total.value > 0"
-            class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded-md transition border-2 border-offline/50 bg-offline/10 text-offline hover:bg-offline/20 alarm-flash"
-            :title="`${alarms.active.value} alarmes capteur · ${alarms.open.value} ouvertes (signalements + interventions)`"
+            v-if="alarms.urgent.value > 0"
+            :class="[
+              'inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded-md transition border-2',
+              urgentChipClass,
+            ]"
+            :title="`${alarms.active.value} alarmes capteur · ${alarms.openSignalements.value} signalements ouverts`"
             @click="router.push({ name: 'admin-alarms' })"
           >
-            <span class="size-1.5 rounded-full bg-offline pulse-dot" />
-            <span class="tabular">{{ alarms.total.value }}</span>
+            <span :class="['size-1.5 rounded-full pulse-dot', urgentDotClass]" />
+            <span class="tabular">{{ alarms.urgent.value }}</span>
             <span class="hidden sm:inline">à traiter</span>
+          </button>
+          <button
+            v-if="alarms.openInterventions.value > 0"
+            class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded-md transition border-2 border-signal/40 bg-signal/10 text-signal hover:bg-signal/20"
+            :title="`${alarms.openInterventions.value} interventions ouvertes`"
+            @click="router.push({ name: 'admin-interventions' })"
+          >
+            <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+            </svg>
+            <span class="tabular">{{ alarms.openInterventions.value }}</span>
+            <span class="hidden sm:inline">interv.</span>
           </button>
           <span class="hidden sm:flex items-center gap-1.5">
             <span class="size-1 rounded-full bg-signal pulse-dot" />

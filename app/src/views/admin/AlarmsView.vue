@@ -4,6 +4,9 @@ import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { useDevices } from '@/composables/useDevices'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { injectAlarmCounts } from '@/composables/useAlarmCounts'
+
+const alarmCounts = injectAlarmCounts()
 import {
   formatRelative,
   severityPillClass,
@@ -118,6 +121,7 @@ async function toggleInterventionStatus(row: InterventionRow) {
     return
   }
   await loadInterventions()
+  alarmCounts?.refresh()
 }
 
 const deviceNameById = computed(() => {
