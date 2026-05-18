@@ -351,7 +351,7 @@ export type Database = {
     }
     Functions: {
       alarm_counts: {
-        Args: never
+        Args: { p_company_id: string | null }
         Returns: {
           active_alarms: number
           max_severity: string
