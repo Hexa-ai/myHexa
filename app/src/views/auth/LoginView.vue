@@ -68,14 +68,11 @@ async function handleSubmit() {
           class="h-14 w-[200px] object-contain mb-7 select-none drop-shadow-[0_8px_30px_rgb(232_144_46_/_0.25)]"
           draggable="false"
         />
-        <div class="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-3">
-          Restricted access
-        </div>
         <h1 class="text-3xl font-semibold tracking-tight">
           my<span class="text-signal">Hexa</span> <span class="text-muted-foreground/70 font-light">Edge</span>
         </h1>
         <p class="mt-3 text-sm text-muted-foreground text-center max-w-sm">
-          Supervisez en temps réel votre parc de capteurs Hexa.ai.
+          Monitorez vos machines dès le premier jour.
         </p>
       </div>
 
