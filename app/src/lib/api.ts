@@ -115,6 +115,29 @@ export interface SubmitInterventionData {
 export const submitIntervention = (input: SubmitInterventionInput) =>
   post<SubmitInterventionData>('submit-intervention', input)
 
+// ----------------------------- view-supervision ----------------------------
+
+export interface SupervisionDevice {
+  id: string
+  name: string | null
+  address: string | null
+  latitude: number | null
+  longitude: number | null
+  last_status_at: string | null
+  online: boolean
+  alarm_count: number
+}
+
+export interface ViewSupervisionData {
+  recipient: { name: string | null; role: string | null }
+  expiresAt: string
+  company: { id: string; name: string }
+  devices: SupervisionDevice[]
+}
+
+export const viewSupervision = (token: string) =>
+  get<ViewSupervisionData>('view-supervision', { t: token })
+
 // ----------------------------- recover-link ---------------------------------
 
 export const recoverLink = (email: string, fromUrl?: string) =>

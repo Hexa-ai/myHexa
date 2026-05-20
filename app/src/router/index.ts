@@ -19,6 +19,7 @@ import StaffDeviceNewView from '@/views/admin/staff/DeviceNewView.vue'
 import StaffDeviceEditView from '@/views/admin/staff/DeviceEditView.vue'
 import ReportView from '@/views/public/ReportView.vue'
 import PeriodicReportView from '@/views/public/PeriodicReportView.vue'
+import SupervisionView from '@/views/public/SupervisionView.vue'
 import InterventionView from '@/views/public/InterventionView.vue'
 import RecoverView from '@/views/public/RecoverView.vue'
 import { requireAuth, requireAdmin, requireStaff, requireStaffAdmin } from '@/router/guards'
@@ -41,6 +42,7 @@ export const router = createRouter({
     { path: '/auth/magic-link', name: 'magic-link', component: MagicLinkView },
     { path: '/report', name: 'report', component: ReportView },
     { path: '/report/periodic', name: 'report-periodic', component: PeriodicReportView },
+    { path: '/report/supervision', name: 'report-supervision', component: SupervisionView },
     { path: '/intervention', name: 'intervention', component: InterventionView },
     { path: '/recover', name: 'recover', component: RecoverView },
     {
