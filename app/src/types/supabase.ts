@@ -233,9 +233,8 @@ export type Database = {
       }
       recipients: {
         Row: {
-          allowed_device_ids: string[] | null
-          auth_user_id: string | null
-          company_id: string
+          auth_user_id: string
+          company_id: string | null
           contact_email: string | null
           created_at: string
           id: string
@@ -247,9 +246,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          allowed_device_ids?: string[] | null
-          auth_user_id?: string | null
-          company_id: string
+          auth_user_id: string
+          company_id?: string | null
           contact_email?: string | null
           created_at?: string
           id?: string
@@ -261,9 +259,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          allowed_device_ids?: string[] | null
-          auth_user_id?: string | null
-          company_id?: string
+          auth_user_id?: string
+          company_id?: string | null
           contact_email?: string | null
           created_at?: string
           id?: string
