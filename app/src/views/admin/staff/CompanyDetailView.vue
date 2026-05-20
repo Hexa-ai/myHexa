@@ -175,6 +175,7 @@ watch(id, load)
               <td class="px-4 py-2 font-mono text-xs text-muted-foreground">{{ fmtDate(d.last_connection_at) }}</td>
               <td class="px-4 py-2 text-right">
                 <router-link
+                  v-if="auth.isHexaStaffAdmin"
                   :to="{ name: 'staff-device-edit', params: { id: d.id } }"
                   class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-signal transition"
                 >

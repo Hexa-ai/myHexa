@@ -3,6 +3,9 @@ import { onMounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { useStaffCompanies } from '@/composables/useStaffCompanies'
+import { useAuthStore } from '@/stores/auth'
+
+const auth = useAuthStore()
 
 interface DeviceRow {
   id: string
@@ -80,6 +83,7 @@ onMounted(() => { fetchCompanies(); load() })
         <p class="text-sm text-muted-foreground">Tous les devices, toutes compagnies.</p>
       </div>
       <button
+        v-if="auth.isHexaStaffAdmin"
         type="button"
         class="font-mono text-[10px] uppercase tracking-wider border border-signal/50 text-signal px-3 py-1.5 rounded-md hover:bg-signal-soft transition"
         @click="provision"
@@ -138,6 +142,7 @@ onMounted(() => { fetchCompanies(); load() })
             </td>
             <td class="px-4 py-3 text-right">
               <router-link
+                v-if="auth.isHexaStaffAdmin"
                 :to="{ name: 'staff-device-edit', params: { id: d.id } }"
                 class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-signal transition"
               >

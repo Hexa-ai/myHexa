@@ -21,7 +21,7 @@ import ReportView from '@/views/public/ReportView.vue'
 import PeriodicReportView from '@/views/public/PeriodicReportView.vue'
 import InterventionView from '@/views/public/InterventionView.vue'
 import RecoverView from '@/views/public/RecoverView.vue'
-import { requireAuth, requireAdmin, requireStaff } from '@/router/guards'
+import { requireAuth, requireAdmin, requireStaff, requireStaffAdmin } from '@/router/guards'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -63,8 +63,8 @@ export const router = createRouter({
         { path: 'staff/companies', name: 'staff-companies', component: StaffCompaniesView, beforeEnter: requireStaff },
         { path: 'staff/companies/:id', name: 'staff-company-detail', component: StaffCompanyDetailView, beforeEnter: requireStaff },
         { path: 'staff/devices', name: 'staff-devices', component: StaffDevicesView, beforeEnter: requireStaff },
-        { path: 'staff/devices/new', name: 'staff-device-new', component: StaffDeviceNewView, beforeEnter: requireStaff },
-        { path: 'staff/devices/:id/edit', name: 'staff-device-edit', component: StaffDeviceEditView, beforeEnter: requireStaff },
+        { path: 'staff/devices/new', name: 'staff-device-new', component: StaffDeviceNewView, beforeEnter: requireStaffAdmin },
+        { path: 'staff/devices/:id/edit', name: 'staff-device-edit', component: StaffDeviceEditView, beforeEnter: requireStaffAdmin },
         { path: '', redirect: { name: 'admin-devices' } },
       ],
     },

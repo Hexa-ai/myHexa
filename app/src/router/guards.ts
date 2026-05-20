@@ -19,3 +19,9 @@ export const requireStaff: NavigationGuardWithThis<undefined> = () => {
   if (!auth.isAuthenticated) return { name: 'login' }
   if (!auth.isHexaStaff) return { name: 'admin-devices' }
 }
+
+export const requireStaffAdmin: NavigationGuardWithThis<undefined> = () => {
+  const auth = useAuthStore()
+  if (!auth.isAuthenticated) return { name: 'login' }
+  if (!auth.isHexaStaffAdmin) return { name: 'staff-companies' }
+}
