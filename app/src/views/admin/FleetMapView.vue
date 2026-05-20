@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDevices } from '@/composables/useDevices'
-import { isOnline } from '@/lib/utils'
+import { isOnline, maxActiveAlarmSeverity } from '@/lib/utils'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import DeviceMap, { type MarkerInput } from '@/components/DeviceMap.vue'
 
@@ -20,6 +20,7 @@ const markers = computed<MarkerInput[]>(() =>
       lng: Number(d.longitude),
       label: d.name ?? undefined,
       online: isOnline(d.last_connection_at),
+      severity: maxActiveAlarmSeverity(d.status_payload),
     })),
 )
 

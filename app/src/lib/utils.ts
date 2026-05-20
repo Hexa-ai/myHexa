@@ -134,3 +134,20 @@ export function activeAlarmCount(payload: unknown): number {
     (v) => v?.category === 'alarm' && v?.value !== 0 && v?.value !== null && v?.value !== false,
   ).length
 }
+
+export function maxActiveAlarmSeverity(payload: unknown): 'error' | 'warning' | null {
+  if (!payload || typeof payload !== 'object') return null
+  const vars = (payload as {
+    variables?: Array<{ category?: string; value: unknown; type_alarm?: string }>
+  }).variables
+  if (!Array.isArray(vars)) return null
+  let hasWarning = false
+  for (const v of vars) {
+    if (v?.category !== 'alarm') continue
+    if (v?.value === 0 || v?.value === null || v?.value === false) continue
+    const t = String(v?.type_alarm ?? '').toLowerCase()
+    if (t === 'error') return 'error'
+    if (t === 'warning') hasWarning = true
+  }
+  return hasWarning ? 'warning' : null
+}

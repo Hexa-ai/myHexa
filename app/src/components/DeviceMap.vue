@@ -10,6 +10,7 @@ export interface MarkerInput {
   lng: number
   label?: string
   online?: boolean
+  severity?: 'error' | 'warning' | null
   href?: string
 }
 
@@ -41,7 +42,16 @@ const ATTR = '&copy; OpenStreetMap &middot; CartoDB'
 
 function colorFor(m: MarkerInput): string {
   if (m.online === false) return '#ff7a7a'
+  if (m.severity === 'error') return '#ff7a7a'
+  if (m.severity === 'warning') return '#f5a524'
   return '#00d4aa'
+}
+
+function markerClassFor(m: MarkerInput): string {
+  if (m.online === false) return 'hai-marker hai-marker-offline'
+  if (m.severity === 'error') return 'hai-marker hai-marker-error'
+  if (m.severity === 'warning') return 'hai-marker hai-marker-warning'
+  return 'hai-marker hai-marker-ok'
 }
 
 function escapeHtml(s: string): string {
@@ -54,8 +64,21 @@ function escapeHtml(s: string): string {
 }
 
 function tooltipHtml(m: MarkerInput): string {
-  const stateClass = m.online === false ? 'is-offline' : 'is-online'
-  const stateLabel = m.online === false ? 'Offline' : 'Online'
+  let stateClass: string
+  let stateLabel: string
+  if (m.online === false) {
+    stateClass = 'is-offline'
+    stateLabel = 'Offline'
+  } else if (m.severity === 'error') {
+    stateClass = 'is-error'
+    stateLabel = 'Alarme'
+  } else if (m.severity === 'warning') {
+    stateClass = 'is-warning'
+    stateLabel = 'Vigilance'
+  } else {
+    stateClass = 'is-online'
+    stateLabel = 'Online'
+  }
   const name = escapeHtml(m.label ?? '—')
   return `
     <div class="hai-tip ${stateClass}">
@@ -86,6 +109,7 @@ function buildMarkers() {
       fillColor: colorFor(m),
       fillOpacity: 1,
       radius: 8,
+      className: markerClassFor(m),
     })
     c.bindTooltip(tooltipHtml(m), {
       direction: 'top',
@@ -226,6 +250,14 @@ defineExpose({
   background: color-mix(in srgb, var(--signal) 55%, transparent);
   animation: hai-tip-pulse 2.4s ease-in-out infinite;
 }
+.hai-tip.is-warning .hai-tip-halo {
+  background: color-mix(in srgb, var(--warn, #f5a524) 55%, transparent);
+  animation: hai-tip-pulse 1.2s ease-in-out infinite;
+}
+.hai-tip.is-error .hai-tip-halo {
+  background: color-mix(in srgb, var(--offline, #ff7a7a) 55%, transparent);
+  animation: hai-tip-pulse 1.2s ease-in-out infinite;
+}
 .hai-tip.is-offline .hai-tip-halo {
   background: color-mix(in srgb, var(--muted-foreground) 25%, transparent);
 }
@@ -243,6 +275,14 @@ defineExpose({
 }
 .hai-tip.is-online .hai-tip-ripple {
   animation: hai-tip-ripple 2.4s ease-out infinite;
+}
+.hai-tip.is-warning .hai-tip-ripple {
+  border-color: color-mix(in srgb, var(--warn, #f5a524) 50%, transparent);
+  animation: hai-tip-ripple 1.2s ease-out infinite;
+}
+.hai-tip.is-error .hai-tip-ripple {
+  border-color: color-mix(in srgb, var(--offline, #ff7a7a) 55%, transparent);
+  animation: hai-tip-ripple 1.2s ease-out infinite;
 }
 .hai-tip-img {
   position: relative;
@@ -278,8 +318,28 @@ defineExpose({
 .hai-tip.is-online .hai-tip-state {
   color: var(--signal);
 }
+.hai-tip.is-warning .hai-tip-state {
+  color: var(--warn, #f5a524);
+}
+.hai-tip.is-error .hai-tip-state,
 .hai-tip.is-offline .hai-tip-state {
   color: var(--offline, #ff7a7a);
+}
+
+/* Pulse animation on the map markers themselves (SVG circles) */
+.leaflet-interactive.hai-marker {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.leaflet-interactive.hai-marker-warning {
+  animation: hai-marker-pulse 1.2s ease-in-out infinite;
+}
+.leaflet-interactive.hai-marker-error {
+  animation: hai-marker-pulse 1.0s ease-in-out infinite;
+}
+@keyframes hai-marker-pulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%       { opacity: 0.55; transform: scale(1.45); }
 }
 
 @keyframes hai-tip-pulse {
