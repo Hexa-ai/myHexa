@@ -26,7 +26,7 @@ const markers = computed<MarkerInput[]>(() =>
 )
 
 // --- Play mode (kiosque) -----------------------------------------------------
-const PLAY_INTERVAL_MS = 10_000
+const PLAY_INTERVAL_MS = 12_000
 const mapRef = ref<InstanceType<typeof DeviceMap> | null>(null)
 const isPlaying = ref(false)
 const playIndex = ref(0)
@@ -36,7 +36,7 @@ function nextStep() {
   if (!markers.value.length) return
   playIndex.value = (playIndex.value + 1) % markers.value.length
   const m = markers.value[playIndex.value]
-  mapRef.value?.focusMarker(m.id)
+  mapRef.value?.focusMarker(m.id, { withOverview: true })
 }
 
 function startPlay() {
