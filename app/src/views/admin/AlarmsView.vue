@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
@@ -58,6 +58,7 @@ async function refreshAll() {
   await Promise.all([loadDevices(), loadHistory(), loadInterventions()])
 }
 useAutoRefresh(refreshAll, { intervalMs: 120_000 })
+watch(() => auth.effectiveCompanyId, refreshAll)
 
 // ------------------------------ Filters --------------------------------------
 

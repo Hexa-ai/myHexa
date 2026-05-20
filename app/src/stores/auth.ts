@@ -75,14 +75,20 @@ export const useAuthStore = defineStore('auth', () => {
     const { data } = await supabase.auth.getSession()
     session.value = data.session
     if (session.value) await loadRecipient()
-    supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    supabase.auth.onAuthStateChange(async (event, newSession) => {
       session.value = newSession
-      if (newSession) await loadRecipient()
-      else {
+      // Ne recharger le recipient que lors d'une vraie (dé)connexion ou d'un
+      // changement d'utilisateur. TOKEN_REFRESHED arrive toutes les ~30 min
+      // et déclencherait une race avec les fetches en cours.
+      if (!newSession) {
         recipient.value = null
         companyName.value = null
         isHexaInternalCompany.value = false
         actAsCompanyId.value = null
+        return
+      }
+      if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || !recipient.value) {
+        await loadRecipient()
       }
     })
   }

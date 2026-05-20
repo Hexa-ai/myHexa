@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 import { useDevices } from '@/composables/useDevices'
 import {
@@ -127,7 +128,9 @@ watch(
   { immediate: true },
 )
 
+const auth = useAuthStore()
 useAutoRefresh(loadAll, { intervalMs: 120_000 })
+watch(() => auth.effectiveCompanyId, loadAll)
 
 const IFC_LABEL: Record<InterfaceKey, string> = {
   eth0: 'Ethernet 0',
