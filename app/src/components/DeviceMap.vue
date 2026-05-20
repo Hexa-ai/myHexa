@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import L, { type Map as LeafletMap, type CircleMarker } from 'leaflet'
+import L, { type Map as LeafletMap, type Marker } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useTheme } from '@/composables/useTheme'
 
@@ -33,7 +33,7 @@ const mapEl = ref<HTMLElement | null>(null)
 let map: LeafletMap | null = null
 let layer: L.LayerGroup | null = null
 let tileLayer: L.TileLayer | null = null
-const circlesById = new Map<string, CircleMarker>()
+const circlesById = new Map<string, Marker>()
 
 const TILES = {
   dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
@@ -41,18 +41,11 @@ const TILES = {
 }
 const ATTR = '&copy; OpenStreetMap &middot; CartoDB'
 
-function colorFor(m: MarkerInput): string {
-  if (m.online === false) return '#ff7a7a'
-  if (m.severity === 'error') return '#ff7a7a'
-  if (m.severity === 'warning') return '#f5a524'
-  return '#00d4aa'
-}
-
-function markerClassFor(m: MarkerInput): string {
-  if (m.online === false) return 'hai-marker hai-marker-offline'
-  if (m.severity === 'error') return 'hai-marker hai-marker-error'
-  if (m.severity === 'warning') return 'hai-marker hai-marker-warning'
-  return 'hai-marker hai-marker-ok'
+function markerStateClass(m: MarkerInput): string {
+  if (m.online === false) return 'hai-marker-offline'
+  if (m.severity === 'error') return 'hai-marker-error'
+  if (m.severity === 'warning') return 'hai-marker-warning'
+  return 'hai-marker-ok'
 }
 
 function escapeHtml(s: string): string {
@@ -103,16 +96,15 @@ function buildMarkers() {
   if (!valid.length) return
 
   circlesById.clear()
-  const circles: CircleMarker[] = []
+  const circles: Marker[] = []
   for (const m of valid) {
-    const c = L.circleMarker([m.lat, m.lng], {
-      color: '#ffffff',
-      weight: 2,
-      fillColor: colorFor(m),
-      fillOpacity: 1,
-      radius: 8,
-      className: markerClassFor(m),
+    const icon = L.divIcon({
+      className: `hai-marker ${markerStateClass(m)}`,
+      html: '<span class="hai-marker-dot"></span>',
+      iconSize: [16, 16],
+      iconAnchor: [8, 8],
     })
+    const c = L.marker([m.lat, m.lng], { icon })
     c.bindTooltip(tooltipHtml(m), {
       direction: 'top',
       offset: [0, -10],
@@ -368,20 +360,41 @@ defineExpose({
   color: var(--offline, #ff7a7a);
 }
 
-/* Pulse animation on the map markers themselves (SVG circles) */
-.leaflet-interactive.hai-marker {
-  transform-box: fill-box;
-  transform-origin: center;
+/* HTML markers (divIcon) — keep their pixel size during zoom */
+.hai-marker {
+  background: transparent;
+  border: 0;
+  pointer-events: auto;
 }
-.leaflet-interactive.hai-marker-warning {
-  animation: hai-marker-pulse 1.2s ease-in-out infinite;
+.hai-marker-dot {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25), 0 2px 6px rgba(0, 0, 0, 0.35);
+  background: #00d4aa;
+  transition: transform 0.15s ease;
 }
-.leaflet-interactive.hai-marker-error {
-  animation: hai-marker-pulse 1.0s ease-in-out infinite;
-}
+.hai-marker-offline .hai-marker-dot,
+.hai-marker-error .hai-marker-dot   { background: #ff7a7a; }
+.hai-marker-warning .hai-marker-dot { background: #f5a524; }
+.hai-marker-ok .hai-marker-dot      { background: #00d4aa; }
+.hai-marker:hover .hai-marker-dot   { transform: scale(1.25); }
+
+.hai-marker-warning .hai-marker-dot { animation: hai-marker-pulse 1.2s ease-in-out infinite; }
+.hai-marker-error   .hai-marker-dot { animation: hai-marker-pulse 1.0s ease-in-out infinite; }
+
 @keyframes hai-marker-pulse {
-  0%, 100% { opacity: 1;   transform: scale(1); }
-  50%       { opacity: 0.55; transform: scale(1.45); }
+  0%, 100% { box-shadow: 0 0 0 0   rgba(255, 122, 122, 0.6); }
+  50%       { box-shadow: 0 0 0 10px rgba(255, 122, 122, 0); }
+}
+.hai-marker-warning .hai-marker-dot {
+  animation-name: hai-marker-pulse-warn;
+}
+@keyframes hai-marker-pulse-warn {
+  0%, 100% { box-shadow: 0 0 0 0   rgba(245, 165, 36, 0.6); }
+  50%       { box-shadow: 0 0 0 10px rgba(245, 165, 36, 0); }
 }
 
 @keyframes hai-tip-pulse {
