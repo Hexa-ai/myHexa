@@ -119,30 +119,7 @@ function onSelect(id: string) {
         </p>
       </div>
 
-      <div class="flex items-center gap-3 self-start md:self-auto w-full md:w-auto">
-        <button
-          type="button"
-          :disabled="!markers.length"
-          :class="[
-            'inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-md border transition',
-            isPlaying
-              ? 'bg-signal text-primary-foreground border-signal hover:brightness-110'
-              : 'border-border text-muted-foreground hover:border-signal/60 hover:text-signal',
-            !markers.length && 'opacity-50 cursor-not-allowed',
-          ]"
-          @click="togglePlay"
-        >
-          <template v-if="isPlaying">
-            <svg viewBox="0 0 24 24" class="size-3" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="0.5"/><rect x="14" y="5" width="4" height="14" rx="0.5"/></svg>
-            Pause · {{ playIndex + 1 }}/{{ markers.length }}
-          </template>
-          <template v-else>
-            <svg viewBox="0 0 24 24" class="size-3" fill="currentColor"><path d="M7 5v14l12-7z"/></svg>
-            Mode kiosque
-          </template>
-        </button>
-
-      <div class="grid grid-cols-3 gap-px bg-border border border-border rounded-sm overflow-hidden flex-1 md:flex-initial">
+      <div class="grid grid-cols-3 gap-px bg-border border border-border rounded-sm overflow-hidden self-start md:self-auto w-full md:w-auto">
         <div class="bg-card px-3 sm:px-5 py-2.5 sm:py-3 min-w-0">
           <div class="font-mono text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground">Géoloc.</div>
           <div class="font-mono text-xl sm:text-2xl tabular mt-0.5">{{ markers.length.toString().padStart(2, '0') }}</div>
@@ -164,7 +141,6 @@ function onSelect(id: string) {
             {{ offlineCount.toString().padStart(2, '0') }}
           </div>
         </div>
-      </div>
       </div>
     </header>
 
@@ -190,14 +166,35 @@ function onSelect(id: string) {
         Ajoute une adresse dans la fiche d'un équipement pour le voir apparaître ici.
       </p>
     </div>
-    <DeviceMap
-      v-else
-      ref="mapRef"
-      :markers="markers"
-      height="100%"
-      class="flex-1 fade-up"
-      style="animation-delay: 80ms"
-      @select="onSelect"
-    />
+    <div v-else class="relative flex-1 fade-up" style="animation-delay: 80ms">
+      <DeviceMap
+        ref="mapRef"
+        :markers="markers"
+        height="100%"
+        @select="onSelect"
+      />
+
+      <!-- Play / kiosk control floating on the map -->
+      <button
+        type="button"
+        :disabled="!markers.length"
+        :class="[
+          'absolute top-4 right-4 z-[400] inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-md border backdrop-blur-md transition shadow-sm',
+          isPlaying
+            ? 'bg-signal text-primary-foreground border-signal hover:brightness-110'
+            : 'bg-card/85 border-border text-muted-foreground hover:border-signal/60 hover:text-signal',
+        ]"
+        @click="togglePlay"
+      >
+        <template v-if="isPlaying">
+          <svg viewBox="0 0 24 24" class="size-3" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="0.5"/><rect x="14" y="5" width="4" height="14" rx="0.5"/></svg>
+          Pause · {{ playIndex + 1 }}/{{ markers.length }}
+        </template>
+        <template v-else>
+          <svg viewBox="0 0 24 24" class="size-3" fill="currentColor"><path d="M7 5v14l12-7z"/></svg>
+          Mode kiosque
+        </template>
+      </button>
+    </div>
   </section>
 </template>
