@@ -281,38 +281,6 @@ export type Database = {
           },
         ]
       }
-      report_tokens: {
-        Row: {
-          created_at: string
-          device_ids: string
-          expires_at: string
-          recipient_id: string
-          token: string
-        }
-        Insert: {
-          created_at?: string
-          device_ids: string
-          expires_at: string
-          recipient_id: string
-          token: string
-        }
-        Update: {
-          created_at?: string
-          device_ids?: string
-          expires_at?: string
-          recipient_id?: string
-          token?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "report_tokens_recipient_id_fkey"
-            columns: ["recipient_id"]
-            isOneToOne: false
-            referencedRelation: "recipients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       reports: {
         Row: {
           device_id: string
