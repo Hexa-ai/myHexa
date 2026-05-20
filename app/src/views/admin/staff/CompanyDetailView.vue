@@ -85,7 +85,11 @@ async function sendReportNow() {
     })
     if (err) throw new Error(err.message)
     if (!data?.ok) throw new Error(data?.error ?? 'Erreur inconnue')
-    sendReportResult.value = `${data.mails_sent} mail(s) envoyé(s) · ${data.recipients} destinataire(s)`
+    if (data.queued) {
+      sendReportResult.value = `Envoi en cours pour ${data.recipients} destinataire(s) — les mails arrivent dans quelques secondes.`
+    } else {
+      sendReportResult.value = `${data.mails_sent} mail(s) envoyé(s) · ${data.recipients} destinataire(s)`
+    }
   } catch (e) {
     sendReportResult.value = e instanceof Error ? `Erreur : ${e.message}` : 'Erreur inconnue'
   } finally {

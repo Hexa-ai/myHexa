@@ -330,55 +330,82 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ ok: false, error: rErr.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
   }
 
+  // Counters hoisted so cron mode can include them in the response.
   let mailsSent = 0
   let mailsFailed = 0
-  for (const r of (recipients ?? []) as Recipient[]) {
-    if (!r.contact_email) continue
 
-    // Devices visible to this recipient (respects allowed_device_ids)
+  // Heavy work (Gemini calls + SMTP sends) — long-running.
+  // For manual sends we run it in background via EdgeRuntime.waitUntil so the
+  // client gets feedback immediately. For cron we await it (pg_cron is async).
+  const heavyWork = (async () => {
     const { data: rpcData, error: rpcErr } = await admin.rpc('devices_with_latest_status')
     if (rpcErr) {
       console.error('[status-email] devices_with_latest_status failed', rpcErr)
-      continue
+      return
     }
     const allDevices = (rpcData ?? []) as Array<{ id: string; company_id: string; name: string | null; address: string | null; status_payload: unknown; status_received_at: string | null }>
-    const devices: DeviceWithStatus[] = allDevices
-      .filter((d) => d.company_id === r.company_id)
-      .filter((d) => !r.allowed_device_ids || r.allowed_device_ids.includes(d.id))
-      .map((d) => ({ id: d.id, name: d.name, address: d.address, status: d.status_payload, status_received_at: d.status_received_at }))
 
-    if (!devices.length) continue
-
-    const token = genToken()
-    const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString()
-    const deviceIdsCsv = devices.map((d) => d.id).join(',')
-    const { error: tErr } = await admin.from('report_tokens').insert({ token, recipient_id: r.id, device_ids: deviceIdsCsv, expires_at: expiresAt })
-    if (tErr) {
-      console.error('[status-email] token insert failed', tErr)
-      continue
+    // Compute AI brief ONCE per company (divides Gemini cost+latency by ~N).
+    const aiByCompany = new Map<string, AiOutput>()
+    for (const cid of targetCompanyIds) {
+      const devs: DeviceWithStatus[] = allDevices
+        .filter((d) => d.company_id === cid)
+        .map((d) => ({ id: d.id, name: d.name, address: d.address, status: d.status_payload, status_received_at: d.status_received_at }))
+      if (!devs.length) continue
+      aiByCompany.set(cid, await callGemini(buildPrompt(devs)))
     }
 
-    const ai = await callGemini(buildPrompt(devices))
-    const { subject, html } = buildEmail({ recipient: r, devices, ai, token, expiresAt })
-    try {
-      await sendMail({ to: r.contact_email, subject, html })
-      mailsSent++
-    } catch (e) {
-      mailsFailed++
-      console.error('[status-email] sendMail failed', e)
+    for (const r of (recipients ?? []) as Recipient[]) {
+      if (!r.contact_email) continue
+      const devices: DeviceWithStatus[] = allDevices
+        .filter((d) => d.company_id === r.company_id)
+        .filter((d) => !r.allowed_device_ids || r.allowed_device_ids.includes(d.id))
+        .map((d) => ({ id: d.id, name: d.name, address: d.address, status: d.status_payload, status_received_at: d.status_received_at }))
+      if (!devices.length) continue
+      const token = genToken()
+      const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString()
+      const deviceIdsCsv = devices.map((d) => d.id).join(',')
+      const { error: tErr } = await admin.from('report_tokens').insert({ token, recipient_id: r.id, device_ids: deviceIdsCsv, expires_at: expiresAt })
+      if (tErr) { console.error('[status-email] token insert failed', tErr); continue }
+      const ai = aiByCompany.get(r.company_id) ?? { brief: '', watchlist: [] }
+      const { subject, html } = buildEmail({ recipient: r, devices, ai, token, expiresAt })
+      try {
+        await sendMail({ to: r.contact_email, subject, html })
+        mailsSent++
+      } catch (e) {
+        mailsFailed++
+        console.error('[status-email] sendMail failed', e)
+      }
     }
+
+    await closeMailer()
+    console.log('[status-email] done', { mode: manualCompanyId ? 'manual' : 'cron', mails_sent: mailsSent, mails_failed: mailsFailed, duration_ms: Date.now() - startedAt })
+  })()
+
+  // For cron we await (pg_cron polls anyway). For manual we fire-and-forget
+  // via EdgeRuntime.waitUntil so the client gets feedback immediately.
+  const recipientCount = (recipients ?? []).length
+  if (isCron) {
+    await heavyWork
+    return new Response(JSON.stringify({
+      ok: true,
+      mode: 'cron',
+      target_companies: targetCompanyIds.length,
+      recipients: recipientCount,
+      mails_sent: mailsSent,
+      mails_failed: mailsFailed,
+      is_tuesday: isTuesday,
+      duration_ms: Date.now() - startedAt,
+    }), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
   }
-
-  await closeMailer()
-
+  // @ts-expect-error EdgeRuntime is provided by Supabase Edge Runtime
+  EdgeRuntime.waitUntil(heavyWork)
   return new Response(JSON.stringify({
     ok: true,
-    mode: manualCompanyId ? 'manual' : 'cron',
+    mode: 'manual',
     target_companies: targetCompanyIds.length,
-    recipients: recipients?.length ?? 0,
-    mails_sent: mailsSent,
-    mails_failed: mailsFailed,
-    is_tuesday: isTuesday,
-    duration_ms: Date.now() - startedAt,
-  }), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
+    recipients: recipientCount,
+    queued: true,
+    note: "Envoi en cours en arrière-plan ; les mails arrivent dans quelques secondes.",
+  }), { status: 202, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
 })
