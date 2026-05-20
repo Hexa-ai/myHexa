@@ -12,6 +12,19 @@ const { devices, loading, error, load } = useDevices()
 
 useAutoRefresh(load, { intervalMs: 120_000 })
 
+const markers = computed<MarkerInput[]>(() =>
+  devices.value
+    .filter((d) => d.latitude != null && d.longitude != null)
+    .map((d) => ({
+      id: d.id,
+      lat: Number(d.latitude),
+      lng: Number(d.longitude),
+      label: d.name ?? undefined,
+      online: isOnline(d.last_connection_at),
+      severity: maxActiveAlarmSeverity(d.status_payload),
+    })),
+)
+
 // --- Play mode (kiosque) -----------------------------------------------------
 const PLAY_INTERVAL_MS = 5_000
 const mapRef = ref<InstanceType<typeof DeviceMap> | null>(null)
@@ -77,19 +90,6 @@ watch(
 onBeforeUnmount(() => {
   if (playTimer) clearInterval(playTimer)
 })
-
-const markers = computed<MarkerInput[]>(() =>
-  devices.value
-    .filter((d) => d.latitude != null && d.longitude != null)
-    .map((d) => ({
-      id: d.id,
-      lat: Number(d.latitude),
-      lng: Number(d.longitude),
-      label: d.name ?? undefined,
-      online: isOnline(d.last_connection_at),
-      severity: maxActiveAlarmSeverity(d.status_payload),
-    })),
-)
 
 const missingCount = computed(() => devices.value.length - markers.value.length)
 const onlineCount = computed(() => markers.value.filter((m) => m.online).length)
