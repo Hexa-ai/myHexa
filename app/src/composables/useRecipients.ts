@@ -61,11 +61,11 @@ export function useRecipients() {
   }
 
   async function remove(id: string) {
-    const { error: err } = await supabase
-      .from('recipients')
-      .delete()
-      .eq('id', id)
+    const { data, error: err } = await supabase.functions.invoke('delete-recipient', {
+      body: { recipient_id: id },
+    })
     if (err) throw new Error(err.message)
+    if (!data?.ok) throw new Error(data?.error?.message ?? 'Erreur suppression')
     await fetchAll()
   }
 
