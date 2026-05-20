@@ -4,7 +4,6 @@ import { formatRelative, isOnline } from '@/lib/utils'
 import DeviceMap from '@/components/DeviceMap.vue'
 import QRCodeBlock from '@/components/QRCodeBlock.vue'
 import { useTailscaleReachable } from '@/composables/useTailscaleReachable'
-import HaiPGatewayIcon from '@/components/HaiPGatewayIcon.vue'
 
 interface Device {
   id: string
@@ -251,9 +250,11 @@ async function copyTailscaleIp(ip: string) {
     <!-- Header -->
     <header class="flex items-end justify-between flex-wrap gap-4">
       <div class="flex items-center gap-4">
-        <HaiPGatewayIcon
-          animated
-          class="hidden sm:block h-24 w-auto text-muted-foreground/70"
+        <img
+          src="/hai-p-gateway.png"
+          alt="HAI-P Gateway"
+          class="hidden sm:block h-28 w-auto object-contain select-none opacity-90 dark:invert dark:opacity-70"
+          draggable="false"
         />
         <div>
           <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-2 flex items-center gap-2">
