@@ -36,17 +36,8 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <main class="min-h-screen relative flex items-center justify-center p-6 overflow-hidden">
+  <main class="min-h-screen relative p-6 overflow-hidden">
     <div class="absolute inset-0 hex-grid" />
-
-    <!-- Hero illustration (desktop only, decorative) -->
-    <img
-      src="/hai-p-gateway-annotated.jpeg"
-      alt=""
-      aria-hidden="true"
-      class="hidden lg:block absolute right-[-4rem] top-1/2 -translate-y-1/2 max-h-[85vh] w-auto opacity-[0.08] dark:opacity-[0.12] mix-blend-luminosity pointer-events-none select-none"
-      draggable="false"
-    />
 
     <!-- corners -->
     <div class="absolute top-6 left-6 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground flex items-center gap-2">
@@ -69,8 +60,20 @@ async function handleSubmit() {
       </svg>
     </button>
 
-    <div class="relative w-full max-w-[440px] fade-up">
-      <div class="mb-8 flex flex-col items-center">
+    <div class="relative min-h-screen grid lg:grid-cols-2 items-center gap-10 max-w-[1200px] mx-auto">
+      <!-- Hero illustration (desktop only) -->
+      <div class="hidden lg:flex items-center justify-center order-2">
+        <img
+          src="/hai-p-gateway.png"
+          alt="HAI-P Gateway"
+          class="max-h-[70vh] w-auto object-contain select-none drop-shadow-[0_30px_60px_rgb(0_0_0_/_0.45)] fade-up"
+          draggable="false"
+        />
+      </div>
+
+      <!-- Form column -->
+      <div class="w-full max-w-[440px] justify-self-center lg:justify-self-end fade-up order-1">
+      <div class="mb-8 flex flex-col items-center lg:items-start">
         <img
           :src="theme === 'dark' ? '/hexa-logo-dark.png' : '/hexa-logo-light.png'"
           alt="Hexa.ai"
@@ -150,8 +153,9 @@ async function handleSubmit() {
         </div>
       </form>
 
-      <div class="mt-6 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+      <div class="mt-6 text-center lg:text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
         Pas encore d'accès ? Contactez votre administrateur.
+      </div>
       </div>
     </div>
   </main>
