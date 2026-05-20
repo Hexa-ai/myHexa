@@ -49,6 +49,7 @@ interface Recipient {
   contact_email: string
   role: string | null
   allowed_device_ids: string[] | null
+  auth_user_id: string | null
 }
 
 interface DeviceWithStatus {
@@ -224,8 +225,16 @@ function buildEmail(opts: {
   const statsLine = `<p style="margin:0 0 22px 0;font-size:14px;color:#374151;line-height:1.6;">📊 ${statsBits.join(' &nbsp;·&nbsp; ')}</p>`
 
   // Pick one device for the dashboard CTA (first online, else first)
+  // Recipients with an account land on their authenticated dashboard (their
+  // session takes over). Token-only recipients (no auth_user_id) get the
+  // single-device token-protected view as a fallback.
   const firstDev = devices.find((d) => getConnectivity(d) === 'online') ?? devices[0]
-  const dashUrl = firstDev ? `${APP_URL}/report?t=${encodeURIComponent(token)}&d=${encodeURIComponent(firstDev.id)}` : `${APP_URL}/`
+  const hasAccount = !!recipient.auth_user_id
+  const dashUrl = hasAccount
+    ? `${APP_URL}/admin/devices`
+    : firstDev
+      ? `${APP_URL}/report?t=${encodeURIComponent(token)}&d=${encodeURIComponent(firstDev.id)}`
+      : `${APP_URL}/`
   const manageUrl = `${APP_URL}/admin/recipients`
   const ctaLine = `<p style="margin:0 0 24px 0;font-size:14.5px;color:#1f2937;line-height:1.7;">→ <a href="${dashUrl}" style="color:#0a8068;text-decoration:none;font-weight:600;border-bottom:1px solid #0a8068;">Voir le tableau de bord</a>${isAdmin ? `<br>→ <a href="${manageUrl}" style="color:#0a8068;text-decoration:none;font-weight:600;border-bottom:1px solid #0a8068;">Gérer les destinataires</a>` : ''}</p>`
 
@@ -322,7 +331,7 @@ Deno.serve(async (req) => {
   // 3. Get recipients of these companies
   const { data: recipients, error: rErr } = await admin
     .from('recipients')
-    .select('id, company_id, name, contact_email, role, allowed_device_ids')
+    .select('id, company_id, name, contact_email, role, allowed_device_ids, auth_user_id')
     .in('company_id', targetCompanyIds)
     .not('contact_email', 'is', null)
   if (rErr) {
