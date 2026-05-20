@@ -250,12 +250,28 @@ async function copyTailscaleIp(ip: string) {
     <!-- Header -->
     <header class="flex items-end justify-between flex-wrap gap-4">
       <div class="flex items-center gap-4">
-        <img
-          src="/hai-p-gateway.png"
-          alt="HAI-P Gateway"
-          class="hidden sm:block h-40 w-auto object-contain select-none opacity-90 dark:invert dark:opacity-70"
-          draggable="false"
-        />
+        <div class="relative hidden sm:block">
+          <!-- pulsing halo (only animates when device is online) -->
+          <div
+            :class="[
+              'absolute inset-0 -m-6 rounded-full blur-2xl pointer-events-none',
+              online ? 'bg-signal/40 device-halo' : 'bg-muted-foreground/15',
+            ]"
+            aria-hidden="true"
+          />
+          <!-- secondary outer ripple (radar style) -->
+          <div
+            v-if="online"
+            class="absolute inset-0 -m-4 rounded-full border border-signal/30 device-ripple pointer-events-none"
+            aria-hidden="true"
+          />
+          <img
+            src="/hai-p-gateway.png"
+            alt="HAI-P Gateway"
+            class="relative h-40 w-auto object-contain select-none opacity-90 dark:invert dark:opacity-70"
+            draggable="false"
+          />
+        </div>
         <div>
           <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-2 flex items-center gap-2">
             <span class="text-signal">⬢</span>
@@ -737,3 +753,25 @@ async function copyTailscaleIp(ip: string) {
     </footer>
   </div>
 </template>
+
+<style scoped>
+@keyframes device-halo {
+  0%, 100% { opacity: 0.4; transform: scale(0.95); }
+  50%       { opacity: 0.9; transform: scale(1.05); }
+}
+.device-halo {
+  animation: device-halo 2.8s ease-in-out infinite;
+}
+
+@keyframes device-ripple {
+  0%   { opacity: 0.6; transform: scale(0.85); }
+  100% { opacity: 0;   transform: scale(1.35); }
+}
+.device-ripple {
+  animation: device-ripple 2.8s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .device-halo, .device-ripple { animation: none; }
+}
+</style>
