@@ -1,17 +1,13 @@
-// Edge Function: cron-connectivity-alerts
+// Edge Function: cron-connectivity-alerts (modèle unifié)
+// Triggered every 15min by pg_cron via net.http_post. CRON_SECRET header.
+// Plus de tokens : on génère un magic link Supabase Auth par recipient.
 //
-// Replaces the n8n workflow "Connectivity Alerts" (B9C7aWfXjagRyyMP).
-// Triggered every 15 minutes by pg_cron via net.http_post.
-//
-// Flow:
-//   1. Load each device's last status received_at and last notified state.
-//   2. Compute transitions lost↔recovered using a 1h threshold.
-//   3. For each transition: fanout to company recipients (respecting
-//      allowed_device_ids), generate a 24h report token, store it, send a
-//      lost/recovered email via Gmail SMTP, upsert connectivity_alerts.
-//
-// Auth: verify_jwt is disabled because pg_cron can't easily attach a JWT.
-// We protect the endpoint with a shared CRON_SECRET header instead.
+// Flow :
+//   1. Lire les states devices + dernier received_at
+//   2. Compute transitions lost↔recovered (seuil 1h)
+//   3. Pour chaque transition : trouver les recipients qui ont accès au
+//      device (compagnie native OU shared_devices), générer un magic link,
+//      envoyer mail, upsert connectivity_alerts.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { sendMail, closeMailer } from '../_shared/mailer.ts'
@@ -20,66 +16,25 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const CRON_SECRET = Deno.env.get('CRON_SECRET') ?? ''
 const APP_URL = Deno.env.get('APP_URL') ?? 'https://my.hexa-ai.fr'
-const LOST_THRESHOLD_MS = 60 * 60 * 1000 // 1h
-const TOKEN_TTL_MS = 24 * 60 * 60 * 1000 // 24h
+const LOST_THRESHOLD_MS = 60 * 60 * 1000
 
-const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
-  auth: { persistSession: false },
-})
+const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } })
 
-interface DeviceState {
-  id: string
-  company_id: string
-  name: string | null
-  last_seen_at: string | null
-  last_notified_state: 'lost' | 'recovered' | null
-}
+interface DeviceState { id: string; company_id: string; name: string | null; last_seen_at: string | null; last_notified_state: 'lost' | 'recovered' | null }
+interface Transition { device_id: string; hostname: string; company_id: string; last_seen_at: string; transition: 'lost' | 'recovered'; offline_minutes: number }
+interface Recipient { id: string; contact_email: string; name: string | null; company_id: string | null; restrict_to_devices: string[] | null; shared_devices: string[] | null; auth_user_id: string }
 
-interface Transition {
-  device_id: string
-  hostname: string
-  company_id: string
-  last_seen_at: string
-  transition: 'lost' | 'recovered'
-  offline_minutes: number
+function escapeHtml(s: string): string { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!)) }
+function formatDateTime(iso: string): string { const d = new Date(iso); if (Number.isNaN(d.getTime())) return '—'; return d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' }) }
+function formatDuration(minutes: number): string { if (minutes < 60) return `${minutes} min`; const h = Math.floor(minutes / 60); const m = minutes % 60; if (h < 24) return m ? `${h}h ${m}min` : `${h}h`; const d = Math.floor(h / 24); const rh = h % 24; return rh ? `${d}j ${rh}h` : `${d}j` }
+
+async function makeMagicLink(email: string, redirectTo: string): Promise<string | null> {
+  const { data, error } = await admin.auth.admin.generateLink({ type: 'magiclink', email, options: { redirectTo } })
+  if (error) { console.error('[connectivity-alerts] generateLink failed for', email, error.message); return null }
+  return data?.properties?.action_link ?? null
 }
 
-interface Recipient {
-  id: string
-  contact_email: string
-  name: string | null
-  allowed_device_ids: string[] | null
-}
-
-function escapeHtml(s: string): string {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!
-  ))
-}
-function formatDateTime(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleString('fr-FR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris',
-  })
-}
-function formatDuration(minutes: number): string {
-  if (minutes < 60) return `${minutes} min`
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  if (h < 24) return m ? `${h}h ${m}min` : `${h}h`
-  const d = Math.floor(h / 24)
-  const rh = h % 24
-  return rh ? `${d}j ${rh}h` : `${d}j`
-}
-function genToken(): string {
-  const a = new Uint8Array(16)
-  crypto.getRandomValues(a)
-  return Array.from(a, (b) => b.toString(16).padStart(2, '0')).join('')
-}
-
-function buildEmail(t: Transition, recipient: Recipient, token: string, expiresAt: string) {
+function buildEmail(t: Transition, recipient: Recipient, viewUrl: string) {
   const isLost = t.transition === 'lost'
   const subjectIcon = isLost ? '🔴' : '🟢'
   const subjectText = isLost ? 'Équipement perdu' : 'Équipement reconnecté'
@@ -93,59 +48,29 @@ function buildEmail(t: Transition, recipient: Recipient, token: string, expiresA
   const banner = isLost
     ? `<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:14px 18px;border-radius:8px;margin-bottom:20px;font-size:14px;">⚠ ${detail}</div>`
     : `<div style="background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;padding:14px 18px;border-radius:8px;margin-bottom:20px;font-size:14px;">✓ ${detail}</div>`
-  const viewUrl = `${APP_URL}/report?t=${encodeURIComponent(token)}&d=${encodeURIComponent(t.device_id)}`
-  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>${escapeHtml(subjectText)}</title></head><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#111;background:#fafafa;margin:0;padding:20px 24px;"><div style="max-width:600px;margin:0 auto;"><h1 style="margin:0 0 16px 0;font-size:22px;color:#111;letter-spacing:-0.5px;">${heading}</h1><p style="margin:0 0 8px 0;color:#6b7280;font-size:14px;">Bonjour ${escapeHtml(recipient.name ?? '')},</p>${banner}<p style="margin:0 0 20px 0;"><a href="${viewUrl}" style="display:inline-block;background:#00d4aa;color:#0a0f14;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;">Voir l'équipement →</a></p><p style="margin:24px 0 0 0;color:#9ca3af;font-size:12px;text-align:center;">Lien valide jusqu'au ${escapeHtml(formatDateTime(expiresAt))}</p></div></body></html>`
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>${escapeHtml(subjectText)}</title></head><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#111;background:#fafafa;margin:0;padding:20px 24px;"><div style="max-width:600px;margin:0 auto;"><h1 style="margin:0 0 16px 0;font-size:22px;color:#111;letter-spacing:-0.5px;">${heading}</h1><p style="margin:0 0 8px 0;color:#6b7280;font-size:14px;">Bonjour ${escapeHtml(recipient.name ?? '')},</p>${banner}<p style="margin:0 0 20px 0;"><a href="${viewUrl}" style="display:inline-block;background:#00d4aa;color:#0a0f14;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;">Voir l'équipement →</a></p></div></body></html>`
   return { subject, html }
 }
 
 Deno.serve(async (req) => {
-  // Shared-secret auth (since verify_jwt is disabled for cron)
   const provided = req.headers.get('x-cron-secret') ?? ''
-  if (!CRON_SECRET || provided !== CRON_SECRET) {
-    return new Response('Unauthorized', { status: 401 })
-  }
-
+  if (!CRON_SECRET || provided !== CRON_SECRET) return new Response('Unauthorized', { status: 401 })
   const startedAt = Date.now()
 
-  // 1. Load device states (last status received_at + last notified state)
-  const { data: devicesRaw, error: devErr } = await admin.rpc('connectivity_states')
-  let deviceStates: DeviceState[]
-  if (devErr) {
-    // Fallback: do it inline if the RPC doesn't exist (first deploy)
-    const { data, error } = await admin
-      .from('devices')
-      .select(`
-        id, company_id, name,
-        connectivity_alerts(state)
-      `)
-    if (error) {
-      console.error('[connectivity-alerts] load failed', error)
-      return new Response(JSON.stringify({ ok: false, error: error.message }), { status: 500 })
-    }
-    // Need last_seen_at per device from reports.received_at — fetch in batch
-    const ids = (data ?? []).map((d) => d.id)
-    const { data: reps } = await admin
-      .from('reports')
-      .select('device_id, received_at')
-      .eq('type', 'status')
-      .in('device_id', ids)
-      .order('received_at', { ascending: false })
-    const lastSeenById = new Map<string, string>()
-    for (const r of reps ?? []) {
-      if (!lastSeenById.has(r.device_id)) lastSeenById.set(r.device_id, r.received_at as string)
-    }
-    deviceStates = (data ?? []).map((d) => ({
-      id: d.id,
-      company_id: d.company_id,
-      name: d.name,
-      last_seen_at: lastSeenById.get(d.id) ?? null,
-      last_notified_state: (d.connectivity_alerts?.[0]?.state ?? null) as 'lost' | 'recovered' | null,
-    }))
-  } else {
-    deviceStates = (devicesRaw as DeviceState[]) ?? []
-  }
+  const { data: devs, error: devErr } = await admin.from('devices').select('id, company_id, name, connectivity_alerts(state)')
+  if (devErr) { console.error('[connectivity-alerts] load failed', devErr); return new Response(JSON.stringify({ ok: false, error: devErr.message }), { status: 500 }) }
+  const ids = (devs ?? []).map((d) => d.id)
+  const { data: reps } = await admin.from('reports').select('device_id, received_at').eq('type', 'status').in('device_id', ids).order('received_at', { ascending: false })
+  const lastSeenById = new Map<string, string>()
+  for (const r of reps ?? []) { if (!lastSeenById.has(r.device_id)) lastSeenById.set(r.device_id, r.received_at as string) }
+  const deviceStates: DeviceState[] = (devs ?? []).map((d: any) => ({
+    id: d.id,
+    company_id: d.company_id,
+    name: d.name,
+    last_seen_at: lastSeenById.get(d.id) ?? null,
+    last_notified_state: (d.connectivity_alerts?.[0]?.state ?? null) as 'lost' | 'recovered' | null,
+  }))
 
-  // 2. Compute transitions
   const now = Date.now()
   const transitions: Transition[] = []
   for (const d of deviceStates) {
@@ -156,72 +81,58 @@ Deno.serve(async (req) => {
     let next: 'lost' | 'recovered' | null = null
     if (isLost && lastState !== 'lost') next = 'lost'
     else if (!isLost && lastState === 'lost') next = 'recovered'
-    if (next) {
-      transitions.push({
-        device_id: d.id,
-        hostname: d.name ?? d.id,
-        company_id: d.company_id,
-        last_seen_at: d.last_seen_at,
-        transition: next,
-        offline_minutes: Math.floor((now - lastSeenMs) / 60000),
-      })
-    }
+    if (next) transitions.push({
+      device_id: d.id,
+      hostname: d.name ?? d.id,
+      company_id: d.company_id,
+      last_seen_at: d.last_seen_at,
+      transition: next,
+      offline_minutes: Math.floor((now - lastSeenMs) / 60000),
+    })
   }
 
   if (transitions.length === 0) {
-    return new Response(JSON.stringify({
-      ok: true,
-      transitions: 0,
-      duration_ms: Date.now() - startedAt,
-    }), { headers: { 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ ok: true, transitions: 0, duration_ms: Date.now() - startedAt }), { headers: { 'Content-Type': 'application/json' } })
   }
 
-  // 3. For each transition, fanout recipients + send mail + upsert state
   let mailsSent = 0
   let mailsFailed = 0
   for (const t of transitions) {
+    // Tous les recipients dont l'accès couvre ce device :
+    //   (company_id = t.company_id ET (restrict_to_devices NULL OR includes t.device_id))
+    //   OR t.device_id ∈ shared_devices
     const { data: recipients, error: recErr } = await admin
       .from('recipients')
-      .select('id, contact_email, name, allowed_device_ids, auth_user_id')
-      .eq('company_id', t.company_id)
+      .select('id, contact_email, name, company_id, restrict_to_devices, shared_devices, auth_user_id')
       .not('contact_email', 'is', null)
     if (recErr) {
       console.error('[connectivity-alerts] recipients fetch failed', recErr)
       continue
     }
-    // Membres (auth_user_id) reçoivent l'alerte pour tous les devices de
-    // leur compagnie. Externes : seulement si le device est dans
-    // allowed_device_ids (ou allowed_device_ids = NULL = pas de filtre).
     const targets: Recipient[] = (recipients ?? [])
-      .filter((r) => !!r.auth_user_id || !r.allowed_device_ids || r.allowed_device_ids.includes(t.device_id))
-      .filter((r): r is Recipient => !!r.contact_email)
+      .filter((r: any): r is Recipient => !!r.contact_email && !!r.auth_user_id)
+      .filter((r) => {
+        const inCompany =
+          r.company_id === t.company_id &&
+          (r.restrict_to_devices === null || r.restrict_to_devices.includes(t.device_id))
+        const shared = (r.shared_devices ?? []).includes(t.device_id)
+        return inCompany || shared
+      })
 
     for (const r of targets) {
-      const token = genToken()
-      const expiresAt = new Date(now + TOKEN_TTL_MS).toISOString()
-      const { error: insErr } = await admin
-        .from('report_tokens')
-        .insert({
-          token,
-          recipient_id: r.id,
-          device_ids: t.device_id,
-          expires_at: expiresAt,
-        })
-      if (insErr) {
-        console.error('[connectivity-alerts] token insert failed', insErr)
-        continue
-      }
-      const { subject, html } = buildEmail(t, r, token, expiresAt)
+      const link = await makeMagicLink(r.contact_email, `${APP_URL}/admin/devices/${t.device_id}`)
+      const viewUrl = link ?? `${APP_URL}/admin/devices/${t.device_id}`
+      const { subject, html } = buildEmail(t, r, viewUrl)
       try {
         await sendMail({ to: r.contact_email, subject, html })
         mailsSent++
+        console.log('[connectivity-alerts] sent', t.transition, 'to', r.contact_email)
       } catch (e) {
         mailsFailed++
-        console.error('[connectivity-alerts] sendMail failed', e)
+        console.error('[connectivity-alerts] sendMail failed for', r.contact_email, e instanceof Error ? e.message : String(e))
       }
     }
 
-    // Upsert the new state (only once per transition, after fanout)
     const { error: upErr } = await admin
       .from('connectivity_alerts')
       .upsert({
@@ -229,13 +140,10 @@ Deno.serve(async (req) => {
         state: t.transition,
         last_notified_at: new Date().toISOString(),
       })
-    if (upErr) {
-      console.error('[connectivity-alerts] upsert state failed', upErr)
-    }
+    if (upErr) console.error('[connectivity-alerts] upsert state failed', upErr)
   }
 
   await closeMailer()
-
   return new Response(JSON.stringify({
     ok: true,
     transitions: transitions.length,
