@@ -2,11 +2,14 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
+import { useAuthStore } from '@/stores/auth'
 import { useDevices } from '@/composables/useDevices'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { injectAlarmCounts } from '@/composables/useAlarmCounts'
 
 const alarmCounts = injectAlarmCounts()
+const auth = useAuthStore()
+const canEdit = computed(() => auth.isHexaStaff || auth.recipient?.role === 'admin')
 import {
   formatRelative,
   severityPillClass,
@@ -108,6 +111,7 @@ async function loadInterventions() {
 }
 
 async function toggleInterventionStatus(row: InterventionRow) {
+  if (!canEdit.value) return
   const next = row.status === 'open' ? 'resolved' : 'open'
   const { error: updErr } = await supabase
     .from('field_interventions')
@@ -664,6 +668,7 @@ function openDevice(id: string) {
               </td>
               <td class="px-4 py-3 text-right" @click.stop>
                 <button
+                  v-if="canEdit"
                   :class="[
                     'font-mono text-[10px] uppercase tracking-wider px-2.5 py-1 rounded transition',
                     row.status === 'open'
@@ -674,6 +679,15 @@ function openDevice(id: string) {
                 >
                   {{ row.status === 'open' ? 'Marquer résolu' : '✓ Résolu' }}
                 </button>
+                <span
+                  v-else
+                  :class="[
+                    'font-mono text-[10px] uppercase tracking-wider px-2.5 py-1 rounded',
+                    row.status === 'open' ? 'bg-amber/15 text-amber' : 'bg-signal-soft text-signal',
+                  ]"
+                >
+                  {{ row.status === 'open' ? 'Ouvert' : '✓ Résolu' }}
+                </span>
               </td>
             </tr>
           </tbody>
@@ -772,7 +786,7 @@ function openDevice(id: string) {
               </div>
             </div>
 
-            <div class="pt-2 flex justify-end gap-2">
+            <div v-if="canEdit" class="pt-2 flex justify-end gap-2">
               <button
                 :class="[
                   'font-mono text-[11px] uppercase tracking-[0.22em] px-4 py-2 rounded-md transition',
