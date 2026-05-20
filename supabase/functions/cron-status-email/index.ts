@@ -246,7 +246,7 @@ Deno.serve(async (req) => {
         aiBySignature.set(signature, ai)
       }
 
-      const link = await makeMagicLink(r.contact_email, `${APP_URL}/admin/devices`)
+      const link = await makeMagicLink(r.contact_email, `${APP_URL}/auth/callback?next=${encodeURIComponent('/admin/devices')}`)
       const dashUrl = link ?? `${APP_URL}/admin/devices`
       const { subject, html } = buildEmail({ recipient: r, devices, ai, dashUrl })
       try {

@@ -3,6 +3,7 @@ import LoginView from '@/views/auth/LoginView.vue'
 import ForgotPasswordView from '@/views/auth/ForgotPasswordView.vue'
 import ResetPasswordView from '@/views/auth/ResetPasswordView.vue'
 import MagicLinkView from '@/views/auth/MagicLinkView.vue'
+import CallbackView from '@/views/auth/CallbackView.vue'
 import { useAuthStore } from '@/stores/auth'
 import AdminLayout from '@/views/admin/AdminLayout.vue'
 import DevicesView from '@/views/admin/DevicesView.vue'
@@ -36,6 +37,7 @@ export const router = createRouter({
     { path: '/auth/forgot-password', name: 'forgot-password', component: ForgotPasswordView },
     { path: '/auth/reset-password', name: 'reset-password', component: ResetPasswordView },
     { path: '/auth/magic-link', name: 'magic-link', component: MagicLinkView },
+    { path: '/auth/callback', name: 'auth-callback', component: CallbackView },
     { path: '/intervention', name: 'intervention', component: InterventionView },
     {
       path: '/admin',

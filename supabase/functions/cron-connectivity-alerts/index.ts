@@ -120,8 +120,9 @@ Deno.serve(async (req) => {
       })
 
     for (const r of targets) {
-      const link = await makeMagicLink(r.contact_email, `${APP_URL}/admin/devices/${t.device_id}`)
-      const viewUrl = link ?? `${APP_URL}/admin/devices/${t.device_id}`
+      const targetPath = `/admin/devices/${t.device_id}`
+      const link = await makeMagicLink(r.contact_email, `${APP_URL}/auth/callback?next=${encodeURIComponent(targetPath)}`)
+      const viewUrl = link ?? `${APP_URL}${targetPath}`
       const { subject, html } = buildEmail(t, r, viewUrl)
       try {
         await sendMail({ to: r.contact_email, subject, html })
