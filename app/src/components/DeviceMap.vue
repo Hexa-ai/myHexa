@@ -170,16 +170,19 @@ onBeforeUnmount(() => {
 
 defineExpose({
   invalidateSize: () => map?.invalidateSize(),
-  focusMarker(id: string) {
+  focusMarker(id: string, opts?: { zoom?: number; duration?: number }) {
     if (!map) return
     const c = circlesById.get(id)
     if (!c) return
-    // Close any other tooltip then open this one — no zoom, no pan.
-    // Vue d'ensemble préservée pour l'usage kiosque.
     circlesById.forEach((other, key) => {
       if (key !== id) other.closeTooltip()
     })
-    c.openTooltip()
+    const ll = c.getLatLng()
+    const targetZoom = opts?.zoom ?? 9
+    const duration = opts?.duration ?? 3
+    map.flyTo(ll, targetZoom, { duration, easeLinearity: 0.4 })
+    // Open the tooltip once the fly has completed so it sits cleanly on the marker
+    setTimeout(() => c.openTooltip(), duration * 1000 * 0.6)
   },
   closeAllTooltips() {
     circlesById.forEach((c) => c.closeTooltip())
