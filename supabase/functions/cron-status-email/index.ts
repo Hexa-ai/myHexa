@@ -385,9 +385,12 @@ Deno.serve(async (req) => {
 
     for (const r of (recipients ?? []) as Recipient[]) {
       if (!r.contact_email) continue
+      // Membres (auth_user_id) → toute la compagnie. Externes (token-only) →
+      // sous-ensemble allowed_device_ids (s'il est défini).
+      const isMember = !!r.auth_user_id
       const devices: DeviceWithStatus[] = allDevices
         .filter((d) => d.company_id === r.company_id)
-        .filter((d) => !r.allowed_device_ids || r.allowed_device_ids.includes(d.id))
+        .filter((d) => isMember || !r.allowed_device_ids || r.allowed_device_ids.includes(d.id))
         .map((d) => ({ id: d.id, name: d.name, address: d.address, status: d.status_payload, status_received_at: d.status_received_at }))
       if (!devices.length) continue
       const token = genToken()

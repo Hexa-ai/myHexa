@@ -182,15 +182,18 @@ Deno.serve(async (req) => {
   for (const t of transitions) {
     const { data: recipients, error: recErr } = await admin
       .from('recipients')
-      .select('id, contact_email, name, allowed_device_ids')
+      .select('id, contact_email, name, allowed_device_ids, auth_user_id')
       .eq('company_id', t.company_id)
       .not('contact_email', 'is', null)
     if (recErr) {
       console.error('[connectivity-alerts] recipients fetch failed', recErr)
       continue
     }
+    // Membres (auth_user_id) reçoivent l'alerte pour tous les devices de
+    // leur compagnie. Externes : seulement si le device est dans
+    // allowed_device_ids (ou allowed_device_ids = NULL = pas de filtre).
     const targets: Recipient[] = (recipients ?? [])
-      .filter((r) => !r.allowed_device_ids || r.allowed_device_ids.includes(t.device_id))
+      .filter((r) => !!r.auth_user_id || !r.allowed_device_ids || r.allowed_device_ids.includes(t.device_id))
       .filter((r): r is Recipient => !!r.contact_email)
 
     for (const r of targets) {

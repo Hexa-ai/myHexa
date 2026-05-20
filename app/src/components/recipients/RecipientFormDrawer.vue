@@ -63,13 +63,15 @@ function submit() {
     return
   }
   submitting.value = true
+  // Membres = accès à tout, on force allowed_device_ids à null.
+  const effectiveAllowed = type.value === 'member' ? null : allowedDevices.value
   try {
     if (isEdit.value && props.recipient) {
       emit('save', props.recipient.id, {
         name: name.value.trim(),
         phone: phone.value.trim() || null,
         role: role.value,
-        allowed_device_ids: allowedDevices.value,
+        allowed_device_ids: effectiveAllowed,
       })
     } else {
       emit('invite', {
@@ -78,7 +80,7 @@ function submit() {
         phone: phone.value.trim() || null,
         role: role.value,
         type: type.value,
-        allowed_device_ids: allowedDevices.value,
+        allowed_device_ids: effectiveAllowed,
       })
     }
   } finally {
@@ -139,10 +141,14 @@ function submit() {
           </div>
         </div>
 
-        <div>
+        <div v-if="type === 'external'">
           <span class="text-xs uppercase tracking-wide text-muted-foreground">Devices accessibles</span>
           <DeviceMultiSelect v-model="allowedDevices" :devices="devices" class="mt-2" />
+          <p class="mt-1 text-xs text-muted-foreground">Laisse vide pour donner accès à tous les devices de la compagnie.</p>
         </div>
+        <p v-else class="text-xs text-muted-foreground italic">
+          Les membres ont accès à tous les devices de la compagnie automatiquement.
+        </p>
       </div>
 
       <p v-if="error" class="text-sm text-red-500">{{ error }}</p>

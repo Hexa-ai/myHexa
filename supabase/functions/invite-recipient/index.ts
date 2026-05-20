@@ -91,7 +91,9 @@ Deno.serve(async (req) => {
         contact_email: email,
         phone: body.phone ?? null,
         role,
-        allowed_device_ids: body.allowed_device_ids ?? null,
+        // Membres = accès à tous les devices de la compagnie. On ignore
+        // toute liste éventuellement envoyée pour les membres.
+        allowed_device_ids: type === 'member' ? null : (body.allowed_device_ids ?? null),
       })
       .select('*')
       .single()
