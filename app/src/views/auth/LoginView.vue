@@ -127,6 +127,21 @@ async function handleSubmit() {
             </template>
           </span>
         </button>
+
+        <div class="flex items-center justify-between pt-2 font-mono text-[10px] uppercase tracking-widest">
+          <router-link
+            to="/auth/forgot-password"
+            class="text-muted-foreground hover:text-signal transition"
+          >
+            Mot de passe oublié ?
+          </router-link>
+          <router-link
+            to="/auth/magic-link"
+            class="text-muted-foreground hover:text-signal transition"
+          >
+            Lien par email →
+          </router-link>
+        </div>
       </form>
 
       <div class="mt-6 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">

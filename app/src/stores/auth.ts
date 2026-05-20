@@ -99,6 +99,50 @@ export const useAuthStore = defineStore('auth', () => {
     return true
   }
 
+  async function requestPasswordReset(email: string) {
+    loading.value = true
+    error.value = null
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/reset-password`,
+    })
+    loading.value = false
+    if (err) {
+      error.value = err.message
+      return false
+    }
+    return true
+  }
+
+  async function sendMagicLink(email: string) {
+    loading.value = true
+    error.value = null
+    const { error: err } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: `${window.location.origin}/admin`,
+      },
+    })
+    loading.value = false
+    if (err) {
+      error.value = err.message
+      return false
+    }
+    return true
+  }
+
+  async function updatePassword(newPassword: string) {
+    loading.value = true
+    error.value = null
+    const { error: err } = await supabase.auth.updateUser({ password: newPassword })
+    loading.value = false
+    if (err) {
+      error.value = err.message
+      return false
+    }
+    return true
+  }
+
   async function signOut() {
     await supabase.auth.signOut()
     session.value = null
@@ -124,5 +168,8 @@ export const useAuthStore = defineStore('auth', () => {
     init,
     signIn,
     signOut,
+    requestPasswordReset,
+    sendMagicLink,
+    updatePassword,
   }
 })
