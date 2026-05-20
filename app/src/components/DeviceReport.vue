@@ -249,23 +249,15 @@ async function copyTailscaleIp(ip: string) {
   <div class="space-y-6 fade-up">
     <!-- Header -->
     <header class="flex items-end justify-between flex-wrap gap-4">
-      <div class="flex items-center gap-4">
-        <img
-          src="/hai-p-gateway.jpeg"
-          alt="HAI-P Gateway"
-          class="hidden sm:block size-20 object-contain rounded-md bg-card/40 border border-border/60 p-1 select-none"
-          draggable="false"
-        />
-        <div>
-          <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-2 flex items-center gap-2">
-            <span class="text-signal">⬢</span>
-            HAI-P Gateway · {{ isAdmin ? 'admin' : 'lecture' }}
-          </div>
-          <h1 class="text-3xl font-semibold tracking-tight">{{ device.name || '—' }}</h1>
-          <p class="mt-2 text-sm text-muted-foreground font-mono">
-            Dernière télémétrie · {{ lastSeen }}
-          </p>
+      <div>
+        <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-2 flex items-center gap-2">
+          <span class="text-signal">⬢</span>
+          Équipement · {{ isAdmin ? 'admin' : 'lecture' }}
         </div>
+        <h1 class="text-3xl font-semibold tracking-tight">{{ device.name || '—' }}</h1>
+        <p class="mt-2 text-sm text-muted-foreground font-mono">
+          Dernière télémétrie · {{ lastSeen }}
+        </p>
       </div>
       <div class="flex items-center gap-2">
         <span
