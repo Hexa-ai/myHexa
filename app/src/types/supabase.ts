@@ -241,7 +241,9 @@ export type Database = {
           id: string
           name: string
           phone: string | null
+          restrict_to_devices: string[] | null
           role: string
+          shared_devices: string[] | null
           updated_at: string
         }
         Insert: {
@@ -253,7 +255,9 @@ export type Database = {
           id?: string
           name: string
           phone?: string | null
+          restrict_to_devices?: string[] | null
           role?: string
+          shared_devices?: string[] | null
           updated_at?: string
         }
         Update: {
@@ -265,7 +269,9 @@ export type Database = {
           id?: string
           name?: string
           phone?: string | null
+          restrict_to_devices?: string[] | null
           role?: string
+          shared_devices?: string[] | null
           updated_at?: string
         }
         Relationships: [
