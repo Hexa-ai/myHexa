@@ -28,6 +28,7 @@ export type Database = {
           max_weekly_reports: number
           name: string
           phone: string | null
+          status_email_frequency: Database["public"]["Enums"]["status_email_frequency"]
           updated_at: string
         }
         Insert: {
@@ -43,6 +44,7 @@ export type Database = {
           max_weekly_reports?: number
           name: string
           phone?: string | null
+          status_email_frequency?: Database["public"]["Enums"]["status_email_frequency"]
           updated_at?: string
         }
         Update: {
@@ -58,6 +60,7 @@ export type Database = {
           max_weekly_reports?: number
           name?: string
           phone?: string | null
+          status_email_frequency?: Database["public"]["Enums"]["status_email_frequency"]
           updated_at?: string
         }
         Relationships: []
@@ -351,7 +354,7 @@ export type Database = {
     }
     Functions: {
       alarm_counts: {
-        Args: { p_company_id: string | null }
+        Args: { p_company_id: string }
         Returns: {
           active_alarms: number
           max_severity: string
@@ -396,6 +399,7 @@ export type Database = {
     }
     Enums: {
       report_type: "status" | "daily" | "weekly"
+      status_email_frequency: "none" | "daily" | "weekly"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -524,6 +528,7 @@ export const Constants = {
   public: {
     Enums: {
       report_type: ["status", "daily", "weekly"],
+      status_email_frequency: ["none", "daily", "weekly"],
     },
   },
 } as const

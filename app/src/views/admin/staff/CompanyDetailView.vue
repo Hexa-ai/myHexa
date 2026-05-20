@@ -9,6 +9,7 @@ interface CompanyDetail {
   name: string
   is_hexa_internal: boolean
   created_at: string
+  status_email_frequency: 'none' | 'daily' | 'weekly'
 }
 interface DeviceLite {
   id: string
@@ -45,7 +46,7 @@ async function load() {
 
   const [{ data: c, error: cErr }, { data: ds, error: dErr }, { data: rs, error: rErr }] =
     await Promise.all([
-      supabase.from('companies').select('id, name, is_hexa_internal, created_at').eq('id', id.value).maybeSingle(),
+      supabase.from('companies').select('id, name, is_hexa_internal, created_at, status_email_frequency').eq('id', id.value).maybeSingle(),
       supabase.from('devices').select('id, name, mac_eth0, last_connection_at').eq('company_id', id.value).order('name'),
       supabase.from('recipients').select('id, name, contact_email, role').eq('company_id', id.value),
     ])
@@ -69,6 +70,20 @@ async function saveName() {
   if (err) { error.value = err.message; return }
   company.value.name = name
   editing.value = false
+}
+
+async function setFrequency(value: 'none' | 'daily' | 'weekly') {
+  if (!company.value) return
+  const prev = company.value.status_email_frequency
+  company.value.status_email_frequency = value
+  const { error: err } = await supabase
+    .from('companies')
+    .update({ status_email_frequency: value })
+    .eq('id', company.value.id)
+  if (err) {
+    company.value.status_email_frequency = prev
+    error.value = err.message
+  }
 }
 
 function enterAs() {
@@ -143,6 +158,36 @@ watch(id, load)
 
     <p v-if="loading" class="text-sm text-muted-foreground">Chargement…</p>
     <p v-if="error" class="text-sm text-offline">{{ error }}</p>
+
+    <section
+      v-if="auth.isHexaStaffAdmin && company"
+      class="border border-border rounded-md bg-card/40 p-4 flex items-center justify-between flex-wrap gap-3"
+    >
+      <div>
+        <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-1">
+          Résumé status par email
+        </div>
+        <p class="text-xs text-muted-foreground">
+          Pilote l'envoi automatique du brief IA + état de la flotte aux destinataires de la compagnie.
+        </p>
+      </div>
+      <div class="inline-flex rounded-md border border-border overflow-hidden font-mono text-[10px] uppercase tracking-wider">
+        <button
+          v-for="opt in (['none', 'weekly', 'daily'] as const)"
+          :key="opt"
+          type="button"
+          :class="[
+            'px-3 py-1.5 transition border-r border-border last:border-r-0',
+            company.status_email_frequency === opt
+              ? 'bg-signal text-primary-foreground'
+              : 'bg-transparent text-muted-foreground hover:text-foreground',
+          ]"
+          @click="setFrequency(opt)"
+        >
+          {{ opt === 'none' ? 'Aucun' : opt === 'daily' ? 'Quotidien' : 'Hebdo (mardi)' }}
+        </button>
+      </div>
+    </section>
 
     <section class="space-y-2">
       <div class="flex items-center justify-between">
