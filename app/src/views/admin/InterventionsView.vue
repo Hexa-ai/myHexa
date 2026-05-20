@@ -25,7 +25,7 @@ interface InterventionRow {
 }
 
 const auth = useAuthStore()
-const canEdit = computed(() => auth.isHexaStaff || auth.recipient?.role === 'admin')
+const canEdit = computed(() => auth.recipient?.role === 'admin')
 const router = useRouter()
 const items = ref<InterventionRow[]>([])
 const loading = ref(false)

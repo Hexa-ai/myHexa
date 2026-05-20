@@ -9,7 +9,7 @@ import { injectAlarmCounts } from '@/composables/useAlarmCounts'
 
 const alarmCounts = injectAlarmCounts()
 const auth = useAuthStore()
-const canEdit = computed(() => auth.isHexaStaff || auth.recipient?.role === 'admin')
+const canEdit = computed(() => auth.recipient?.role === 'admin')
 import {
   formatRelative,
   severityPillClass,

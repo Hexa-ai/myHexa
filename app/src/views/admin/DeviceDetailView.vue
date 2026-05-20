@@ -59,7 +59,7 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
 }
 
 async function onSaveLocation(address: string) {
-  if (!device.value) return
+  if (!device.value || !canEdit.value) return
   const geo = await geocodeAddress(address)
   if (!geo) {
     reportRef.value?.setLocationFeedback('error', 'Adresse introuvable.')
@@ -80,7 +80,7 @@ async function onSaveLocation(address: string) {
 }
 
 async function onSaveVnc({ host, port }: { host: string | null; port: number }) {
-  if (!device.value) return
+  if (!device.value || !canEdit.value) return
   const { data: updated, error: updErr } = await supabase
     .from('devices')
     .update({ vnc_host: host, vnc_port: port })
