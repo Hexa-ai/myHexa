@@ -60,12 +60,12 @@ async function handleSubmit() {
       </svg>
     </button>
 
-    <!-- Hero illustration (desktop only, decorative) -->
+    <!-- Watermark illustration (decorative, behind form) -->
     <img
       src="/hai-p-gateway.png"
       alt=""
       aria-hidden="true"
-      class="hidden lg:block absolute right-[6%] top-1/2 -translate-y-1/2 h-[70vh] w-auto opacity-80 dark:invert dark:opacity-60 pointer-events-none select-none fade-up"
+      class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[110vh] w-auto max-w-none opacity-[0.05] dark:invert dark:opacity-[0.08] pointer-events-none select-none"
       draggable="false"
     />
 
