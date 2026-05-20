@@ -5,6 +5,7 @@ supabase/.branches/
 # Node / Vue (à venir)
 node_modules/
 dist/
+.vite/
 .env
 .env.local
 .env.*.local
@@ -21,3 +22,4 @@ Thumbs.db
 *.log
 npm-debug.log*
 pnpm-debug.log*
+.superpowers/
