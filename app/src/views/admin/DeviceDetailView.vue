@@ -144,16 +144,108 @@ async function loadDetail() {
 }
 
 useAutoRefresh(loadDetail, { intervalMs: 120_000 })
+
+// --- Partage avec un destinataire externe -----------------------------------
+const shareOpen = ref(false)
+const shareEmail = ref('')
+const shareSubmitting = ref(false)
+const shareResult = ref<string | null>(null)
+
+function openShare() {
+  shareEmail.value = ''
+  shareResult.value = null
+  shareOpen.value = true
+}
+async function submitShare() {
+  if (!device.value) return
+  if (!shareEmail.value.includes('@')) {
+    shareResult.value = 'Email invalide'
+    return
+  }
+  shareSubmitting.value = true
+  shareResult.value = null
+  try {
+    const { data, error: err } = await supabase.functions.invoke('share-device', {
+      body: { device_id: device.value.id, recipient_email: shareEmail.value.trim().toLowerCase() },
+    })
+    if (err) throw new Error(err.message)
+    if (!data?.ok) throw new Error(data?.error?.message ?? 'Erreur')
+    if (data.data.status === 'already_shared') {
+      shareResult.value = `Déjà partagé avec ${data.data.recipient_email}`
+    } else {
+      shareResult.value = `Partagé avec ${data.data.recipient_email} ✓`
+    }
+    shareEmail.value = ''
+  } catch (e) {
+    shareResult.value = `Erreur : ${(e as Error).message}`
+  } finally {
+    shareSubmitting.value = false
+  }
+}
 </script>
 
 <template>
   <section class="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 max-w-[1200px] mx-auto">
-    <button
-      class="mb-6 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground hover:text-signal transition"
-      @click="router.push({ name: 'admin-devices' })"
-    >
-      ← Retour à la flotte
-    </button>
+    <div class="mb-6 flex items-center justify-between gap-3 flex-wrap">
+      <button
+        class="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground hover:text-signal transition"
+        @click="router.push({ name: 'admin-devices' })"
+      >
+        ← Retour à la flotte
+      </button>
+      <button
+        v-if="canEdit"
+        type="button"
+        class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider border border-border text-muted-foreground hover:border-signal/60 hover:text-signal px-3 py-1.5 rounded-md transition"
+        @click="openShare"
+      >
+        ↗ Partager avec un destinataire
+      </button>
+    </div>
+
+    <!-- Share modal -->
+    <Teleport to="body">
+      <div
+        v-if="shareOpen"
+        class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+        @click.self="shareOpen = false"
+      >
+        <div class="bg-background w-full max-w-md border border-border rounded-lg p-6 space-y-4">
+          <header class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold">Partager cet équipement</h2>
+            <button class="text-muted-foreground hover:text-foreground text-xl leading-none" @click="shareOpen = false">×</button>
+          </header>
+          <p class="text-sm text-muted-foreground">
+            Le destinataire (par email) verra cet équipement en plus de ses équipements habituels.
+            Il doit déjà exister comme destinataire dans une compagnie ou comme guest.
+          </p>
+          <label class="block">
+            <span class="text-xs uppercase tracking-wide text-muted-foreground">Email du destinataire</span>
+            <input
+              v-model="shareEmail"
+              type="email"
+              autocomplete="off"
+              class="mt-1 w-full border border-border bg-secondary/30 rounded-md px-3 py-2 text-sm"
+              placeholder="prenom.nom@exemple.fr"
+              @keyup.enter="submitShare"
+            />
+          </label>
+          <p v-if="shareResult" class="text-sm" :class="shareResult.startsWith('Erreur') ? 'text-red-500' : 'text-signal'">
+            {{ shareResult }}
+          </p>
+          <footer class="flex justify-end gap-2">
+            <button class="px-3 py-2 text-sm border border-border rounded-md" @click="shareOpen = false">Fermer</button>
+            <button
+              :disabled="shareSubmitting"
+              class="px-3 py-2 text-sm bg-primary text-primary-foreground rounded-md disabled:opacity-60"
+              @click="submitShare"
+            >
+              {{ shareSubmitting ? 'Partage…' : 'Partager' }}
+            </button>
+          </footer>
+        </div>
+      </div>
+    </Teleport>
 
     <div
       v-if="loading"
