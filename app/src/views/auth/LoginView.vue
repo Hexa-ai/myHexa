@@ -39,6 +39,15 @@ async function handleSubmit() {
   <main class="min-h-screen relative flex items-center justify-center p-6 overflow-hidden">
     <div class="absolute inset-0 hex-grid" />
 
+    <!-- Hero illustration (desktop only, decorative) -->
+    <img
+      src="/hai-p-gateway-annotated.jpeg"
+      alt=""
+      aria-hidden="true"
+      class="hidden lg:block absolute right-[-4rem] top-1/2 -translate-y-1/2 max-h-[85vh] w-auto opacity-[0.08] dark:opacity-[0.12] mix-blend-luminosity pointer-events-none select-none"
+      draggable="false"
+    />
+
     <!-- corners -->
     <div class="absolute top-6 left-6 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground flex items-center gap-2">
       <span class="text-signal">⬢</span> Hexa.ai · myHexa edge
