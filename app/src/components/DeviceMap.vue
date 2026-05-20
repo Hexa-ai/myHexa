@@ -76,8 +76,6 @@ function tooltipHtml(m: MarkerInput): string {
   const name = escapeHtml(m.label ?? '—')
   return `
     <div class="hai-tip ${stateClass}">
-      <div class="hai-tip-halo"></div>
-      <div class="hai-tip-ripple"></div>
       <img src="/hai-p-gateway.png" class="hai-tip-img" alt="" />
       <div class="hai-tip-text">
         <div class="hai-tip-name">${name}</div>
@@ -269,55 +267,6 @@ defineExpose({
   backdrop-filter: blur(6px);
   min-width: 96px;
 }
-.hai-tip-halo {
-  position: absolute;
-  top: 6px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 70px;
-  height: 70px;
-  border-radius: 50%;
-  filter: blur(14px);
-  pointer-events: none;
-}
-.hai-tip.is-online .hai-tip-halo {
-  background: color-mix(in srgb, var(--signal) 55%, transparent);
-  animation: hai-tip-pulse 2.4s ease-in-out infinite;
-}
-.hai-tip.is-warning .hai-tip-halo {
-  background: color-mix(in srgb, var(--warn, #f5a524) 55%, transparent);
-  animation: hai-tip-pulse 1.2s ease-in-out infinite;
-}
-.hai-tip.is-error .hai-tip-halo {
-  background: color-mix(in srgb, var(--offline, #ff7a7a) 55%, transparent);
-  animation: hai-tip-pulse 1.2s ease-in-out infinite;
-}
-.hai-tip.is-offline .hai-tip-halo {
-  background: color-mix(in srgb, var(--muted-foreground) 25%, transparent);
-}
-.hai-tip-ripple {
-  position: absolute;
-  top: 6px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 70px;
-  height: 70px;
-  border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--signal) 45%, transparent);
-  pointer-events: none;
-  opacity: 0;
-}
-.hai-tip.is-online .hai-tip-ripple {
-  animation: hai-tip-ripple 2.4s ease-out infinite;
-}
-.hai-tip.is-warning .hai-tip-ripple {
-  border-color: color-mix(in srgb, var(--warn, #f5a524) 50%, transparent);
-  animation: hai-tip-ripple 1.2s ease-out infinite;
-}
-.hai-tip.is-error .hai-tip-ripple {
-  border-color: color-mix(in srgb, var(--offline, #ff7a7a) 55%, transparent);
-  animation: hai-tip-ripple 1.2s ease-out infinite;
-}
 .hai-tip-img {
   position: relative;
   width: 70px;
@@ -397,15 +346,4 @@ defineExpose({
   50%       { box-shadow: 0 0 0 10px rgba(245, 165, 36, 0); }
 }
 
-@keyframes hai-tip-pulse {
-  0%, 100% { opacity: 0.45; transform: translateX(-50%) scale(0.95); }
-  50%       { opacity: 0.9;  transform: translateX(-50%) scale(1.05); }
-}
-@keyframes hai-tip-ripple {
-  0%   { opacity: 0.6; transform: translateX(-50%) scale(0.85); }
-  100% { opacity: 0;   transform: translateX(-50%) scale(1.35); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .hai-tip-halo, .hai-tip-ripple { animation: none !important; }
-}
 </style>
