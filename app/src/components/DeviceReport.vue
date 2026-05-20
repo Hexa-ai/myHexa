@@ -263,7 +263,7 @@ async function copyTailscaleIp(ip: string) {
           <!-- pulsing halo, color reflects device state -->
           <div
             :class="[
-              'absolute inset-0 -m-6 rounded-full blur-2xl pointer-events-none',
+              'absolute inset-0 -m-1 rounded-full blur-xl pointer-events-none',
               {
                 'bg-muted-foreground/15': haloState === 'offline',
                 'bg-signal/40 device-halo': haloState === 'ok',
@@ -277,7 +277,7 @@ async function copyTailscaleIp(ip: string) {
           <div
             v-if="haloState !== 'offline'"
             :class="[
-              'absolute inset-0 -m-4 rounded-full border device-ripple pointer-events-none',
+              'absolute inset-0 rounded-full border device-ripple pointer-events-none',
               {
                 'border-signal/30': haloState === 'ok',
                 'border-warn/40 device-ripple-fast': haloState === 'warning',
