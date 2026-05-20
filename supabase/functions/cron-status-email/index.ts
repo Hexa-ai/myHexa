@@ -224,6 +224,27 @@ function buildEmail(opts: {
   if (nAlarm) statsBits.push(`<span style="color:#dc2626;">●</span> <strong>${nAlarm}</strong> alarme${nAlarm > 1 ? 's' : ''}`)
   const statsLine = `<p style="margin:0 0 22px 0;font-size:14px;color:#374151;line-height:1.6;">📊 ${statsBits.join(' &nbsp;·&nbsp; ')}</p>`
 
+  // Liste de tous les équipements accessibles au destinataire — pour qu'un
+  // externe (sans compte) puisse naviguer sur n'importe lequel directement
+  // depuis le mail (le CTA principal ne pointe que sur un seul).
+  const devicesListHtml = (() => {
+    if (!devices.length) return ''
+    const hasAccount = !!recipient.auth_user_id
+    const rows = devices.map((d) => {
+      const online = getConnectivity(d) === 'online'
+      const alarms = alarmCount(d.status)
+      const dotColor = online ? (alarms > 0 ? '#f59e0b' : '#16a34a') : '#9ca3af'
+      const label = online ? (alarms > 0 ? `${alarms} alarme${alarms > 1 ? 's' : ''}` : 'En ligne') : 'Inactif'
+      const labelColor = online ? (alarms > 0 ? '#92400e' : '#15803d') : '#6b7280'
+      const url = hasAccount
+        ? `${APP_URL}/admin/devices/${encodeURIComponent(d.id)}`
+        : `${APP_URL}/report?t=${encodeURIComponent(token)}&d=${encodeURIComponent(d.id)}`
+      const name = escapeHtml(d.name ?? d.id.slice(0, 8))
+      return `<tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;"><a href="${url}" style="display:flex;align-items:center;justify-content:space-between;text-decoration:none;color:inherit;"><span style="display:inline-flex;align-items:center;gap:8px;font-size:14px;color:#111827;font-weight:500;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${dotColor};"></span>${name}</span><span style="font-size:12px;color:${labelColor};font-weight:500;">${label} →</span></a></td></tr>`
+    }).join('')
+    return `<div style="margin:0 0 22px 0;"><p style="margin:0 0 8px 0;font-size:13px;font-weight:600;color:#111827;text-transform:uppercase;letter-spacing:0.04em;">Équipements</p><table style="width:100%;border-collapse:collapse;">${rows}</table></div>`
+  })()
+
   // Pick one device for the dashboard CTA (first online, else first)
   // Recipients with an account land on their authenticated dashboard (their
   // session takes over). Token-only recipients (no auth_user_id) get the
@@ -244,6 +265,7 @@ function buildEmail(opts: {
     ${briefHtml}
     ${watchlistHtml}
     ${statsLine}
+    ${devicesListHtml}
     ${ctaLine}
     <p style="margin:28px 0 16px 0;font-size:14.5px;color:#1f2937;line-height:1.5;">Bonne journée,</p>
     <div style="border-left:3px solid #00d4aa;padding:2px 0 2px 14px;margin:0 0 14px 0;">
@@ -355,14 +377,11 @@ Deno.serve(async (req) => {
     const allDevices = (rpcData ?? []) as Array<{ id: string; company_id: string; name: string | null; address: string | null; status_payload: unknown; status_received_at: string | null }>
 
     // Compute AI brief ONCE per company (divides Gemini cost+latency by ~N).
-    const aiByCompany = new Map<string, AiOutput>()
-    for (const cid of targetCompanyIds) {
-      const devs: DeviceWithStatus[] = allDevices
-        .filter((d) => d.company_id === cid)
-        .map((d) => ({ id: d.id, name: d.name, address: d.address, status: d.status_payload, status_received_at: d.status_received_at }))
-      if (!devs.length) continue
-      aiByCompany.set(cid, await callGemini(buildPrompt(devs)))
-    }
+    // Brief IA partagé entre recipients qui voient EXACTEMENT le même
+    // ensemble de devices (signature = ids triés). Évite qu'un externe
+    // restreint voie son brief mentionner des devices qu'il n'a pas le droit
+    // de consulter.
+    const aiBySignature = new Map<string, AiOutput>()
 
     for (const r of (recipients ?? []) as Recipient[]) {
       if (!r.contact_email) continue
@@ -376,7 +395,12 @@ Deno.serve(async (req) => {
       const deviceIdsCsv = devices.map((d) => d.id).join(',')
       const { error: tErr } = await admin.from('report_tokens').insert({ token, recipient_id: r.id, device_ids: deviceIdsCsv, expires_at: expiresAt })
       if (tErr) { console.error('[status-email] token insert failed', tErr); continue }
-      const ai = aiByCompany.get(r.company_id) ?? { brief: '', watchlist: [] }
+      const signature = devices.map((d) => d.id).slice().sort().join(',')
+      let ai = aiBySignature.get(signature)
+      if (!ai) {
+        ai = await callGemini(buildPrompt(devices))
+        aiBySignature.set(signature, ai)
+      }
       const { subject, html } = buildEmail({ recipient: r, devices, ai, token, expiresAt })
       try {
         await sendMail({ to: r.contact_email, subject, html })
