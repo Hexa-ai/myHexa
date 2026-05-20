@@ -249,11 +249,11 @@ async function copyTailscaleIp(ip: string) {
   <div class="space-y-6 fade-up">
     <!-- Header -->
     <header class="flex items-end justify-between flex-wrap gap-4">
-      <div class="flex items-center gap-5">
+      <div class="flex items-center gap-4">
         <img
-          src="/hai-p-gateway.png"
+          src="/hai-p-gateway.jpeg"
           alt="HAI-P Gateway"
-          class="hidden sm:block h-28 w-auto object-contain select-none drop-shadow-[0_6px_20px_rgb(0_0_0_/_0.35)]"
+          class="hidden sm:block size-20 object-contain rounded-md bg-card/40 border border-border/60 p-1 select-none"
           draggable="false"
         />
         <div>
