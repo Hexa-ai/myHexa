@@ -22,6 +22,7 @@ import { sendMail, closeMailer } from '../_shared/mailer.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 const CRON_SECRET = Deno.env.get('CRON_SECRET') ?? ''
 const APP_URL = Deno.env.get('APP_URL') ?? 'https://my.hexa-ai.fr'
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? ''
@@ -29,6 +30,17 @@ const GEMINI_MODEL = 'gemini-2.5-flash'
 const TOKEN_TTL_MS = 8 * 24 * 60 * 60 * 1000 // 8 days
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } })
+
+interface InvokeBody {
+  company_id?: string
+}
+
+// CORS for browser-initiated manual sends
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+}
 
 interface Recipient {
   id: string
@@ -239,33 +251,72 @@ function buildEmail(opts: {
 }
 
 Deno.serve(async (req) => {
-  const provided = req.headers.get('x-cron-secret') ?? ''
-  if (!CRON_SECRET || provided !== CRON_SECRET) return new Response('Unauthorized', { status: 401 })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS })
+
+  // Two auth paths :
+  //   (a) cron call (pg_cron) → x-cron-secret header
+  //   (b) manual call from the app (staff admin) → valid JWT + RPC check
+  const cronProvided = req.headers.get('x-cron-secret') ?? ''
+  const isCron = CRON_SECRET && cronProvided === CRON_SECRET
+
+  let manualCompanyId: string | undefined
+  if (!isCron) {
+    const authHeader = req.headers.get('Authorization') ?? ''
+    const jwt = authHeader.replace(/^Bearer\s+/i, '')
+    if (!jwt) {
+      return new Response(JSON.stringify({ ok: false, error: 'UNAUTHORIZED' }), { status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
+    }
+    const userClient = createClient(SUPABASE_URL, ANON_KEY, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
+      auth: { persistSession: false },
+    })
+    const { data: userData, error: userErr } = await userClient.auth.getUser()
+    if (userErr || !userData.user) {
+      return new Response(JSON.stringify({ ok: false, error: 'INVALID_JWT' }), { status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
+    }
+    const { data: staffOk } = await userClient.rpc('is_hexa_staff_admin')
+    if (staffOk !== true) {
+      return new Response(JSON.stringify({ ok: false, error: 'FORBIDDEN' }), { status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
+    }
+    const body = (await req.json().catch(() => ({}))) as InvokeBody
+    manualCompanyId = body.company_id
+    if (!manualCompanyId) {
+      return new Response(JSON.stringify({ ok: false, error: 'company_id required' }), { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
+    }
+  }
 
   const startedAt = Date.now()
-
-  // Determine "today" in Europe/Paris (Intl trick)
   const parisNow = new Date().toLocaleString('en-US', { timeZone: 'Europe/Paris', weekday: 'long' })
   const isTuesday = parisNow.startsWith('Tuesday')
 
-  // 1. Cleanup expired tokens (idempotent)
-  const { error: clErr } = await admin.from('report_tokens').delete().lt('expires_at', new Date().toISOString())
-  if (clErr) console.error('[status-email] cleanup tokens failed', clErr)
-
-  // 2. Find target companies (frequency=daily, or frequency=weekly && Tuesday)
-  const { data: companies, error: cErr } = await admin
-    .from('companies')
-    .select('id, status_email_frequency')
-  if (cErr) {
-    console.error('[status-email] companies load failed', cErr)
-    return new Response(JSON.stringify({ ok: false, error: cErr.message }), { status: 500 })
+  // Cleanup expired tokens (idempotent, only on cron runs)
+  if (isCron) {
+    const { error: clErr } = await admin.from('report_tokens').delete().lt('expires_at', new Date().toISOString())
+    if (clErr) console.error('[status-email] cleanup tokens failed', clErr)
   }
-  const targetCompanyIds = (companies ?? [])
-    .filter((c) => c.status_email_frequency === 'daily' || (c.status_email_frequency === 'weekly' && isTuesday))
-    .map((c) => c.id)
+
+  // Determine target companies
+  let targetCompanyIds: string[]
+  if (manualCompanyId) {
+    // Bypass frequency filter for manual sends — just verify the company exists
+    const { data: c, error: cErr } = await admin.from('companies').select('id').eq('id', manualCompanyId).maybeSingle()
+    if (cErr || !c) {
+      return new Response(JSON.stringify({ ok: false, error: 'company not found' }), { status: 404, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
+    }
+    targetCompanyIds = [manualCompanyId]
+  } else {
+    const { data: companies, error: cErr } = await admin.from('companies').select('id, status_email_frequency')
+    if (cErr) {
+      console.error('[status-email] companies load failed', cErr)
+      return new Response(JSON.stringify({ ok: false, error: cErr.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
+    }
+    targetCompanyIds = (companies ?? [])
+      .filter((c) => c.status_email_frequency === 'daily' || (c.status_email_frequency === 'weekly' && isTuesday))
+      .map((c) => c.id)
+  }
 
   if (targetCompanyIds.length === 0) {
-    return new Response(JSON.stringify({ ok: true, recipients: 0, mails_sent: 0, duration_ms: Date.now() - startedAt }), { headers: { 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ ok: true, recipients: 0, mails_sent: 0, duration_ms: Date.now() - startedAt }), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
   }
 
   // 3. Get recipients of these companies
@@ -276,7 +327,7 @@ Deno.serve(async (req) => {
     .not('contact_email', 'is', null)
   if (rErr) {
     console.error('[status-email] recipients load failed', rErr)
-    return new Response(JSON.stringify({ ok: false, error: rErr.message }), { status: 500 })
+    return new Response(JSON.stringify({ ok: false, error: rErr.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
   }
 
   let mailsSent = 0
@@ -322,11 +373,12 @@ Deno.serve(async (req) => {
 
   return new Response(JSON.stringify({
     ok: true,
+    mode: manualCompanyId ? 'manual' : 'cron',
     target_companies: targetCompanyIds.length,
     recipients: recipients?.length ?? 0,
     mails_sent: mailsSent,
     mails_failed: mailsFailed,
     is_tuesday: isTuesday,
     duration_ms: Date.now() - startedAt,
-  }), { headers: { 'Content-Type': 'application/json' } })
+  }), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
 })

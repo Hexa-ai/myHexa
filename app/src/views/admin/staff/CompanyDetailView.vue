@@ -72,6 +72,27 @@ async function saveName() {
   editing.value = false
 }
 
+const sendingReport = ref(false)
+const sendReportResult = ref<string | null>(null)
+
+async function sendReportNow() {
+  if (!company.value) return
+  sendingReport.value = true
+  sendReportResult.value = null
+  try {
+    const { data, error: err } = await supabase.functions.invoke('cron-status-email', {
+      body: { company_id: company.value.id },
+    })
+    if (err) throw new Error(err.message)
+    if (!data?.ok) throw new Error(data?.error ?? 'Erreur inconnue')
+    sendReportResult.value = `${data.mails_sent} mail(s) envoyé(s) · ${data.recipients} destinataire(s)`
+  } catch (e) {
+    sendReportResult.value = e instanceof Error ? `Erreur : ${e.message}` : 'Erreur inconnue'
+  } finally {
+    sendingReport.value = false
+  }
+}
+
 async function setFrequency(value: 'none' | 'daily' | 'weekly') {
   if (!company.value) return
   const prev = company.value.status_email_frequency
@@ -171,23 +192,39 @@ watch(id, load)
           Pilote l'envoi automatique du brief IA + état de la flotte aux destinataires de la compagnie.
         </p>
       </div>
-      <div class="inline-flex rounded-md border border-border overflow-hidden font-mono text-[10px] uppercase tracking-wider">
+      <div class="flex items-center gap-2 flex-wrap">
+        <div class="inline-flex rounded-md border border-border overflow-hidden font-mono text-[10px] uppercase tracking-wider">
+          <button
+            v-for="opt in (['none', 'weekly', 'daily'] as const)"
+            :key="opt"
+            type="button"
+            :class="[
+              'px-3 py-1.5 transition border-r border-border last:border-r-0',
+              company.status_email_frequency === opt
+                ? 'bg-signal text-primary-foreground'
+                : 'bg-transparent text-muted-foreground hover:text-foreground',
+            ]"
+            @click="setFrequency(opt)"
+          >
+            {{ opt === 'none' ? 'Aucun' : opt === 'daily' ? 'Quotidien' : 'Hebdo (mardi)' }}
+          </button>
+        </div>
         <button
-          v-for="opt in (['none', 'weekly', 'daily'] as const)"
-          :key="opt"
           type="button"
-          :class="[
-            'px-3 py-1.5 transition border-r border-border last:border-r-0',
-            company.status_email_frequency === opt
-              ? 'bg-signal text-primary-foreground'
-              : 'bg-transparent text-muted-foreground hover:text-foreground',
-          ]"
-          @click="setFrequency(opt)"
+          :disabled="sendingReport"
+          class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider border border-border text-muted-foreground hover:border-signal/60 hover:text-signal px-3 py-1.5 rounded-md transition disabled:opacity-60 disabled:cursor-not-allowed"
+          @click="sendReportNow"
         >
-          {{ opt === 'none' ? 'Aucun' : opt === 'daily' ? 'Quotidien' : 'Hebdo (mardi)' }}
+          {{ sendingReport ? 'Envoi…' : '✉ Envoyer maintenant' }}
         </button>
       </div>
     </section>
+    <p
+      v-if="sendReportResult"
+      class="text-xs font-mono text-muted-foreground -mt-3"
+    >
+      {{ sendReportResult }}
+    </p>
 
     <section class="space-y-2">
       <div class="flex items-center justify-between">
