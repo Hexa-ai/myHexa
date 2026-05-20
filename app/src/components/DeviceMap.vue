@@ -170,13 +170,12 @@ onBeforeUnmount(() => {
 
 defineExpose({
   invalidateSize: () => map?.invalidateSize(),
-  focusMarker(id: string, zoom?: number) {
+  focusMarker(id: string) {
     if (!map) return
     const c = circlesById.get(id)
     if (!c) return
-    const ll = c.getLatLng()
-    map.flyTo(ll, zoom ?? Math.max(map.getZoom(), 14), { duration: 1.2 })
-    // Close any other tooltip then open this one
+    // Close any other tooltip then open this one — no zoom, no pan.
+    // Vue d'ensemble préservée pour l'usage kiosque.
     circlesById.forEach((other, key) => {
       if (key !== id) other.closeTooltip()
     })

@@ -26,7 +26,7 @@ const markers = computed<MarkerInput[]>(() =>
 )
 
 // --- Play mode (kiosque) -----------------------------------------------------
-const PLAY_INTERVAL_MS = 5_000
+const PLAY_INTERVAL_MS = 10_000
 const mapRef = ref<InstanceType<typeof DeviceMap> | null>(null)
 const isPlaying = ref(false)
 const playIndex = ref(0)
