@@ -18,10 +18,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => session.value !== null)
   const companyId = computed(() => recipient.value?.company_id ?? null)
-  const isHexaStaff = computed(() => isHexaInternalCompany.value)
-  const isHexaStaffAdmin = computed(
+  // Un staff Hexa est forcément admin de la compagnie interne. Un viewer
+  // Hexa-ai est traité comme un recipient normal (respect de restrict_to_devices).
+  const isHexaStaff = computed(
     () => isHexaInternalCompany.value && recipient.value?.role === 'admin',
   )
+  const isHexaStaffAdmin = isHexaStaff
 
   // Pour les staff : compagnie sur laquelle on "agit". Stockée en sessionStorage,
   // perdue à la fermeture de l'onglet.
