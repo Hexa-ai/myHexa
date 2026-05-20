@@ -29,13 +29,17 @@ function getClient(): SMTPClient {
     throw new Error('Missing GMAIL_USER or GMAIL_APP_PASSWORD env vars')
   }
   if (client) return client
+  // Gmail port 465 (implicit TLS) — more reliable than 587/STARTTLS in
+  // Deno Edge Runtime where the STARTTLS upgrade sometimes hangs and blocks
+  // the worker mid-batch.
   client = new SMTPClient({
     connection: {
       hostname: 'smtp.gmail.com',
-      port: 587,
-      tls: false, // STARTTLS upgrades from plain
+      port: 465,
+      tls: true,
       auth: { username: GMAIL_USER, password: GMAIL_APP_PASSWORD },
     },
+    pool: { size: 1, timeout: 60_000 },
   })
   return client
 }
