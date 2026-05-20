@@ -253,7 +253,7 @@ async function copyTailscaleIp(ip: string) {
         <img
           src="/hai-p-gateway.png"
           alt="HAI-P Gateway"
-          class="hidden sm:block h-28 w-auto object-contain select-none opacity-90 dark:invert dark:opacity-70"
+          class="hidden sm:block h-40 w-auto object-contain select-none opacity-90 dark:invert dark:opacity-70"
           draggable="false"
         />
         <div>
