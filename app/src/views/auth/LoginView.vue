@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useTheme } from '@/composables/useTheme'
+import HaiPGatewayIcon from '@/components/HaiPGatewayIcon.vue'
 
 const { theme, toggle: toggleTheme } = useTheme()
 
@@ -59,6 +60,12 @@ async function handleSubmit() {
         <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
       </svg>
     </button>
+
+    <!-- Hero icon (desktop only, decorative) -->
+    <HaiPGatewayIcon
+      class="hidden lg:block absolute right-[8%] top-1/2 -translate-y-1/2 h-[55vh] w-auto text-muted-foreground/25 pointer-events-none select-none fade-up"
+      animated
+    />
 
     <div class="relative w-full max-w-[440px] fade-up">
       <div class="mb-8 flex flex-col items-center">

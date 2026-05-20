@@ -4,6 +4,7 @@ import { formatRelative, isOnline } from '@/lib/utils'
 import DeviceMap from '@/components/DeviceMap.vue'
 import QRCodeBlock from '@/components/QRCodeBlock.vue'
 import { useTailscaleReachable } from '@/composables/useTailscaleReachable'
+import HaiPGatewayIcon from '@/components/HaiPGatewayIcon.vue'
 
 interface Device {
   id: string
@@ -249,15 +250,21 @@ async function copyTailscaleIp(ip: string) {
   <div class="space-y-6 fade-up">
     <!-- Header -->
     <header class="flex items-end justify-between flex-wrap gap-4">
-      <div>
-        <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-2 flex items-center gap-2">
-          <span class="text-signal">⬢</span>
-          Équipement · {{ isAdmin ? 'admin' : 'lecture' }}
+      <div class="flex items-center gap-4">
+        <HaiPGatewayIcon
+          animated
+          class="hidden sm:block h-24 w-auto text-muted-foreground/70"
+        />
+        <div>
+          <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-2 flex items-center gap-2">
+            <span class="text-signal">⬢</span>
+            HAI-P Gateway · {{ isAdmin ? 'admin' : 'lecture' }}
+          </div>
+          <h1 class="text-3xl font-semibold tracking-tight">{{ device.name || '—' }}</h1>
+          <p class="mt-2 text-sm text-muted-foreground font-mono">
+            Dernière télémétrie · {{ lastSeen }}
+          </p>
         </div>
-        <h1 class="text-3xl font-semibold tracking-tight">{{ device.name || '—' }}</h1>
-        <p class="mt-2 text-sm text-muted-foreground font-mono">
-          Dernière télémétrie · {{ lastSeen }}
-        </p>
       </div>
       <div class="flex items-center gap-2">
         <span
