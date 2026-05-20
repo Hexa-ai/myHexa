@@ -137,6 +137,15 @@ defineExpose({
 const online = computed(() => isOnline(props.status?.receivedAt))
 const lastSeen = computed(() => formatRelative(props.status?.receivedAt))
 const isAdmin = computed(() => props.role === 'admin')
+
+type HaloState = 'offline' | 'error' | 'warning' | 'ok'
+const haloState = computed<HaloState>(() => {
+  if (!online.value) return 'offline'
+  const types = activeAlarms.value.map((v) => String(v?.type_alarm ?? '').toLowerCase())
+  if (types.includes('error')) return 'error'
+  if (types.includes('warning')) return 'warning'
+  return 'ok'
+})
 const payload = computed<StatusPayload>(() => props.status?.payload ?? {})
 
 const activeAlarms = computed(() =>
@@ -251,18 +260,30 @@ async function copyTailscaleIp(ip: string) {
     <header class="flex items-end justify-between flex-wrap gap-4">
       <div class="flex items-center gap-4">
         <div class="relative hidden sm:block">
-          <!-- pulsing halo (only animates when device is online) -->
+          <!-- pulsing halo, color reflects device state -->
           <div
             :class="[
               'absolute inset-0 -m-6 rounded-full blur-2xl pointer-events-none',
-              online ? 'bg-signal/40 device-halo' : 'bg-muted-foreground/15',
+              {
+                'bg-muted-foreground/15': haloState === 'offline',
+                'bg-signal/40 device-halo': haloState === 'ok',
+                'bg-warn/45 device-halo device-halo-fast': haloState === 'warning',
+                'bg-offline/50 device-halo device-halo-fast': haloState === 'error',
+              },
             ]"
             aria-hidden="true"
           />
           <!-- secondary outer ripple (radar style) -->
           <div
-            v-if="online"
-            class="absolute inset-0 -m-4 rounded-full border border-signal/30 device-ripple pointer-events-none"
+            v-if="haloState !== 'offline'"
+            :class="[
+              'absolute inset-0 -m-4 rounded-full border device-ripple pointer-events-none',
+              {
+                'border-signal/30': haloState === 'ok',
+                'border-warn/40 device-ripple-fast': haloState === 'warning',
+                'border-offline/50 device-ripple-fast': haloState === 'error',
+              },
+            ]"
             aria-hidden="true"
           />
           <img
@@ -762,6 +783,9 @@ async function copyTailscaleIp(ip: string) {
 .device-halo {
   animation: device-halo 2.8s ease-in-out infinite;
 }
+.device-halo-fast {
+  animation-duration: 1.2s;
+}
 
 @keyframes device-ripple {
   0%   { opacity: 0.6; transform: scale(0.85); }
@@ -769,6 +793,9 @@ async function copyTailscaleIp(ip: string) {
 }
 .device-ripple {
   animation: device-ripple 2.8s ease-out infinite;
+}
+.device-ripple-fast {
+  animation-duration: 1.2s;
 }
 
 @media (prefers-reduced-motion: reduce) {
