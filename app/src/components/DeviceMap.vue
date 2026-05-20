@@ -33,6 +33,7 @@ const mapEl = ref<HTMLElement | null>(null)
 let map: LeafletMap | null = null
 let layer: L.LayerGroup | null = null
 let tileLayer: L.TileLayer | null = null
+const circlesById = new Map<string, CircleMarker>()
 
 const TILES = {
   dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
@@ -101,6 +102,7 @@ function buildMarkers() {
   const valid = props.markers.filter((m) => Number.isFinite(m.lat) && Number.isFinite(m.lng))
   if (!valid.length) return
 
+  circlesById.clear()
   const circles: CircleMarker[] = []
   for (const m of valid) {
     const c = L.circleMarker([m.lat, m.lng], {
@@ -120,6 +122,7 @@ function buildMarkers() {
     c.on('click', () => emit('select', m.id))
     c.addTo(layer!)
     circles.push(c)
+    circlesById.set(m.id, c)
   }
 
   if (valid.length === 1) {
@@ -167,6 +170,26 @@ onBeforeUnmount(() => {
 
 defineExpose({
   invalidateSize: () => map?.invalidateSize(),
+  focusMarker(id: string, zoom?: number) {
+    if (!map) return
+    const c = circlesById.get(id)
+    if (!c) return
+    const ll = c.getLatLng()
+    map.flyTo(ll, zoom ?? Math.max(map.getZoom(), 14), { duration: 1.2 })
+    // Close any other tooltip then open this one
+    circlesById.forEach((other, key) => {
+      if (key !== id) other.closeTooltip()
+    })
+    c.openTooltip()
+  },
+  closeAllTooltips() {
+    circlesById.forEach((c) => c.closeTooltip())
+  },
+  fitAll() {
+    if (!map || circlesById.size === 0) return
+    const group = L.featureGroup(Array.from(circlesById.values()))
+    map.fitBounds(group.getBounds().pad(0.2))
+  },
 })
 </script>
 

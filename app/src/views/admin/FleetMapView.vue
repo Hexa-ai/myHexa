@@ -1,15 +1,82 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useDevices } from '@/composables/useDevices'
 import { isOnline, maxActiveAlarmSeverity } from '@/lib/utils'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import DeviceMap, { type MarkerInput } from '@/components/DeviceMap.vue'
 
 const router = useRouter()
+const route = useRoute()
 const { devices, loading, error, load } = useDevices()
 
 useAutoRefresh(load, { intervalMs: 120_000 })
+
+// --- Play mode (kiosque) -----------------------------------------------------
+const PLAY_INTERVAL_MS = 5_000
+const mapRef = ref<InstanceType<typeof DeviceMap> | null>(null)
+const isPlaying = ref(false)
+const playIndex = ref(0)
+let playTimer: ReturnType<typeof setInterval> | undefined
+
+function nextStep() {
+  if (!markers.value.length) return
+  playIndex.value = (playIndex.value + 1) % markers.value.length
+  const m = markers.value[playIndex.value]
+  mapRef.value?.focusMarker(m.id)
+}
+
+function startPlay() {
+  if (!markers.value.length) return
+  isPlaying.value = true
+  playIndex.value = -1 // so nextStep lands on 0
+  nextStep()
+  playTimer = setInterval(nextStep, PLAY_INTERVAL_MS)
+  // Reflect in URL for kiosk persistence
+  router.replace({ query: { ...route.query, play: '1' } })
+}
+
+function stopPlay() {
+  isPlaying.value = false
+  if (playTimer) {
+    clearInterval(playTimer)
+    playTimer = undefined
+  }
+  mapRef.value?.closeAllTooltips()
+  mapRef.value?.fitAll()
+  const q = { ...route.query }
+  delete q.play
+  router.replace({ query: q })
+}
+
+function togglePlay() {
+  isPlaying.value ? stopPlay() : startPlay()
+}
+
+// Activate from URL on mount (e.g. /admin/map?play=1 on a kiosk)
+onMounted(() => {
+  const wanted = String(route.query.play ?? '').toLowerCase()
+  if (wanted === '1' || wanted === 'true') {
+    // wait until devices are loaded
+    const tryStart = () => {
+      if (markers.value.length) startPlay()
+      else setTimeout(tryStart, 500)
+    }
+    tryStart()
+  }
+})
+
+// If devices list is fully cleared during play, stop
+watch(
+  () => markers.value.length,
+  (n) => {
+    if (!n && isPlaying.value) stopPlay()
+  },
+)
+
+onBeforeUnmount(() => {
+  if (playTimer) clearInterval(playTimer)
+})
 
 const markers = computed<MarkerInput[]>(() =>
   devices.value
@@ -52,7 +119,30 @@ function onSelect(id: string) {
         </p>
       </div>
 
-      <div class="grid grid-cols-3 gap-px bg-border border border-border rounded-sm overflow-hidden self-start md:self-auto w-full md:w-auto">
+      <div class="flex items-center gap-3 self-start md:self-auto w-full md:w-auto">
+        <button
+          type="button"
+          :disabled="!markers.length"
+          :class="[
+            'inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-md border transition',
+            isPlaying
+              ? 'bg-signal text-primary-foreground border-signal hover:brightness-110'
+              : 'border-border text-muted-foreground hover:border-signal/60 hover:text-signal',
+            !markers.length && 'opacity-50 cursor-not-allowed',
+          ]"
+          @click="togglePlay"
+        >
+          <template v-if="isPlaying">
+            <svg viewBox="0 0 24 24" class="size-3" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="0.5"/><rect x="14" y="5" width="4" height="14" rx="0.5"/></svg>
+            Pause · {{ playIndex + 1 }}/{{ markers.length }}
+          </template>
+          <template v-else>
+            <svg viewBox="0 0 24 24" class="size-3" fill="currentColor"><path d="M7 5v14l12-7z"/></svg>
+            Mode kiosque
+          </template>
+        </button>
+
+      <div class="grid grid-cols-3 gap-px bg-border border border-border rounded-sm overflow-hidden flex-1 md:flex-initial">
         <div class="bg-card px-3 sm:px-5 py-2.5 sm:py-3 min-w-0">
           <div class="font-mono text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground">Géoloc.</div>
           <div class="font-mono text-xl sm:text-2xl tabular mt-0.5">{{ markers.length.toString().padStart(2, '0') }}</div>
@@ -74,6 +164,7 @@ function onSelect(id: string) {
             {{ offlineCount.toString().padStart(2, '0') }}
           </div>
         </div>
+      </div>
       </div>
     </header>
 
@@ -101,6 +192,7 @@ function onSelect(id: string) {
     </div>
     <DeviceMap
       v-else
+      ref="mapRef"
       :markers="markers"
       height="100%"
       class="flex-1 fade-up"
