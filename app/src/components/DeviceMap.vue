@@ -44,6 +44,32 @@ function colorFor(m: MarkerInput): string {
   return '#00d4aa'
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function tooltipHtml(m: MarkerInput): string {
+  const stateClass = m.online === false ? 'is-offline' : 'is-online'
+  const stateLabel = m.online === false ? 'Offline' : 'Online'
+  const name = escapeHtml(m.label ?? '—')
+  return `
+    <div class="hai-tip ${stateClass}">
+      <div class="hai-tip-halo"></div>
+      <div class="hai-tip-ripple"></div>
+      <img src="/hai-p-gateway.png" class="hai-tip-img" alt="" />
+      <div class="hai-tip-text">
+        <div class="hai-tip-name">${name}</div>
+        <div class="hai-tip-state">${stateLabel}</div>
+      </div>
+    </div>
+  `
+}
+
 function buildMarkers() {
   if (!map) return
   if (layer) layer.clearLayers()
@@ -61,9 +87,12 @@ function buildMarkers() {
       fillOpacity: 1,
       radius: 8,
     })
-    if (m.label) {
-      c.bindTooltip(m.label, { direction: 'top', offset: [0, -8] })
-    }
+    c.bindTooltip(tooltipHtml(m), {
+      direction: 'top',
+      offset: [0, -10],
+      className: 'hai-rich-tooltip',
+      opacity: 1,
+    })
     c.on('click', () => emit('select', m.id))
     c.addTo(layer!)
     circles.push(c)
@@ -157,5 +186,111 @@ defineExpose({
 }
 .leaflet-tooltip-top:before {
   border-top-color: var(--border);
+}
+
+/* Rich tooltip with animated HAI-P icon */
+.leaflet-tooltip.hai-rich-tooltip {
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  pointer-events: none;
+}
+.leaflet-tooltip.hai-rich-tooltip:before {
+  display: none;
+}
+.hai-tip {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 10px 6px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(6px);
+  min-width: 96px;
+}
+.hai-tip-halo {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  filter: blur(14px);
+  pointer-events: none;
+}
+.hai-tip.is-online .hai-tip-halo {
+  background: color-mix(in srgb, var(--signal) 55%, transparent);
+  animation: hai-tip-pulse 2.4s ease-in-out infinite;
+}
+.hai-tip.is-offline .hai-tip-halo {
+  background: color-mix(in srgb, var(--muted-foreground) 25%, transparent);
+}
+.hai-tip-ripple {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--signal) 45%, transparent);
+  pointer-events: none;
+  opacity: 0;
+}
+.hai-tip.is-online .hai-tip-ripple {
+  animation: hai-tip-ripple 2.4s ease-out infinite;
+}
+.hai-tip-img {
+  position: relative;
+  width: 70px;
+  height: auto;
+  object-fit: contain;
+  opacity: 0.95;
+  user-select: none;
+}
+.dark .hai-tip-img {
+  filter: invert(1);
+  opacity: 0.85;
+}
+.hai-tip-text {
+  position: relative;
+  margin-top: 4px;
+  text-align: center;
+  font-family: var(--font-mono);
+  line-height: 1.2;
+}
+.hai-tip-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--foreground);
+  white-space: nowrap;
+}
+.hai-tip-state {
+  margin-top: 2px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.hai-tip.is-online .hai-tip-state {
+  color: var(--signal);
+}
+.hai-tip.is-offline .hai-tip-state {
+  color: var(--offline, #ff7a7a);
+}
+
+@keyframes hai-tip-pulse {
+  0%, 100% { opacity: 0.45; transform: translateX(-50%) scale(0.95); }
+  50%       { opacity: 0.9;  transform: translateX(-50%) scale(1.05); }
+}
+@keyframes hai-tip-ripple {
+  0%   { opacity: 0.6; transform: translateX(-50%) scale(0.85); }
+  100% { opacity: 0;   transform: translateX(-50%) scale(1.35); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hai-tip-halo, .hai-tip-ripple { animation: none !important; }
 }
 </style>
