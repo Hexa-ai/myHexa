@@ -20,10 +20,14 @@ const name = ref('')
 const email = ref('')
 const phone = ref('')
 const role = ref<'admin' | 'viewer'>('viewer')
-const type = ref<'member' | 'external'>('external')
-const allowedDevices = ref<string[] | null>(null)
+// Mode d'accès intra-compagnie : par défaut, accès à tous les devices.
+// Sélection limitée → on alimente restrictToDevices.
+const accessMode = ref<'all' | 'restricted'>('all')
+const restrictToDevices = ref<string[] | null>(null)
 const submitting = ref(false)
 const error = ref<string | null>(null)
+
+const sharedDevicesCount = computed(() => props.recipient?.shared_devices?.length ?? 0)
 
 watch(
   () => props.open,
@@ -34,15 +38,21 @@ watch(
       email.value = props.recipient.contact_email ?? ''
       phone.value = props.recipient.phone ?? ''
       role.value = (props.recipient.role as 'admin' | 'viewer') ?? 'viewer'
-      type.value = props.recipient.auth_user_id ? 'member' : 'external'
-      allowedDevices.value = props.recipient.allowed_device_ids
+      const restrict = props.recipient.restrict_to_devices
+      if (restrict && restrict.length > 0) {
+        accessMode.value = 'restricted'
+        restrictToDevices.value = restrict
+      } else {
+        accessMode.value = 'all'
+        restrictToDevices.value = null
+      }
     } else {
       name.value = ''
       email.value = ''
       phone.value = ''
       role.value = 'viewer'
-      type.value = 'external'
-      allowedDevices.value = null
+      accessMode.value = 'all'
+      restrictToDevices.value = null
     }
     error.value = null
   },
@@ -63,15 +73,17 @@ function submit() {
     return
   }
   submitting.value = true
-  // Membres = accès à tout, on force allowed_device_ids à null.
-  const effectiveAllowed = type.value === 'member' ? null : allowedDevices.value
+  const effectiveRestrict =
+    accessMode.value === 'restricted' && restrictToDevices.value && restrictToDevices.value.length > 0
+      ? restrictToDevices.value
+      : null
   try {
     if (isEdit.value && props.recipient) {
       emit('save', props.recipient.id, {
         name: name.value.trim(),
         phone: phone.value.trim() || null,
         role: role.value,
-        allowed_device_ids: effectiveAllowed,
+        restrict_to_devices: effectiveRestrict,
       })
     } else {
       emit('invite', {
@@ -79,8 +91,7 @@ function submit() {
         contact_email: email.value.trim().toLowerCase(),
         phone: phone.value.trim() || null,
         role: role.value,
-        type: type.value,
-        allowed_device_ids: effectiveAllowed,
+        restrict_to_devices: effectiveRestrict,
       })
     }
   } finally {
@@ -125,14 +136,6 @@ function submit() {
           <input v-model="phone" class="mt-1 w-full border border-border bg-secondary/30 rounded-md px-3 py-2 text-sm" />
         </label>
 
-        <div v-if="!isEdit">
-          <span class="text-xs uppercase tracking-wide text-muted-foreground">Type</span>
-          <div class="mt-1 flex gap-3 text-sm">
-            <label class="flex items-center gap-1"><input v-model="type" type="radio" value="member" /> Membre (invite)</label>
-            <label class="flex items-center gap-1"><input v-model="type" type="radio" value="external" /> Externe (email)</label>
-          </div>
-        </div>
-
         <div>
           <span class="text-xs uppercase tracking-wide text-muted-foreground">Rôle</span>
           <div class="mt-1 flex gap-3 text-sm">
@@ -141,14 +144,31 @@ function submit() {
           </div>
         </div>
 
-        <div v-if="type === 'external'">
-          <span class="text-xs uppercase tracking-wide text-muted-foreground">Devices accessibles</span>
-          <DeviceMultiSelect v-model="allowedDevices" :devices="devices" class="mt-2" />
-          <p class="mt-1 text-xs text-muted-foreground">Laisse vide pour donner accès à tous les devices de la compagnie.</p>
+        <fieldset class="space-y-2 pt-1">
+          <legend class="text-xs uppercase tracking-wide text-muted-foreground">Accès aux équipements de la compagnie</legend>
+          <label class="flex items-start gap-2 text-sm">
+            <input v-model="accessMode" type="radio" value="all" class="mt-1" />
+            <span>
+              <strong>Tous les équipements</strong>
+              <span class="block text-xs text-muted-foreground">Le destinataire voit aussi les nouveaux équipements ajoutés ensuite.</span>
+            </span>
+          </label>
+          <label class="flex items-start gap-2 text-sm">
+            <input v-model="accessMode" type="radio" value="restricted" class="mt-1" />
+            <span>
+              <strong>Sélection limitée</strong>
+              <span class="block text-xs text-muted-foreground">Limiter à quelques équipements précis.</span>
+            </span>
+          </label>
+          <div v-if="accessMode === 'restricted'" class="pl-6">
+            <DeviceMultiSelect v-model="restrictToDevices" :devices="devices" />
+          </div>
+        </fieldset>
+
+        <div v-if="isEdit && sharedDevicesCount > 0" class="border border-border rounded-md p-3 bg-secondary/30 text-xs">
+          <div class="font-mono uppercase tracking-wide text-muted-foreground mb-1">Équipements partagés depuis d'autres compagnies</div>
+          <p class="text-foreground">{{ sharedDevicesCount }} équipement(s) partagé(s). Ces partages se gèrent depuis la fiche de chaque équipement.</p>
         </div>
-        <p v-else class="text-xs text-muted-foreground italic">
-          Les membres ont accès à tous les devices de la compagnie automatiquement.
-        </p>
       </div>
 
       <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
@@ -160,7 +180,7 @@ function submit() {
           class="px-3 py-2 text-sm bg-primary text-primary-foreground rounded-md disabled:opacity-60"
           @click="submit"
         >
-          {{ isEdit ? 'Enregistrer' : (type === 'member' ? 'Créer + envoyer l\'invite' : 'Créer') }}
+          {{ isEdit ? 'Enregistrer' : 'Créer + envoyer l\'invitation' }}
         </button>
       </footer>
     </div>

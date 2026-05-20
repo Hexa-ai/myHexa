@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
 import type { Database } from '@/types/supabase'
@@ -10,8 +10,9 @@ export interface InvitePayload {
   contact_email: string
   phone?: string | null
   role: 'admin' | 'viewer'
-  type: 'member' | 'external'
-  allowed_device_ids?: string[] | null
+  company_id?: string | null
+  restrict_to_devices?: string[] | null
+  shared_devices?: string[] | null
   recipient_id?: string
 }
 
@@ -20,9 +21,6 @@ export function useRecipients() {
   const items = ref<Recipient[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
-
-  const members = computed(() => items.value.filter((r) => r.auth_user_id !== null))
-  const externals = computed(() => items.value.filter((r) => r.auth_user_id === null))
 
   async function fetchAll() {
     if (!auth.effectiveCompanyId) return
@@ -69,5 +67,5 @@ export function useRecipients() {
     await fetchAll()
   }
 
-  return { items, members, externals, loading, error, fetchAll, invite, update, remove }
+  return { items, loading, error, fetchAll, invite, update, remove }
 }

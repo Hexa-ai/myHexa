@@ -80,23 +80,6 @@ async function handleRemove(r: Recipient) {
   }
 }
 
-async function handleResend(r: Recipient) {
-  if (!r.contact_email) return
-  try {
-    const res = await invite({
-      recipient_id: r.id,
-      name: r.name,
-      contact_email: r.contact_email,
-      role: (r.role as 'admin' | 'viewer') ?? 'viewer',
-      type: 'member',
-    })
-    setFlash(
-      res.invited ? `Invitation envoyée à ${r.contact_email}` : 'Invitation traitée',
-    )
-  } catch (e) {
-    setFlash(`Erreur : ${(e as Error).message}`)
-  }
-}
 </script>
 
 <template>
@@ -105,7 +88,7 @@ async function handleResend(r: Recipient) {
       <div>
         <h1 class="text-xl font-semibold">Destinataires</h1>
         <p class="text-sm text-muted-foreground">
-          Membres (accès portail) et externes (email uniquement) pour {{ auth.companyName ?? '—' }}.
+          Destinataires (accès portail + mails) de {{ auth.companyName ?? '—' }}.
         </p>
       </div>
       <button class="px-3 py-2 text-sm bg-primary text-primary-foreground rounded-md" @click="openCreate">
@@ -133,7 +116,6 @@ async function handleResend(r: Recipient) {
       :search="search"
       @edit="openEdit"
       @remove="handleRemove"
-      @invite="handleResend"
     />
 
     <RecipientFormDrawer

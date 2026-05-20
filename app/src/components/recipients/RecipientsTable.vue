@@ -9,7 +9,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   edit: [r: Recipient]
   remove: [r: Recipient]
-  invite: [r: Recipient]
 }>()
 
 const filtered = computed(() => {
@@ -22,18 +21,14 @@ const filtered = computed(() => {
   )
 })
 
-function deviceLabel(r: Recipient): string {
-  if (r.allowed_device_ids === null) return 'Tous'
-  if (r.allowed_device_ids.length === 0) return '—'
-  return String(r.allowed_device_ids.length)
-}
-
-function typeOf(r: Recipient): 'Membre' | 'Externe' {
-  return r.auth_user_id ? 'Membre' : 'Externe'
-}
-
-function canInvite(r: Recipient): boolean {
-  return r.auth_user_id === null
+function accessLabel(r: Recipient): string {
+  const restrict = r.restrict_to_devices?.length ?? 0
+  const shared = r.shared_devices?.length ?? 0
+  const parts: string[] = []
+  if (restrict > 0) parts.push(`${restrict} équipement${restrict > 1 ? 's' : ''}`)
+  else parts.push('Tous')
+  if (shared > 0) parts.push(`+${shared} partagé${shared > 1 ? 's' : ''}`)
+  return parts.join(' · ')
 }
 </script>
 
@@ -45,9 +40,8 @@ function canInvite(r: Recipient): boolean {
           <th class="text-left px-3 py-2">Nom</th>
           <th class="text-left px-3 py-2">Email</th>
           <th class="text-left px-3 py-2">Téléphone</th>
-          <th class="text-left px-3 py-2">Type</th>
           <th class="text-left px-3 py-2">Rôle</th>
-          <th class="text-left px-3 py-2">Devices</th>
+          <th class="text-left px-3 py-2">Accès</th>
           <th class="text-right px-3 py-2">Actions</th>
         </tr>
       </thead>
@@ -56,26 +50,15 @@ function canInvite(r: Recipient): boolean {
           <td class="px-3 py-2">{{ r.name }}</td>
           <td class="px-3 py-2">{{ r.contact_email ?? '—' }}</td>
           <td class="px-3 py-2">{{ r.phone ?? '—' }}</td>
-          <td class="px-3 py-2">
-            <span class="text-xs px-1.5 py-0.5 rounded border border-border">{{ typeOf(r) }}</span>
-          </td>
           <td class="px-3 py-2">{{ r.role }}</td>
-          <td class="px-3 py-2">{{ deviceLabel(r) }}</td>
+          <td class="px-3 py-2">{{ accessLabel(r) }}</td>
           <td class="px-3 py-2 text-right space-x-3 whitespace-nowrap">
-            <button
-              v-if="canInvite(r)"
-              class="text-xs text-primary hover:underline"
-              title="Inviter comme membre"
-              @click="emit('invite', r)"
-            >
-              Inviter
-            </button>
             <button class="text-xs hover:underline" @click="emit('edit', r)">Éditer</button>
             <button class="text-xs text-red-500 hover:underline" @click="emit('remove', r)">Supprimer</button>
           </td>
         </tr>
         <tr v-if="filtered.length === 0">
-          <td colspan="7" class="px-3 py-6 text-center text-muted-foreground">Aucun destinataire</td>
+          <td colspan="6" class="px-3 py-6 text-center text-muted-foreground">Aucun destinataire</td>
         </tr>
       </tbody>
     </table>
