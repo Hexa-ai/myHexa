@@ -38,10 +38,21 @@ async function load() {
   loading.value = true
   error.value = null
 
-  const { data: devs, error: devErr } = await supabase
-    .from('devices')
-    .select('id, name')
-    .eq('company_id', auth.effectiveCompanyId)
+  // Inclut les devices de la compagnie effective + ceux partagés explicitement
+  // au recipient (quand on est sur sa propre compagnie). RLS limite déjà la
+  // visibilité côté DB, donc on peut requêter sans .eq() pour Hexa staff acting
+  // as own company, mais on garde le filtre pour les autres cas.
+  const shared = auth.recipient?.shared_devices ?? []
+  const isOwnCompany = auth.effectiveCompanyId === auth.recipient?.company_id
+  let devicesQuery = supabase.from('devices').select('id, name')
+  if (isOwnCompany && shared.length > 0) {
+    devicesQuery = devicesQuery.or(
+      `company_id.eq.${auth.effectiveCompanyId},id.in.(${shared.join(',')})`,
+    )
+  } else {
+    devicesQuery = devicesQuery.eq('company_id', auth.effectiveCompanyId)
+  }
+  const { data: devs, error: devErr } = await devicesQuery
   if (devErr) {
     loading.value = false
     error.value = devErr.message

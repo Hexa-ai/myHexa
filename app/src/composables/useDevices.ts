@@ -25,12 +25,18 @@ export function useDevices() {
   const auth = useAuthStore()
   const allDevices = ref<DeviceWithStatus[]>([])
   // Filtre client-side : si un staff a sélectionné une compagnie via "act as",
-  // on n'affiche que les devices de cette compagnie. Pour un non-staff, la RLS
-  // limite déjà à sa propre compagnie côté DB.
+  // on n'affiche que les devices de cette compagnie. Exception : quand la
+  // compagnie sélectionnée est celle du recipient lui-même, on inclut aussi
+  // les devices partagés explicitement (recipients.shared_devices) — sinon
+  // un partage cross-compagnie devient invisible.
   const devices = computed<DeviceWithStatus[]>(() => {
     const eff = auth.effectiveCompanyId
-    if (auth.isHexaStaff && eff) return allDevices.value.filter((d) => d.company_id === eff)
-    return allDevices.value
+    if (!auth.isHexaStaff || !eff) return allDevices.value
+    const shared = new Set(auth.recipient?.shared_devices ?? [])
+    const isOwnCompany = eff === auth.recipient?.company_id
+    return allDevices.value.filter(
+      (d) => d.company_id === eff || (isOwnCompany && shared.has(d.id)),
+    )
   })
   const loading = ref(false)
   const error = ref<string | null>(null)
