@@ -151,10 +151,53 @@ const shareEmail = ref('')
 const shareSubmitting = ref(false)
 const shareResult = ref<string | null>(null)
 
+interface CurrentShare { id: string; name: string; contact_email: string }
+const currentShares = ref<CurrentShare[]>([])
+const sharesLoading = ref(false)
+const revokingId = ref<string | null>(null)
+
+async function loadShares() {
+  if (!device.value) return
+  sharesLoading.value = true
+  try {
+    const { data, error: err } = await supabase
+      .from('recipients')
+      .select('id, name, contact_email, shared_devices')
+      .contains('shared_devices', [device.value.id])
+    if (err) throw new Error(err.message)
+    currentShares.value = (data ?? []).map((r) => ({
+      id: r.id, name: r.name, contact_email: r.contact_email ?? '',
+    }))
+  } catch (e) {
+    shareResult.value = `Erreur : ${(e as Error).message}`
+  } finally {
+    sharesLoading.value = false
+  }
+}
+
+async function revokeShare(s: CurrentShare) {
+  if (!device.value) return
+  if (!confirm(`Retirer le partage de cet équipement avec ${s.contact_email} ?`)) return
+  revokingId.value = s.id
+  try {
+    const { data, error: err } = await supabase.functions.invoke('share-device', {
+      body: { device_id: device.value.id, recipient_email: s.contact_email, revoke: true },
+    })
+    if (err) throw new Error(err.message)
+    if (!data?.ok) throw new Error(data?.error?.message ?? 'Erreur')
+    await loadShares()
+  } catch (e) {
+    shareResult.value = `Erreur : ${(e as Error).message}`
+  } finally {
+    revokingId.value = null
+  }
+}
+
 function openShare() {
   shareEmail.value = ''
   shareResult.value = null
   shareOpen.value = true
+  loadShares()
 }
 async function submitShare() {
   if (!device.value) return
@@ -176,6 +219,7 @@ async function submitShare() {
       shareResult.value = `Partagé avec ${data.data.recipient_email} ✓`
     }
     shareEmail.value = ''
+    await loadShares()
   } catch (e) {
     shareResult.value = `Erreur : ${(e as Error).message}`
   } finally {
@@ -233,6 +277,36 @@ async function submitShare() {
           <p v-if="shareResult" class="text-sm" :class="shareResult.startsWith('Erreur') ? 'text-red-500' : 'text-signal'">
             {{ shareResult }}
           </p>
+
+          <div class="border-t border-border pt-3">
+            <div class="text-xs uppercase tracking-wide text-muted-foreground mb-2">
+              Partages actifs
+            </div>
+            <div v-if="sharesLoading" class="text-xs text-muted-foreground">Chargement…</div>
+            <div v-else-if="currentShares.length === 0" class="text-xs text-muted-foreground">
+              Aucun partage pour cet équipement.
+            </div>
+            <ul v-else class="space-y-1.5">
+              <li
+                v-for="s in currentShares"
+                :key="s.id"
+                class="flex items-center justify-between gap-2 text-sm"
+              >
+                <span class="truncate">
+                  <span class="font-medium">{{ s.name }}</span>
+                  <span class="text-muted-foreground"> · {{ s.contact_email }}</span>
+                </span>
+                <button
+                  :disabled="revokingId === s.id"
+                  class="font-mono text-[10px] uppercase tracking-wider border border-border text-muted-foreground hover:border-offline/60 hover:text-offline px-2 py-1 rounded-md transition disabled:opacity-50"
+                  @click="revokeShare(s)"
+                >
+                  {{ revokingId === s.id ? '…' : 'Retirer' }}
+                </button>
+              </li>
+            </ul>
+          </div>
+
           <footer class="flex justify-end gap-2">
             <button class="px-3 py-2 text-sm border border-border rounded-md" @click="shareOpen = false">Fermer</button>
             <button
