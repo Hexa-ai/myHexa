@@ -352,6 +352,7 @@ export type Database = {
         Returns: {
           address: string
           company_id: string
+          company_name: string | null
           id: string
           last_connection_at: string
           latitude: number

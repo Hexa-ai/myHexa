@@ -94,6 +94,7 @@ interface Row {
   tsIp: string | null
   vnc: string | null
   shared: boolean
+  sharedFrom: string | null
 }
 
 const rows = computed<Row[]>(() => {
@@ -113,6 +114,7 @@ const rows = computed<Row[]>(() => {
       tsIp: online ? tailscaleIp(d.status_payload) : null,
       vnc: online ? vncUrl(d.vnc_host, d.vnc_port) : null,
       shared: eff !== null && d.company_id !== null && d.company_id !== eff,
+      sharedFrom: d.company_name,
     }
   })
 })
@@ -281,10 +283,10 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
                 <span class="font-medium tracking-tight">{{ r.name || '—' }}</span>
                 <span
                   v-if="r.shared"
-                  title="Équipement partagé depuis une autre compagnie"
+                  :title="r.sharedFrom ? `Partagé depuis ${r.sharedFrom}` : 'Équipement partagé depuis une autre compagnie'"
                   class="inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border"
                 >
-                  ↗ partagé
+                  ↗ partagé{{ r.sharedFrom ? ` · ${r.sharedFrom}` : '' }}
                 </span>
               </div>
             </td>
@@ -423,9 +425,10 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
             <span class="font-medium tracking-tight truncate">{{ r.name || '—' }}</span>
             <span
               v-if="r.shared"
-              class="inline-flex items-center font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border shrink-0"
+              :title="r.sharedFrom ? `Partagé depuis ${r.sharedFrom}` : ''"
+              class="inline-flex items-center font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border shrink-0 truncate max-w-[140px]"
             >
-              ↗ partagé
+              ↗ partagé{{ r.sharedFrom ? ` · ${r.sharedFrom}` : '' }}
             </span>
           </span>
           <span

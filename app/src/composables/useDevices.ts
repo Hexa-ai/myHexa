@@ -8,6 +8,7 @@ type Row = Database['public']['Functions']['devices_with_latest_status']['Return
 export interface DeviceWithStatus {
   id: string
   company_id: string | null
+  company_name: string | null
   name: string | null
   serial_number: string | null
   mac_eth0: string | null
@@ -58,6 +59,7 @@ export function useDevices() {
       allDevices.value = (data ?? []).map((d: Row) => ({
         id: d.id,
         company_id: d.company_id,
+        company_name: d.company_name,
         name: d.name,
         serial_number: d.serial_number,
         mac_eth0: d.mac_eth0,
