@@ -15,6 +15,7 @@ const error = ref<string | null>(null)
 
 interface Device {
   id: string
+  company_id: string | null
   name: string | null
   address: string | null
   latitude: number | null
@@ -34,6 +35,14 @@ const reportRef = ref<InstanceType<typeof DeviceReport> | null>(null)
 
 const role = computed(() => auth.recipient?.role ?? 'viewer')
 const canEdit = computed(() => role.value === 'admin')
+// Seul un admin de la compagnie PROPRIÉTAIRE du device (ou staff Hexa) peut
+// le (re)partager. Un destinataire qui a reçu le device via shared_devices
+// ne doit pas pouvoir le repartager — cohérent avec l'edge function share-device.
+const canShare = computed(() => {
+  if (auth.isHexaStaff) return true
+  if (role.value !== 'admin') return false
+  return device.value?.company_id != null && device.value.company_id === auth.recipient?.company_id
+})
 const interventionUrl = computed(() => {
   if (!device.value || typeof window === 'undefined') return null
   return `${window.location.origin}/intervention?d=${device.value.id}`
@@ -69,7 +78,7 @@ async function onSaveLocation(address: string) {
     .from('devices')
     .update({ address: geo.displayName, latitude: geo.lat, longitude: geo.lng })
     .eq('id', device.value.id)
-    .select('id, name, address, latitude, longitude, vnc_host, vnc_port')
+    .select('id, company_id, name, address, latitude, longitude, vnc_host, vnc_port')
     .single()
   if (updErr) {
     reportRef.value?.setLocationFeedback('error', updErr.message)
@@ -85,7 +94,7 @@ async function onSaveVnc({ host, port }: { host: string | null; port: number }) 
     .from('devices')
     .update({ vnc_host: host, vnc_port: port })
     .eq('id', device.value.id)
-    .select('id, name, address, latitude, longitude, vnc_host, vnc_port')
+    .select('id, company_id, name, address, latitude, longitude, vnc_host, vnc_port')
     .single()
   if (updErr) {
     reportRef.value?.setVncFeedback('error', updErr.message)
@@ -107,7 +116,7 @@ async function loadDetail() {
   try {
     const { data: d, error: dErr } = await supabase
       .from('devices')
-      .select('id, name, address, latitude, longitude, vnc_host, vnc_port')
+      .select('id, company_id, name, address, latitude, longitude, vnc_host, vnc_port')
       .eq('id', deviceId)
       .maybeSingle()
 
@@ -238,7 +247,7 @@ async function submitShare() {
         ← Retour à la flotte
       </button>
       <button
-        v-if="canEdit"
+        v-if="canShare"
         type="button"
         class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider border border-border text-muted-foreground hover:border-signal/60 hover:text-signal px-3 py-1.5 rounded-md transition"
         @click="openShare"
