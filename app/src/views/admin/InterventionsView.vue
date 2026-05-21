@@ -182,7 +182,7 @@ useAutoRefresh(load, { intervalMs: 60_000 })
     <p v-if="loading" class="text-sm text-muted-foreground">Chargement…</p>
     <p v-if="error" class="text-sm text-offline">{{ error }}</p>
 
-    <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
+    <div class="hidden md:block border border-border rounded-md bg-card/40 overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-card/60 border-b border-border">
           <tr>
@@ -268,6 +268,75 @@ useAutoRefresh(load, { intervalMs: 60_000 })
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Mobile cards -->
+    <div class="md:hidden space-y-2 fade-up">
+      <button
+        v-for="(row, i) in filtered"
+        :key="`mi-${row.id}`"
+        class="w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
+        :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
+        @click="openDetail(row)"
+      >
+        <div class="flex items-center justify-between gap-2 mb-1.5">
+          <div class="flex items-center gap-1.5 flex-wrap min-w-0">
+            <span :class="['inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0', severityClass(row.severity)]">
+              <span class="text-[10px] leading-none">{{ SEVERITY_ICON[row.severity] }}</span>
+              {{ CATEGORY_LABEL[row.category] }}
+            </span>
+            <span class="font-medium tracking-tight truncate">{{ deviceNameById.get(row.device_id) || '—' }}</span>
+          </div>
+          <span class="font-mono text-[10px] tabular text-muted-foreground shrink-0">{{ fmt(row.created_at) }}</span>
+        </div>
+        <div class="flex items-center justify-between gap-2">
+          <div class="min-w-0 flex-1">
+            <div class="text-xs">
+              <span class="font-medium">{{ row.technician_name }}</span>
+              <span v-if="row.technician_contact" class="font-mono text-[10px] text-muted-foreground ml-1">· {{ row.technician_contact }}</span>
+              <span v-if="row.technician_phone" class="font-mono text-[10px] text-muted-foreground ml-1">· {{ row.technician_phone }}</span>
+            </div>
+            <div v-if="row.message" class="text-xs text-muted-foreground line-clamp-1">{{ row.message }}</div>
+            <div
+              v-if="row.photo_paths.length"
+              class="mt-0.5 inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-signal"
+            >
+              <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z" />
+                <circle cx="9" cy="9" r="2" />
+                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+              </svg>
+              {{ row.photo_paths.length }} photo{{ row.photo_paths.length > 1 ? 's' : '' }}
+            </div>
+          </div>
+          <div class="shrink-0" @click.stop>
+            <button
+              v-if="canEdit"
+              :class="[
+                'font-mono text-[10px] uppercase tracking-wider px-2.5 py-1 rounded transition',
+                row.status === 'open'
+                  ? 'bg-amber/15 text-amber hover:bg-amber/25'
+                  : 'bg-signal-soft text-signal hover:bg-signal/20',
+              ]"
+              @click="toggleStatus(row)"
+            >
+              {{ row.status === 'open' ? 'Résoudre' : '✓ Résolue' }}
+            </button>
+            <span
+              v-else
+              :class="[
+                'font-mono text-[10px] uppercase tracking-wider px-2.5 py-1 rounded',
+                row.status === 'open' ? 'bg-amber/15 text-amber' : 'bg-signal-soft text-signal',
+              ]"
+            >
+              {{ row.status === 'open' ? 'Ouverte' : '✓ Résolue' }}
+            </span>
+          </div>
+        </div>
+      </button>
+      <div v-if="!filtered.length && !loading" class="border border-border rounded-md bg-card/40 p-6 text-center text-muted-foreground text-sm">
+        Aucune intervention
+      </div>
     </div>
 
     <!-- Detail modal -->

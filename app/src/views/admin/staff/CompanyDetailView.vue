@@ -244,7 +244,7 @@ watch(id, load)
           + Provisionner
         </button>
       </div>
-      <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
+      <div class="hidden md:block border border-border rounded-md bg-card/40 overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-card/60 border-b border-border">
             <tr>
@@ -275,13 +275,41 @@ watch(id, load)
           </tbody>
         </table>
       </div>
+
+      <!-- Mobile cards (devices) -->
+      <div class="md:hidden space-y-2 fade-up">
+        <div
+          v-for="(d, i) in devices"
+          :key="`mcd-${d.id}`"
+          class="border border-border rounded-md bg-card/40 px-4 py-3 fade-up"
+          :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
+        >
+          <div class="flex items-center justify-between gap-2 mb-1.5">
+            <span class="font-medium tracking-tight truncate">{{ d.name }}</span>
+            <router-link
+              v-if="auth.isHexaStaffAdmin"
+              :to="{ name: 'staff-device-edit', params: { id: d.id } }"
+              class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-signal transition shrink-0"
+            >
+              ✎ éditer
+            </router-link>
+          </div>
+          <div class="text-xs text-muted-foreground font-mono space-x-1">
+            <span>{{ d.mac_eth0 ?? '—' }}</span>
+            <span>· {{ fmtDate(d.last_connection_at) }}</span>
+          </div>
+        </div>
+        <div v-if="!devices.length" class="border border-border rounded-md bg-card/40 p-6 text-center text-muted-foreground text-sm">
+          Aucun device
+        </div>
+      </div>
     </section>
 
     <section class="space-y-2">
       <h2 class="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
         Recipients · {{ recipients.length }}
       </h2>
-      <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
+      <div class="hidden md:block border border-border rounded-md bg-card/40 overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-card/60 border-b border-border">
             <tr>
@@ -301,6 +329,27 @@ watch(id, load)
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- Mobile cards (recipients) -->
+      <div class="md:hidden space-y-2 fade-up">
+        <div
+          v-for="(r, i) in recipients"
+          :key="`mcr-${r.id}`"
+          class="border border-border rounded-md bg-card/40 px-4 py-3 fade-up"
+          :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
+        >
+          <div class="flex items-center justify-between gap-2 mb-1.5">
+            <span class="font-medium tracking-tight truncate">{{ r.name }}</span>
+            <span class="font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary/60 text-muted-foreground shrink-0">
+              {{ r.role }}
+            </span>
+          </div>
+          <div class="text-xs text-muted-foreground truncate">{{ r.contact_email ?? '—' }}</div>
+        </div>
+        <div v-if="!recipients.length" class="border border-border rounded-md bg-card/40 p-6 text-center text-muted-foreground text-sm">
+          Aucun recipient
+        </div>
       </div>
       <p class="text-xs text-muted-foreground">
         Pour inviter un recipient dans cette compagnie, utilise "Entrer comme {{ company?.name ?? '…' }}" puis va dans Destinataires.

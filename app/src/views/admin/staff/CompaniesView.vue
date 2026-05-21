@@ -87,7 +87,7 @@ function enterAs(id: string) {
     <p v-if="loading && !companies.length" class="text-sm text-muted-foreground">Chargement…</p>
     <p v-if="error" class="text-sm text-offline">{{ error }}</p>
 
-    <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
+    <div class="hidden md:block border border-border rounded-md bg-card/40 overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-card/60 border-b border-border">
           <tr>
@@ -131,6 +131,43 @@ function enterAs(id: string) {
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Mobile cards -->
+    <div class="md:hidden space-y-2 fade-up">
+      <button
+        v-for="(c, i) in sorted"
+        :key="`mc-${c.id}`"
+        class="w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
+        :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
+        @click="openCompany(c.id)"
+      >
+        <div class="flex items-center justify-between gap-2 mb-1.5">
+          <div class="font-medium tracking-tight truncate flex items-center gap-2 min-w-0">
+            <span class="truncate">{{ c.name }}</span>
+            <span v-if="c.is_hexa_internal" class="font-mono text-[9px] uppercase tracking-wider text-signal shrink-0">interne</span>
+          </div>
+          <span class="font-mono text-[10px] tabular text-muted-foreground shrink-0">{{ fmtDate(c.created_at) }}</span>
+        </div>
+        <div class="flex items-center justify-between gap-2">
+          <div class="text-xs text-muted-foreground font-mono">
+            <span class="tabular">{{ c.devices_count }}</span> devices ·
+            <span class="tabular">{{ c.recipients_count }}</span> recipients
+          </div>
+          <div @click.stop>
+            <button
+              type="button"
+              class="font-mono text-[10px] uppercase tracking-wider border border-signal/50 text-signal px-2.5 py-1 rounded hover:bg-signal-soft transition"
+              @click="enterAs(c.id)"
+            >
+              Entrer →
+            </button>
+          </div>
+        </div>
+      </button>
+      <div v-if="!sorted.length && !loading" class="border border-border rounded-md bg-card/40 p-6 text-center text-muted-foreground text-sm">
+        Aucune compagnie
+      </div>
     </div>
   </div>
 </template>

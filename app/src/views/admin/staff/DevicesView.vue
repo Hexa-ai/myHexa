@@ -107,7 +107,7 @@ onMounted(() => { fetchCompanies(); load() })
     <p v-if="loading" class="text-sm text-muted-foreground">Chargement…</p>
     <p v-if="error" class="text-sm text-offline">{{ error }}</p>
 
-    <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
+    <div class="hidden md:block border border-border rounded-md bg-card/40 overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-card/60 border-b border-border">
           <tr>
@@ -155,6 +155,52 @@ onMounted(() => { fetchCompanies(); load() })
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Mobile cards -->
+    <div class="md:hidden space-y-2 fade-up">
+      <div
+        v-for="(d, i) in filtered"
+        :key="`md-${d.id}`"
+        class="border border-border rounded-md bg-card/40 px-4 py-3 fade-up"
+        :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
+      >
+        <div class="flex items-center justify-between gap-2 mb-1.5">
+          <span class="font-medium tracking-tight truncate">{{ d.name }}</span>
+          <span
+            :class="[
+              'inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0',
+              isOnline(d) ? 'bg-signal-soft text-signal' : 'bg-offline-soft text-offline',
+            ]"
+          >
+            <span :class="['size-1.5 rounded-full', isOnline(d) ? 'bg-signal' : 'bg-offline']" />
+            {{ isOnline(d) ? 'Online' : 'Offline' }}
+          </span>
+        </div>
+        <div class="flex items-center justify-between gap-2">
+          <div class="min-w-0 flex-1 text-xs text-muted-foreground">
+            <div class="font-mono truncate">{{ d.mac_eth0 ?? '—' }}</div>
+            <div class="truncate">
+              <button class="hover:text-signal transition" @click="goCompany(d.company_id)">
+                {{ companyName.get(d.company_id) ?? d.company_id }}
+              </button>
+              <span class="font-mono ml-1">· {{ fmtDate(d.last_connection_at) }}</span>
+            </div>
+          </div>
+          <div class="shrink-0">
+            <router-link
+              v-if="auth.isHexaStaffAdmin"
+              :to="{ name: 'staff-device-edit', params: { id: d.id } }"
+              class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-signal transition"
+            >
+              ✎ éditer
+            </router-link>
+          </div>
+        </div>
+      </div>
+      <div v-if="!filtered.length && !loading" class="border border-border rounded-md bg-card/40 p-6 text-center text-muted-foreground text-sm">
+        Aucun device
+      </div>
     </div>
   </div>
 </template>

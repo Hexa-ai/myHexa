@@ -433,7 +433,7 @@ function openDevice(id: string) {
       </div>
       <div
         v-else
-        class="border border-offline/40 rounded-md bg-card/60 overflow-x-auto fade-up"
+        class="hidden md:block border border-offline/40 rounded-md bg-card/60 overflow-x-auto fade-up"
         style="animation-delay: 100ms"
       >
         <table class="w-full text-sm min-w-[760px]">
@@ -502,6 +502,67 @@ function openDevice(id: string) {
           </tbody>
         </table>
       </div>
+
+      <!-- Mobile cards (live) -->
+      <div
+        v-if="!(devicesLoading || interventionsLoading) && !devicesError && filteredLive.length"
+        class="md:hidden space-y-2 fade-up"
+        style="animation-delay: 100ms"
+      >
+        <button
+          v-for="(row, i) in filteredLive"
+          :key="row.kind === 'alarm' ? `ma-${row.device_id}-${row.title}` : `mi-${row.intervention.id}`"
+          class="w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
+          :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
+          @click="row.kind === 'alarm' ? openDevice(row.device_id) : openDetail(row.intervention)"
+        >
+          <div class="flex items-center justify-between gap-2 mb-1.5">
+            <div class="flex items-center gap-1.5 flex-wrap min-w-0">
+              <span
+                :class="['inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0', typeClass(row.severity)]"
+              >
+                <span v-if="row.severity" class="text-[10px] leading-none">{{ SEVERITY_ICON[row.severity as 'info' | 'warning' | 'error'] || '' }}</span>
+                {{ row.severity || '—' }}
+              </span>
+              <span
+                v-if="row.kind === 'alarm'"
+                class="inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-offline/10 text-offline border border-offline/30 shrink-0"
+              >
+                <span class="size-1 rounded-full bg-offline" /> Alarme
+              </span>
+              <span
+                v-else
+                class="inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-signal/10 text-signal border border-signal/30 shrink-0"
+              >
+                Signalement
+              </span>
+              <span class="font-medium tracking-tight truncate">{{ row.device_name || '—' }}</span>
+            </div>
+            <span class="font-mono text-[11px] tabular text-muted-foreground shrink-0">
+              {{ row.ts ? formatRelative(row.ts) : '—' }}
+            </span>
+          </div>
+          <div class="flex items-center justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <div class="font-mono text-[11px] truncate">{{ row.title }}</div>
+              <div v-if="row.subtitle" class="text-xs text-muted-foreground line-clamp-1">
+                {{ row.subtitle }}
+              </div>
+            </div>
+            <div
+              v-if="row.kind === 'intervention' && row.intervention.photo_paths.length"
+              class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-signal shrink-0"
+            >
+              <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z" />
+                <circle cx="9" cy="9" r="2" />
+                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+              </svg>
+              {{ row.intervention.photo_paths.length }}
+            </div>
+          </div>
+        </button>
+      </div>
     </template>
 
     <!-- History -->
@@ -524,7 +585,7 @@ function openDevice(id: string) {
       >
         Aucun événement d'alarme dans l'historique pour ces filtres.
       </div>
-      <div v-else class="border border-border rounded-md bg-card/40 overflow-x-auto fade-up" style="animation-delay: 140ms">
+      <div v-else class="hidden md:block border border-border rounded-md bg-card/40 overflow-x-auto fade-up" style="animation-delay: 140ms">
         <table class="w-full text-sm min-w-[720px]">
           <thead>
             <tr class="border-b border-border bg-card/60">
@@ -571,6 +632,52 @@ function openDevice(id: string) {
           </tbody>
         </table>
       </div>
+
+      <!-- Mobile cards (history) -->
+      <div
+        v-if="!(historyLoading && !history.length) && !historyError && filteredHistory.length"
+        class="md:hidden space-y-2 fade-up"
+        style="animation-delay: 140ms"
+      >
+        <button
+          v-for="(a, i) in filteredHistory"
+          :key="`mh-${a.device_id}-${a.ts}-${a.variable_name}-${a.state_label}`"
+          class="w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
+          :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
+          @click="openDevice(a.device_id)"
+        >
+          <div class="flex items-center justify-between gap-2 mb-1.5">
+            <div class="flex items-center gap-1.5 flex-wrap min-w-0">
+              <span
+                :class="['inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0', typeClass(a.type_alarm)]"
+              >
+                <span v-if="a.type_alarm" class="text-[10px] leading-none">{{ SEVERITY_ICON[a.type_alarm as 'info' | 'warning' | 'error'] || '' }}</span>
+                {{ a.type_alarm || '—' }}
+              </span>
+              <span class="font-medium tracking-tight truncate">{{ a.device_name || '—' }}</span>
+            </div>
+            <span
+              :class="[
+                'font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0',
+                a.state_label === 'ON' ? 'bg-offline-soft text-offline' : 'bg-signal-soft text-signal',
+              ]"
+            >
+              {{ a.state_label || '—' }}
+            </span>
+          </div>
+          <div class="flex items-center justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <div class="font-mono text-[11px] truncate">{{ a.variable_name }}</div>
+              <div v-if="a.description" class="text-xs text-muted-foreground line-clamp-1">
+                {{ a.description }}
+              </div>
+            </div>
+            <span class="font-mono text-[10px] tabular text-muted-foreground shrink-0">
+              {{ fmtFullDate(a.ts) }}
+            </span>
+          </div>
+        </button>
+      </div>
     </template>
 
     <!-- Interventions -->
@@ -609,7 +716,7 @@ function openDevice(id: string) {
       >
         Aucun signalement pour ces filtres.
       </div>
-      <div v-else class="border border-border rounded-md bg-card/40 overflow-x-auto fade-up" style="animation-delay: 100ms">
+      <div v-else class="hidden md:block border border-border rounded-md bg-card/40 overflow-x-auto fade-up" style="animation-delay: 100ms">
         <table class="w-full text-sm min-w-[840px]">
           <thead>
             <tr class="border-b border-border bg-card/60">
@@ -693,6 +800,81 @@ function openDevice(id: string) {
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- Mobile cards (signalements) -->
+      <div
+        v-if="!(interventionsLoading && !interventions.length) && !interventionsError && filteredInterventions.length"
+        class="md:hidden space-y-2 fade-up"
+        style="animation-delay: 100ms"
+      >
+        <button
+          v-for="(row, i) in filteredInterventions"
+          :key="`ms-${row.id}`"
+          class="w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
+          :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
+          @click="openDetail(row)"
+        >
+          <div class="flex items-center justify-between gap-2 mb-1.5">
+            <div class="flex items-center gap-1.5 flex-wrap min-w-0">
+              <span
+                :class="['inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0', typeClass(row.severity)]"
+              >
+                <span class="text-[10px] leading-none">{{ SEVERITY_ICON[row.severity] }}</span>
+                {{ row.severity }}
+              </span>
+              <span class="font-medium tracking-tight truncate">{{ deviceNameById.get(row.device_id) || '—' }}</span>
+            </div>
+            <span class="font-mono text-[10px] tabular text-muted-foreground shrink-0">
+              {{ fmtFullDate(row.created_at) }}
+            </span>
+          </div>
+          <div class="flex items-center justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <div class="text-xs">
+                <span class="font-medium">{{ row.technician_name }}</span>
+                <span v-if="row.technician_contact" class="font-mono text-[10px] text-muted-foreground ml-1">· {{ row.technician_contact }}</span>
+              </div>
+              <div v-if="row.message" class="text-xs text-muted-foreground line-clamp-1">
+                {{ row.message }}
+              </div>
+              <div
+                v-if="row.photo_paths.length"
+                class="mt-0.5 inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-signal"
+              >
+                <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z" />
+                  <circle cx="9" cy="9" r="2" />
+                  <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                </svg>
+                {{ row.photo_paths.length }} photo{{ row.photo_paths.length > 1 ? 's' : '' }}
+              </div>
+            </div>
+            <div class="shrink-0" @click.stop>
+              <button
+                v-if="canEdit"
+                :class="[
+                  'font-mono text-[10px] uppercase tracking-wider px-2.5 py-1 rounded transition',
+                  row.status === 'open'
+                    ? 'bg-amber/15 text-amber hover:bg-amber/25'
+                    : 'bg-signal-soft text-signal hover:bg-signal/20',
+                ]"
+                @click="toggleInterventionStatus(row)"
+              >
+                {{ row.status === 'open' ? 'Résoudre' : '✓ Résolu' }}
+              </button>
+              <span
+                v-else
+                :class="[
+                  'font-mono text-[10px] uppercase tracking-wider px-2.5 py-1 rounded',
+                  row.status === 'open' ? 'bg-amber/15 text-amber' : 'bg-signal-soft text-signal',
+                ]"
+              >
+                {{ row.status === 'open' ? 'Ouvert' : '✓ Résolu' }}
+              </span>
+            </div>
+          </div>
+        </button>
       </div>
     </template>
     <!-- Detail modal -->
