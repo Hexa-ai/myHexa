@@ -71,10 +71,14 @@ async function handleSave(id: string, patch: Partial<Recipient>) {
 }
 
 async function handleRemove(r: Recipient) {
-  if (!confirm(`Supprimer ${r.name} ?`)) return
+  const isExternal = r.company_id === null
+  const prompt = isExternal
+    ? `Retirer vos partages avec ${r.name} ? Si ${r.name} a aussi des partages d'autres compagnies, il les conservera ; sinon le compte sera supprimé.`
+    : `Supprimer ${r.name} ?`
+  if (!confirm(prompt)) return
   try {
-    await remove(r.id)
-    setFlash(`${r.name} supprimé`)
+    const mode = await remove(r.id)
+    setFlash(mode === 'unshared' ? `Partages retirés pour ${r.name}` : `${r.name} supprimé`)
   } catch (e) {
     setFlash(`Erreur : ${(e as Error).message}`)
   }

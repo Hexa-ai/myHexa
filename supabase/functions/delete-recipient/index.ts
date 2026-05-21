@@ -44,28 +44,60 @@ Deno.serve(async (req) => {
 
   const { data: target, error: tErr } = await admin
     .from('recipients')
-    .select('id, company_id, auth_user_id, contact_email')
+    .select('id, company_id, auth_user_id, contact_email, shared_devices')
     .eq('id', body.recipient_id)
     .maybeSingle()
   if (tErr) return fail('DB_ERROR', tErr.message, 500)
   if (!target) return fail('NOT_FOUND', 'Destinataire introuvable', 404)
 
-  // Authorization: caller must be admin of the same company, OR Hexa staff
+  // Authorization :
+  //   - staff Hexa : tout supprimer
+  //   - admin compagnie : peut supprimer un destinataire de SA compagnie,
+  //     OU "retirer ses partages" d'un externe (company_id = null) — auquel
+  //     cas on filtre shared_devices au lieu de delete. Si shared_devices
+  //     devient vide après ce filtrage, on supprime quand même la ligne
+  //     (plus personne ne lui partage rien).
   const { data: caller, error: cErr } = await admin
     .from('recipients')
     .select('company_id, role')
     .eq('auth_user_id', userData.user.id)
     .maybeSingle()
   if (cErr) return fail('DB_ERROR', cErr.message, 500)
+  const { data: staff } = await admin.rpc('is_hexa_staff')
+  const isStaff = staff === true
+  const callerIsCompanyAdmin = !!caller && caller.role === 'admin'
 
-  let authorized = false
-  if (caller && caller.role === 'admin' && caller.company_id === target.company_id) {
-    authorized = true
+  let mode: 'delete' | 'unshare' = 'delete'
+  if (isStaff) {
+    mode = 'delete'
+  } else if (callerIsCompanyAdmin && caller!.company_id === target.company_id) {
+    mode = 'delete'
+  } else if (callerIsCompanyAdmin && target.company_id === null && caller!.company_id) {
+    mode = 'unshare'
   } else {
-    const { data: staff } = await admin.rpc('is_hexa_staff')
-    if (staff === true) authorized = true
+    return fail('FORBIDDEN', 'Action non autorisée', 403)
   }
-  if (!authorized) return fail('FORBIDDEN', 'Action non autorisée', 403)
+
+  if (mode === 'unshare') {
+    // Retire de target.shared_devices les devices de la compagnie du caller.
+    const { data: callerDevs, error: cdErr } = await admin
+      .from('devices')
+      .select('id')
+      .eq('company_id', caller!.company_id!)
+    if (cdErr) return fail('DB_ERROR', cdErr.message, 500)
+    const callerDevSet = new Set((callerDevs ?? []).map((d) => d.id))
+    const remaining = (target.shared_devices ?? []).filter((id) => !callerDevSet.has(id))
+
+    if (remaining.length > 0) {
+      const { error: uErr } = await admin
+        .from('recipients')
+        .update({ shared_devices: remaining })
+        .eq('id', target.id)
+      if (uErr) return fail('DB_ERROR', uErr.message, 500)
+      return ok({ recipient_id: target.id, auth_user_deleted: false, mode: 'unshared' })
+    }
+    // remaining.length === 0 → fall through to delete
+  }
 
   const { error: delErr } = await admin
     .from('recipients')
@@ -91,5 +123,5 @@ Deno.serve(async (req) => {
     }
   }
 
-  return ok({ recipient_id: target.id, auth_user_deleted: authUserDeleted })
+  return ok({ recipient_id: target.id, auth_user_deleted: authUserDeleted, mode: 'deleted' })
 })

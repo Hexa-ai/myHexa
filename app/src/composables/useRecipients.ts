@@ -57,13 +57,14 @@ export function useRecipients() {
     await fetchAll()
   }
 
-  async function remove(id: string) {
+  async function remove(id: string): Promise<'deleted' | 'unshared'> {
     const { data, error: err } = await supabase.functions.invoke('delete-recipient', {
       body: { recipient_id: id },
     })
     if (err) throw new Error(err.message)
     if (!data?.ok) throw new Error(data?.error?.message ?? 'Erreur suppression')
     await fetchAll()
+    return (data.data?.mode === 'unshared' ? 'unshared' : 'deleted') as 'deleted' | 'unshared'
   }
 
   return { items, loading, error, fetchAll, invite, update, remove }
