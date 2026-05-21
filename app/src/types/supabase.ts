@@ -367,6 +367,22 @@ export type Database = {
       }
       is_hexa_staff: { Args: never; Returns: boolean }
       is_hexa_staff_admin: { Args: never; Returns: boolean }
+      list_company_recipients: {
+        Args: { p_company_id: string }
+        Returns: {
+          auth_user_id: string
+          company_id: string | null
+          contact_email: string | null
+          created_at: string
+          id: string
+          name: string
+          phone: string | null
+          restrict_to_devices: string[] | null
+          role: string
+          shared_devices: string[] | null
+          updated_at: string
+        }[]
+      }
     }
     Enums: {
       report_type: "status" | "daily" | "weekly"
