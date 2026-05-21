@@ -85,17 +85,26 @@ Deno.serve(async (req) => {
   if (!email.includes('@')) return fail('INVALID_EMAIL', 'Email invalide', 400)
   if (role !== 'admin' && role !== 'viewer') return fail('INVALID_ROLE', 'Rôle invalide', 400)
 
-  // Résoudre company_id : par défaut celle du caller (sauf si staff admin fournit explicitement, y compris null)
+  // Résoudre company_id :
+  //   - staff Hexa : libre (toute compagnie, null inclus)
+  //   - admin compagnie : sa compagnie OU null (externe). Un externe doit recevoir
+  //     au moins un shared_devices depuis sa compagnie (sinon il n'a rien à voir).
   let targetCompanyId: string | null
   if (isStaffAdmin) {
     targetCompanyId = body.company_id === undefined ? (callerRcpt?.company_id ?? null) : (body.company_id ?? null)
   } else {
-    // Admin compagnie ne peut créer que pour SA compagnie
     if (!callerRcpt) return fail('FORBIDDEN', 'Pas de compagnie associée', 403)
-    if (body.company_id && body.company_id !== callerRcpt.company_id) {
+    if (body.company_id === null) {
+      // Externe — il faut un partage explicite depuis la compagnie du caller
+      if (!body.shared_devices || body.shared_devices.length === 0) {
+        return fail('INVALID_GUEST', 'Un destinataire externe doit avoir au moins un équipement partagé', 400)
+      }
+      targetCompanyId = null
+    } else if (body.company_id && body.company_id !== callerRcpt.company_id) {
       return fail('FORBIDDEN', 'Vous ne pouvez créer un destinataire que pour votre compagnie', 403)
+    } else {
+      targetCompanyId = callerRcpt.company_id
     }
-    targetCompanyId = callerRcpt.company_id
   }
 
   // Validation : restrict_to_devices doivent appartenir à targetCompanyId

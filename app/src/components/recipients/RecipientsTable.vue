@@ -48,7 +48,16 @@ function accessLabel(r: Recipient): string {
       </thead>
       <tbody>
         <tr v-for="r in filtered" :key="r.id" class="border-t border-border">
-          <td class="px-3 py-2">{{ r.name }}</td>
+          <td class="px-3 py-2">
+            <span class="inline-flex items-center gap-2">
+              {{ r.name }}
+              <span
+                v-if="r.company_id === null"
+                title="Destinataire externe (sans compagnie d'attache)"
+                class="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border"
+              >externe</span>
+            </span>
+          </td>
           <td class="px-3 py-2">{{ r.contact_email ?? '—' }}</td>
           <td class="px-3 py-2">{{ r.phone ?? '—' }}</td>
           <td class="px-3 py-2">{{ r.role }}</td>
@@ -74,7 +83,13 @@ function accessLabel(r: Recipient): string {
       :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
     >
       <div class="flex items-center justify-between gap-2 mb-1.5">
-        <span class="font-medium tracking-tight truncate">{{ r.name }}</span>
+        <span class="flex items-center gap-2 min-w-0">
+          <span class="font-medium tracking-tight truncate">{{ r.name }}</span>
+          <span
+            v-if="r.company_id === null"
+            class="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border shrink-0"
+          >externe</span>
+        </span>
         <span class="font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary/60 text-muted-foreground shrink-0">
           {{ r.role }}
         </span>

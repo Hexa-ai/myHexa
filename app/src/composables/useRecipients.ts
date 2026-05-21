@@ -26,17 +26,16 @@ export function useRecipients() {
     if (!auth.effectiveCompanyId) return
     loading.value = true
     error.value = null
+    // RPC qui inclut les recipients de la compagnie + les externes (company_id NULL)
+    // ayant au moins un device partagé depuis cette compagnie.
     const { data, error: err } = await supabase
-      .from('recipients')
-      .select('*')
-      .eq('company_id', auth.effectiveCompanyId)
-      .order('name', { ascending: true })
+      .rpc('list_company_recipients', { p_company_id: auth.effectiveCompanyId })
     loading.value = false
     if (err) {
       error.value = err.message
       return
     }
-    items.value = data ?? []
+    items.value = (data ?? []) as Recipient[]
   }
 
   async function invite(payload: InvitePayload) {
