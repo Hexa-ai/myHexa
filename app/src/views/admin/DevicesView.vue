@@ -18,6 +18,7 @@ import QRCodeBlock from '@/components/QRCodeBlock.vue'
 import { supabase } from '@/lib/supabase'
 
 const router = useRouter()
+const auth = useAuthStore()
 const { devices, loading, error, load } = useDevices()
 const query = ref('')
 
@@ -92,9 +93,11 @@ interface Row {
   alarmCount: number
   tsIp: string | null
   vnc: string | null
+  shared: boolean
 }
 
 const rows = computed<Row[]>(() => {
+  const eff = auth.effectiveCompanyId
   return filtered.value.map((d) => {
     const online = isOnline(d.last_connection_at)
     return {
@@ -109,6 +112,7 @@ const rows = computed<Row[]>(() => {
       alarmCount: activeAlarmCount(d.status_payload) + (openInterventionsByDevice.value.get(d.id) ?? 0),
       tsIp: online ? tailscaleIp(d.status_payload) : null,
       vnc: online ? vncUrl(d.vnc_host, d.vnc_port) : null,
+      shared: eff !== null && d.company_id !== null && d.company_id !== eff,
     }
   })
 })
@@ -128,7 +132,6 @@ watch(
   { immediate: true },
 )
 
-const auth = useAuthStore()
 useAutoRefresh(loadAll, { intervalMs: 120_000 })
 watch(() => auth.effectiveCompanyId, loadAll)
 
@@ -276,6 +279,13 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
               <div class="flex items-center gap-2">
                 <span class="opacity-0 group-hover:opacity-100 text-signal transition">›</span>
                 <span class="font-medium tracking-tight">{{ r.name || '—' }}</span>
+                <span
+                  v-if="r.shared"
+                  title="Équipement partagé depuis une autre compagnie"
+                  class="inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border"
+                >
+                  ↗ partagé
+                </span>
               </div>
             </td>
             <td class="px-4 py-3.5">
@@ -409,7 +419,15 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
         @click="openDevice(r.id)"
       >
         <div class="flex items-center justify-between gap-3 mb-1.5">
-          <span class="font-medium tracking-tight truncate">{{ r.name || '—' }}</span>
+          <span class="flex items-center gap-2 min-w-0">
+            <span class="font-medium tracking-tight truncate">{{ r.name || '—' }}</span>
+            <span
+              v-if="r.shared"
+              class="inline-flex items-center font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border shrink-0"
+            >
+              ↗ partagé
+            </span>
+          </span>
           <span
             class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider shrink-0"
             :class="r.online ? 'text-signal' : 'text-offline/80'"
