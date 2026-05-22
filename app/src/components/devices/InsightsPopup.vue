@@ -58,13 +58,34 @@ function severityLabel(sev: number): string {
   return 'Info'
 }
 
-function kindLabel(kind: string): string {
+function kindLabel(kind: string, ins?: ReportInsight): string {
   if (kind === 'anomaly') return 'Anomalie'
-  if (kind === 'trend') return 'Tendance'
+  if (kind === 'trend') {
+    const dir = (ins?.evidence as { direction?: string } | null)?.direction
+    return dir === 'down' ? 'Tendance ↘' : 'Tendance ↗'
+  }
   if (kind === 'alarm_burst') return 'Rafale d’alarmes'
   if (kind === 'threshold_cross') return 'Seuil franchi'
   if (kind === 'seasonal_deviation') return 'Écart saisonnier'
   return kind
+}
+
+// Pastille couleur par type d'insight (en complément de la sévérité)
+function kindClass(kind: string): string {
+  if (kind === 'anomaly') return 'bg-amber/15 text-amber border border-amber/40'
+  if (kind === 'trend') return 'bg-signal-soft text-signal border border-signal/40'
+  if (kind === 'alarm_burst') return 'bg-offline-soft text-offline border border-offline/40'
+  return 'bg-secondary text-muted-foreground border border-border'
+}
+
+// Explication courte par type (affichée si body absent)
+function kindExplain(kind: string): string {
+  if (kind === 'anomaly') return 'Écart inhabituel par rapport à l’historique récent (z-score > 2σ).'
+  if (kind === 'trend') return 'Dérive significative de la moyenne sur plusieurs périodes consécutives.'
+  if (kind === 'alarm_burst') return 'Concentration d’événements d’alarme nettement plus élevée que d’habitude.'
+  if (kind === 'threshold_cross') return 'Une valeur a dépassé un seuil configuré.'
+  if (kind === 'seasonal_deviation') return 'Écart par rapport au même créneau (jour/semaine) des périodes précédentes.'
+  return ''
 }
 
 function fmtEvidence(e: unknown): string {
@@ -101,13 +122,15 @@ function fmtEvidence(e: unknown): string {
             <div class="flex items-start justify-between gap-2">
               <div class="flex items-center gap-2 flex-wrap">
                 <span
+                  :class="['font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold', kindClass(ins.kind)]"
+                >
+                  {{ kindLabel(ins.kind, ins) }}
+                </span>
+                <span
                   :class="['font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded', severityClass(ins.severity)]"
                   :title="`Sévérité ${ins.severity}/5`"
                 >
                   {{ severityLabel(ins.severity) }}
-                </span>
-                <span class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                  {{ kindLabel(ins.kind) }}
                 </span>
                 <span v-if="ins.variable_name" class="font-mono text-[10px] text-muted-foreground">
                   · {{ ins.variable_name }}
@@ -122,6 +145,9 @@ function fmtEvidence(e: unknown): string {
             </div>
             <p class="text-sm font-medium">{{ ins.title }}</p>
             <p v-if="ins.body" class="text-sm text-muted-foreground">{{ ins.body }}</p>
+            <p v-else-if="kindExplain(ins.kind)" class="text-xs text-muted-foreground italic">
+              {{ kindExplain(ins.kind) }}
+            </p>
             <p v-if="fmtPeriod(ins)" class="text-[11px] font-mono text-muted-foreground">
               {{ fmtPeriod(ins) }}
             </p>
