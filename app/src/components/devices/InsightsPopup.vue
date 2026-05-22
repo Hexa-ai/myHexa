@@ -98,14 +98,21 @@ function fmtEvidence(e: unknown): string {
 // --- Synthèse "ce qu'il faut retenir" ---------------------------------------
 
 // Score combiné : severity (1-5) + bonus récence
+// On se base sur la PÉRIODE du rapport (donnée observée) plutôt que sur
+// created_at de l'insight (qui correspond au moment où l'analyse a tourné —
+// peut être trompeur juste après un backfill).
 //   < 24h  → +1
 //   24-72h → +0
 //   3-7j   → -0.5
 //   > 7j   → -1
+function ageHoursFromPeriod(ins: ReportInsight): number {
+  // On utilise period_end si dispo (dernier jour des données), sinon period_start, sinon created_at
+  const ref = ins.report_period_end ?? ins.report_period_start ?? ins.created_at
+  if (!ref) return Infinity
+  return (Date.now() - new Date(ref).getTime()) / 3600_000
+}
 function priorityScore(ins: ReportInsight): number {
-  const ageH = ins.created_at
-    ? (Date.now() - new Date(ins.created_at).getTime()) / 3600_000
-    : Infinity
+  const ageH = ageHoursFromPeriod(ins)
   let bonus = 0
   if (ageH < 24) bonus = 1
   else if (ageH < 72) bonus = 0
@@ -123,12 +130,13 @@ const otherCount = computed(() => Math.max(0, sortedInsights.value.length - 1))
 function fmtRelative(iso: string | null | undefined): string {
   if (!iso) return ''
   const ageH = (Date.now() - new Date(iso).getTime()) / 3600_000
-  if (ageH < 1) return 'il y a moins d’une heure'
-  if (ageH < 24) return `il y a ${Math.round(ageH)} h`
+  if (ageH < 0) return 'aujourd’hui' // futur (rapport datant du jour même)
+  if (ageH < 24) return 'aujourd’hui'
   const ageD = Math.round(ageH / 24)
   if (ageD === 1) return 'hier'
   if (ageD < 7) return `il y a ${ageD} j`
-  return `il y a ${Math.round(ageD / 7)} sem`
+  if (ageD < 60) return `il y a ${Math.round(ageD / 7)} sem`
+  return `il y a ${Math.round(ageD / 30)} mois`
 }
 
 // Synthèse paragraphe : compose à partir du top insight + compteur
@@ -139,7 +147,8 @@ const synthesisLead = computed(() => {
   const var_ = ins.variable_name ? ` sur ${ins.variable_name}` : ''
   const sevL = ins.severity >= 5 ? 'critique' : ins.severity >= 4 ? 'importante' : 'à surveiller'
   const period = fmtPeriod(ins)
-  const when = fmtRelative(ins.created_at)
+  // Récence basée sur la période du rapport (pas sur quand l'analyse a tourné)
+  const when = fmtRelative(ins.report_period_end ?? ins.report_period_start ?? ins.created_at)
   return `Point d’attention principal — ${kindL}${var_}, ${sevL} (${when}${period ? ' · ' + period.toLowerCase() : ''}).`
 })
 </script>

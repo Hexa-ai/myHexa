@@ -292,18 +292,21 @@ export type Database = {
           device_id: string
           last_acknowledged_insight_at: string | null
           last_viewed_at: string
+          popup_snoozed_until: string | null
           recipient_id: string
         }
         Insert: {
           device_id: string
           last_acknowledged_insight_at?: string | null
           last_viewed_at?: string
+          popup_snoozed_until?: string | null
           recipient_id: string
         }
         Update: {
           device_id?: string
           last_acknowledged_insight_at?: string | null
           last_viewed_at?: string
+          popup_snoozed_until?: string | null
           recipient_id?: string
         }
         Relationships: [
