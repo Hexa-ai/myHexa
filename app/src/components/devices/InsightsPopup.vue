@@ -78,6 +78,19 @@ function kindClass(kind: string): string {
   return 'bg-secondary text-muted-foreground border border-border'
 }
 
+// Tag de consolidation (daily × weekly) — montre si l'insight a été
+// confirmé/déclassé par le recoupement avec l'historique hebdo
+function consolidationTag(ins: ReportInsight): { label: string; cls: string } | null {
+  const ev = ins.evidence as { consolidation?: string; weekly_z_score?: number } | null
+  const c = ev?.consolidation
+  if (!c) return null
+  if (c === 'confirmed_at_weekly_scale') return { label: 'Confirmé à l’échelle hebdo', cls: 'bg-offline-soft text-offline border-offline/40' }
+  if (c === 'mild_weekly_signal') return { label: 'Signal hebdo modéré', cls: 'bg-amber/15 text-amber border-amber/40' }
+  if (c === 'demoted_no_weekly_confirmation') return { label: 'Pic isolé (non confirmé hebdo)', cls: 'bg-secondary text-muted-foreground border-border' }
+  if (c === 'no_weekly_data') return { label: 'Historique hebdo insuffisant', cls: 'bg-secondary/60 text-muted-foreground border-border' }
+  return null
+}
+
 // Explication courte par type (affichée si body absent)
 function kindExplain(kind: string): string {
   if (kind === 'anomaly') return 'Écart inhabituel par rapport à l’historique récent (z-score > 2σ).'
@@ -151,6 +164,11 @@ function fmtEvidence(e: unknown): string {
             <p v-if="fmtPeriod(ins)" class="text-[11px] font-mono text-muted-foreground">
               {{ fmtPeriod(ins) }}
             </p>
+            <div v-if="consolidationTag(ins)" class="pt-0.5">
+              <span :class="['inline-block font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border', consolidationTag(ins)!.cls]">
+                {{ consolidationTag(ins)!.label }}
+              </span>
+            </div>
             <pre v-if="expanded.has(ins.id)" class="text-[11px] font-mono bg-secondary/40 border border-border rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ fmtEvidence(ins.evidence) }}</pre>
             <div class="pt-1">
               <button

@@ -241,7 +241,7 @@ Pas de markdown, pas de backticks.`
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 400 },
+        generationConfig: { temperature: 0.3, maxOutputTokens: 400, responseMimeType: 'application/json' },
       }),
     })
     if (!res.ok) { console.error('[analyze-report] gemini http', res.status); return null }
@@ -332,7 +332,7 @@ Deno.serve(async (req) => {
     historyByVar.set(row.variable_name, arr)
   }
 
-  // 4. Détecteurs par variable mesurable
+  // 4a. Détecteurs par variable mesurable (échelle native du rapport)
   const detected: DetectedInsight[] = []
   for (const v of analysableVars) {
     if (v.category && v.category !== 'measure' && v.category !== 'counter') continue
@@ -365,6 +365,51 @@ Deno.serve(async (req) => {
     alarmEvents,
   )
   if (burst) detected.push(burst)
+
+  // 4b. Consolidation daily × weekly :
+  // Pour un rapport daily, on recoupe chaque insight (anomaly/trend) avec
+  // l'historique HEBDO du même device et de la même variable. Si l'écart
+  // observé sur le daily ne ressort pas à l'échelle hebdo, c'est qu'on a
+  // affaire à un pic isolé qui se dilue en moyenne — on déclasse la sévérité.
+  if (periodKind === 'daily' && detected.length > 0) {
+    const wkSince = new Date(Date.now() - 12 * 7 * 86400_000).toISOString().slice(0, 10)
+    const { data: wkRows } = await admin
+      .from('device_period_stats')
+      .select('variable_name, mean')
+      .eq('device_id', report.device_id)
+      .eq('period_kind', 'weekly')
+      .gte('period_start', wkSince)
+    const wkByVar = new Map<string, number[]>()
+    for (const row of wkRows ?? []) {
+      if (typeof row.mean !== 'number') continue
+      const arr = wkByVar.get(row.variable_name) ?? []
+      arr.push(row.mean)
+      wkByVar.set(row.variable_name, arr)
+    }
+    for (const ins of detected) {
+      if ((ins.kind !== 'anomaly' && ins.kind !== 'trend') || !ins.variable_name) continue
+      const wkHist = wkByVar.get(ins.variable_name) ?? []
+      const ev = ins.evidence as Record<string, unknown>
+      if (wkHist.length < 3) { ev.consolidation = 'no_weekly_data'; continue }
+      const mW = mean(wkHist); const sdW = stddev(wkHist)
+      if (sdW === 0) { ev.consolidation = 'no_weekly_variance'; continue }
+      const current = typeof ev.current === 'number' ? ev.current : (typeof ev.mean === 'number' ? ev.mean : null)
+      if (current === null) { ev.consolidation = 'no_current_value'; continue }
+      const wkZ = Math.abs(current - mW) / sdW
+      ev.weekly_z_score = Number(wkZ.toFixed(2))
+      ev.weekly_baseline_mean = Number(mW.toFixed(3))
+      ev.weekly_baseline_stddev = Number(sdW.toFixed(3))
+      if (wkZ < 1.0) {
+        ev.consolidation = 'demoted_no_weekly_confirmation'
+        ins.severity = Math.max(1, ins.severity - 2)
+      } else if (wkZ < 2.0) {
+        ev.consolidation = 'mild_weekly_signal'
+        ins.severity = Math.max(1, ins.severity - 1)
+      } else {
+        ev.consolidation = 'confirmed_at_weekly_scale'
+      }
+    }
+  }
 
   // 5. Idempotence : supprime les anciens insights du même rapport
   if (detected.length > 0) {
