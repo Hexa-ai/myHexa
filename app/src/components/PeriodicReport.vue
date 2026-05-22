@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import SeriesChart from '@/components/SeriesChart.vue'
 
 interface ReportPoint { ts: number | string; value: number }
@@ -42,6 +42,7 @@ const props = defineProps<{
   periodStart: string | null
   periodEnd: string | null
   periods: PeriodOption[]
+  focusVariable?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -51,6 +52,20 @@ const emit = defineEmits<{
 
 const variables = computed(() => props.payload?.variables ?? [])
 const alarms = computed(() => props.payload?.alarm_events ?? [])
+
+// Highlight + scroll vers la variable cible (passée via ?focus= sur la route)
+const variableRefs = ref<Record<string, HTMLElement | null>>({})
+function setVariableRef(name: string, el: Element | unknown) {
+  variableRefs.value[name] = el as HTMLElement | null
+}
+async function focusOnVariable(name: string | null | undefined) {
+  if (!name) return
+  await nextTick()
+  const el = variableRefs.value[name]
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+onMounted(() => focusOnVariable(props.focusVariable))
+watch(() => [props.focusVariable, props.payload], () => focusOnVariable(props.focusVariable))
 
 function fmtNum(v: unknown, unit?: string): string {
   if (v === null || v === undefined) return '—'
@@ -175,7 +190,9 @@ const typeBadgeClass = (cat?: string) => {
         <div
           v-for="(v, i) in variables"
           :key="i"
-          class="border border-border rounded-md bg-card/40 p-5 space-y-4"
+          :ref="(el) => setVariableRef(v.name ?? `_${i}`, el)"
+          class="border rounded-md bg-card/40 p-5 space-y-4 transition-colors"
+          :class="focusVariable && v.name === focusVariable ? 'border-signal/70 ring-2 ring-signal/30' : 'border-border'"
         >
           <div class="flex items-start justify-between gap-3 flex-wrap">
             <div>

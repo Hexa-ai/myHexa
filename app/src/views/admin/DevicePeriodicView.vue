@@ -13,6 +13,7 @@ const type = computed<PeriodicType>(() =>
   route.query.type === 'weekly' ? 'weekly' : 'daily',
 )
 const period = computed(() => (route.query.period ? String(route.query.period) : null))
+const focusVariable = computed(() => (route.query.focus ? String(route.query.focus) : null))
 
 async function reload() {
   await load(deviceId.value, type.value, period.value)
@@ -60,6 +61,7 @@ function setPeriod(p: string) {
       :period-start="result.periodStart"
       :period-end="result.periodEnd"
       :periods="result.periods"
+      :focus-variable="focusVariable"
       @change-type="setType"
       @change-period="setPeriod"
     />

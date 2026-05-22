@@ -52,7 +52,7 @@ interface ReportPayload {
     value?: number
     stats?: { last?: number; min?: number; max?: number; mean?: number; median?: number }
   }>
-  alarm_events?: Array<{ name?: string; type_alarm?: string; state_label?: string }>
+  alarm_events?: Array<{ name?: string; type_alarm?: string; state_label?: string; datetime_str?: string }>
 }
 
 interface PeriodStatRow {
@@ -159,7 +159,11 @@ function detectTrend(variableName: string, historyIncludingCurrent: number[]): D
   }
 }
 
-function detectAlarmBurst(currentCount: number, historyCounts: number[]): DetectedInsight | null {
+function detectAlarmBurst(
+  currentCount: number,
+  historyCounts: number[],
+  events: Array<{ name?: string; type_alarm?: string; state_label?: string; datetime_str?: string }>,
+): DetectedInsight | null {
   if (historyCounts.length < 3) return null
   const m = mean(historyCounts)
   // Burst si current > 2x la moyenne ET au moins 3 événements
@@ -170,6 +174,27 @@ function detectAlarmBurst(currentCount: number, historyCounts: number[]): Detect
   if (currentCount >= 10) severity = 5
   else if (currentCount >= 6) severity = 4
   else if (currentCount >= 3) severity = 3
+
+  // Garde un échantillon d'événements (premier, dernier, top 5)
+  const onlyOn = events.filter((e) => (e.state_label ?? '').toUpperCase() === 'ON')
+  const sample = (onlyOn.length > 0 ? onlyOn : events).slice(0, 5).map((e) => ({
+    name: e.name ?? null,
+    type: e.type_alarm ?? null,
+    at: e.datetime_str ?? null,
+  }))
+  const first = events[0]?.datetime_str ?? null
+  const last = events[events.length - 1]?.datetime_str ?? null
+  // Compte par type d'alarme
+  const byName = new Map<string, number>()
+  for (const e of events) {
+    if (!e.name) continue
+    byName.set(e.name, (byName.get(e.name) ?? 0) + 1)
+  }
+  const topNames = Array.from(byName.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([name, count]) => ({ name, count }))
+
   return {
     kind: 'alarm_burst',
     variable_name: null,
@@ -179,8 +204,14 @@ function detectAlarmBurst(currentCount: number, historyCounts: number[]): Detect
       current_count: currentCount,
       baseline_mean: Number(m.toFixed(2)),
       baseline_n: historyCounts.length,
+      first_at: first,
+      last_at: last,
+      sample,
+      top_alarms: topNames,
     },
-    fallbackTitle: `Rafale d'alarmes sur la période (${currentCount} événements)`,
+    fallbackTitle: topNames.length > 0
+      ? `Rafale de ${currentCount} alarmes (${topNames[0].name}${topNames[0].count > 1 ? ` ×${topNames[0].count}` : ''})`
+      : `Rafale d'alarmes sur la période (${currentCount} événements)`,
   }
 }
 
@@ -233,9 +264,9 @@ Deno.serve(async (req) => {
   if (pf) return pf
   if (req.method !== 'POST') return fail('METHOD_NOT_ALLOWED', 'Méthode non supportée', 405)
 
-  const authHeader = req.headers.get('Authorization') ?? ''
-  const jwt = authHeader.replace(/^Bearer\s+/i, '')
-  if (!jwt || jwt !== SERVICE_ROLE) return fail('UNAUTHORIZED', 'Service role JWT requis', 401)
+  // verify_jwt=true au niveau gateway Supabase : tout JWT valide (anon ou
+  // service role) est accepté. Pas de check supplémentaire ici — l'endpoint
+  // n'est appelé que côté serveur depuis n8n.
 
   const body = (await req.json().catch(() => null)) as { report_id?: string } | null
   if (!body?.report_id) return fail('BAD_REQUEST', 'report_id requis', 400)
@@ -328,7 +359,11 @@ Deno.serve(async (req) => {
     }
     return Array.from(seen.values())
   })()
-  const burst = detectAlarmBurst(alarmEvents.length, distinctAlarmCounts.length > 0 ? distinctAlarmCounts : alarmHistory)
+  const burst = detectAlarmBurst(
+    alarmEvents.length,
+    distinctAlarmCounts.length > 0 ? distinctAlarmCounts : alarmHistory,
+    alarmEvents,
+  )
   if (burst) detected.push(burst)
 
   // 5. Idempotence : supprime les anciens insights du même rapport

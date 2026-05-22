@@ -1,16 +1,40 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import type { ReportInsight } from '@/composables/useDeviceInsights'
 
 const props = defineProps<{
   open: boolean
   insights: ReportInsight[]
+  deviceId: string
   deviceName?: string | null
 }>()
 const emit = defineEmits<{
   acknowledge: []
   dismiss: []
 }>()
+
+const router = useRouter()
+
+function openReport(ins: ReportInsight) {
+  router.push({
+    name: 'admin-device-periodic',
+    params: { id: props.deviceId },
+    query: {
+      type: ins.period_kind,
+      ...(ins.report_period_start ? { period: ins.report_period_start } : {}),
+      ...(ins.variable_name ? { focus: ins.variable_name } : {}),
+    },
+  })
+  emit('dismiss')
+}
+
+function fmtPeriod(ins: ReportInsight): string {
+  if (!ins.report_period_start) return ''
+  const d = new Date(ins.report_period_start)
+  const label = ins.period_kind === 'weekly' ? 'Semaine du' : 'Journée du'
+  return `${label} ${d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}`
+}
 
 const expanded = ref<Set<string>>(new Set())
 
@@ -98,7 +122,19 @@ function fmtEvidence(e: unknown): string {
             </div>
             <p class="text-sm font-medium">{{ ins.title }}</p>
             <p v-if="ins.body" class="text-sm text-muted-foreground">{{ ins.body }}</p>
+            <p v-if="fmtPeriod(ins)" class="text-[11px] font-mono text-muted-foreground">
+              {{ fmtPeriod(ins) }}
+            </p>
             <pre v-if="expanded.has(ins.id)" class="text-[11px] font-mono bg-secondary/40 border border-border rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ fmtEvidence(ins.evidence) }}</pre>
+            <div class="pt-1">
+              <button
+                v-if="ins.report_period_start"
+                class="font-mono text-[10px] uppercase tracking-wider text-signal hover:underline"
+                @click="openReport(ins)"
+              >
+                Voir le rapport →
+              </button>
+            </div>
           </li>
         </ul>
 

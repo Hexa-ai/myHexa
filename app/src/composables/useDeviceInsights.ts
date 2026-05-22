@@ -3,7 +3,11 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
 import type { Database } from '@/types/supabase'
 
-export type ReportInsight = Database['public']['Tables']['report_insights']['Row']
+type RawInsight = Database['public']['Tables']['report_insights']['Row']
+export type ReportInsight = RawInsight & {
+  report_period_start: string | null
+  report_period_end: string | null
+}
 export type RecipientDeviceView = Database['public']['Tables']['recipient_device_views']['Row']
 
 const STALE_VISIT_DAYS = 3
@@ -41,7 +45,7 @@ export function useDeviceInsights(deviceId: () => string | null) {
     if (!did) return []
     let q = supabase
       .from('report_insights')
-      .select('*')
+      .select('*, reports(period_start, period_end)')
       .eq('device_id', did)
       .gte('severity', 2)
       .order('severity', { ascending: false })
@@ -53,7 +57,11 @@ export function useDeviceInsights(deviceId: () => string | null) {
       console.warn('[insights] loadInsights', error.message)
       return []
     }
-    return (data ?? []) as ReportInsight[]
+    return (data ?? []).map((row: RawInsight & { reports?: { period_start: string | null; period_end: string | null } | null }) => ({
+      ...row,
+      report_period_start: row.reports?.period_start ?? null,
+      report_period_end: row.reports?.period_end ?? null,
+    }))
   }
 
   async function upsertVisit() {

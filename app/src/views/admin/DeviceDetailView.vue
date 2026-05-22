@@ -272,6 +272,7 @@ async function submitShare() {
     <InsightsPopup
       :open="insightsApi.shouldShowPopup.value"
       :insights="insightsApi.insights.value"
+      :device-id="device?.id ?? ''"
       :device-name="device?.name"
       @acknowledge="insightsApi.acknowledge"
       @dismiss="insightsApi.dismiss"
