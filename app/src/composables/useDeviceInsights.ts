@@ -14,10 +14,6 @@ export type RecipientDeviceView = Database['public']['Tables']['recipient_device
 // Sous ce seuil, les insights restent consultables (via le bouton "Voir tout"
 // par exemple) mais n'interrompent pas l'utilisateur.
 const AUTO_OPEN_SEVERITY = 4
-// Snooze appliqué quand l'utilisateur clique "Plus tard"
-const SNOOZE_HOURS = 24
-// Une sévérité ≥ ce seuil bypass le snooze (popup s'ouvre quand même)
-const SNOOZE_OVERRIDE_SEVERITY = 5
 
 export function useDeviceInsights(deviceId: () => string | null) {
   const auth = useAuthStore()
@@ -97,26 +93,11 @@ export function useDeviceInsights(deviceId: () => string | null) {
       //  1. il faut au moins un insight de sévérité ≥ AUTO_OPEN_SEVERITY (4 par défaut)
       //  2. sauf si l'utilisateur a snoozé récemment ET qu'aucun insight n'override
       //     le snooze (sév ≥ SNOOZE_OVERRIDE_SEVERITY apparu APRÈS le snooze)
-      const hasAuto = ins.some((i) => i.severity >= AUTO_OPEN_SEVERITY)
-      if (!hasAuto) {
-        shouldShowPopup.value = false
-      } else {
-        const snoozedUntilMs = v?.popup_snoozed_until ? new Date(v.popup_snoozed_until).getTime() : 0
-        const snoozeActive = snoozedUntilMs > Date.now()
-        if (!snoozeActive) {
-          shouldShowPopup.value = true
-        } else {
-          // Snooze actif : seul un insight critique APPARU depuis le snooze réveille le popup.
-          // On compare created_at à snoozed_at (snoozed_until - SNOOZE_HOURS) approximé : on
-          // utilise simplement insights créés après visit.last_viewed_at comme proxy.
-          const snoozeRefMs = v?.last_viewed_at ? new Date(v.last_viewed_at).getTime() : 0
-          const critOverride = ins.some(
-            (i) => i.severity >= SNOOZE_OVERRIDE_SEVERITY &&
-              new Date(i.created_at).getTime() > snoozeRefMs,
-          )
-          shouldShowPopup.value = critOverride
-        }
-      }
+      // Auto-open dès qu'au moins un insight de sévérité ≥ AUTO_OPEN_SEVERITY
+      // existe et n'a pas été acquitté (le filtre last_acknowledged_insight_at
+      // est appliqué dans loadInsights). Pas de snooze : si l'utilisateur
+      // ferme sans acquitter, le popup réapparaît au prochain mount.
+      shouldShowPopup.value = ins.some((i) => i.severity >= AUTO_OPEN_SEVERITY)
     } finally {
       loading.value = false
     }
@@ -141,20 +122,12 @@ export function useDeviceInsights(deviceId: () => string | null) {
     shouldShowPopup.value = false
   }
 
-  async function dismiss() {
-    // "Plus tard" : snooze persistant en base pendant SNOOZE_HOURS
+  function dismiss() {
+    // "Plus tard" / × : simple fermeture en mémoire — pas de persistance.
+    // Au prochain mount (reload, navigation), le popup réapparaît si les
+    // critères d'auto-open sont toujours remplis. Seul "Compris" acquitte
+    // durablement.
     shouldShowPopup.value = false
-    const rid = getRecipientId()
-    const did = deviceId()
-    if (!rid || !did) return
-    const snoozeUntil = new Date(Date.now() + SNOOZE_HOURS * 3600_000).toISOString()
-    const { error } = await supabase
-      .from('recipient_device_views')
-      .upsert(
-        { recipient_id: rid, device_id: did, last_viewed_at: new Date().toISOString(), popup_snoozed_until: snoozeUntil },
-        { onConflict: 'recipient_id,device_id', ignoreDuplicates: false },
-      )
-    if (error) console.warn('[insights] dismiss/snooze', error.message)
   }
 
   return { insights, visit, loading, shouldShowPopup, init, acknowledge, dismiss }
