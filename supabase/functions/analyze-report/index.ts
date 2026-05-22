@@ -86,6 +86,24 @@ function stddev(xs: number[]): number {
   const v = xs.reduce((a, b) => a + (b - m) * (b - m), 0) / (xs.length - 1)
   return Math.sqrt(v)
 }
+// Statistiques robustes — médiane et MAD (Median Absolute Deviation).
+// Le z-score robuste est insensible aux outliers passés : un pic exceptionnel
+// il y a 3 semaines n'inflate pas artificiellement la baseline et n'empêche
+// donc pas de détecter une nouvelle anomalie dans la "normalité" habituelle.
+function median(xs: number[]): number {
+  if (xs.length === 0) return NaN
+  const sorted = [...xs].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
+}
+function mad(xs: number[]): number {
+  if (xs.length === 0) return 0
+  const med = median(xs)
+  const devs = xs.map((x) => Math.abs(x - med))
+  return median(devs)
+}
+// Facteur 1.4826 pour rendre MAD comparable à stddev sur des données normales
+const MAD_CONST = 1.4826
 // Régression linéaire simple : renvoie slope (y = slope * x + intercept) où x = index.
 function linearSlope(xs: number[]): number {
   const n = xs.length
@@ -103,17 +121,22 @@ function linearSlope(xs: number[]): number {
 // ---------- Detectors ----------
 function detectAnomaly(variableName: string, current: number, baseline: number[]): DetectedInsight | null {
   if (baseline.length < 3) return null
-  const m = mean(baseline)
-  const sd = stddev(baseline)
+  // Statistiques robustes : médiane + MAD (insensibles aux outliers historiques)
+  const med = median(baseline)
+  const madVal = mad(baseline)
+  const robustSd = madVal * MAD_CONST
+  // Fallback : si MAD = 0 (toutes les valeurs identiques), tente stddev pour ne pas perdre le signal
+  const sd = robustSd > 0 ? robustSd : stddev(baseline)
   if (sd === 0) return null
-  const z = Math.abs(current - m) / sd
+  const center = robustSd > 0 ? med : mean(baseline)
+  const z = Math.abs(current - center) / sd
   let severity = 0
   if (z >= 4) severity = 5
   else if (z >= 3) severity = 4
   else if (z >= 2.5) severity = 3
   else if (z >= 2) severity = 2
   if (severity === 0) return null
-  const deltaPct = m !== 0 ? ((current - m) / Math.abs(m)) * 100 : null
+  const deltaPct = center !== 0 ? ((current - center) / Math.abs(center)) * 100 : null
   return {
     kind: 'anomaly',
     variable_name: variableName,
@@ -121,9 +144,12 @@ function detectAnomaly(variableName: string, current: number, baseline: number[]
     score: Number(z.toFixed(2)),
     evidence: {
       current: Number(current.toFixed(3)),
-      baseline_mean: Number(m.toFixed(3)),
-      baseline_stddev: Number(sd.toFixed(3)),
+      baseline_median: Number(med.toFixed(3)),
+      baseline_mad: Number(madVal.toFixed(3)),
+      baseline_mean: Number(mean(baseline).toFixed(3)),
+      baseline_stddev: Number(stddev(baseline).toFixed(3)),
       baseline_n: baseline.length,
+      method: robustSd > 0 ? 'robust_mad' : 'fallback_stddev',
       z_score: Number(z.toFixed(2)),
       delta_pct: deltaPct !== null ? Number(deltaPct.toFixed(1)) : null,
     },
@@ -391,14 +417,19 @@ Deno.serve(async (req) => {
       const wkHist = wkByVar.get(ins.variable_name) ?? []
       const ev = ins.evidence as Record<string, unknown>
       if (wkHist.length < 3) { ev.consolidation = 'no_weekly_data'; continue }
-      const mW = mean(wkHist); const sdW = stddev(wkHist)
+      // Baseline hebdo robuste (même logique que la baseline daily)
+      const medW = median(wkHist)
+      const madW = mad(wkHist)
+      const sdRobust = madW * MAD_CONST
+      const sdW = sdRobust > 0 ? sdRobust : stddev(wkHist)
+      const centerW = sdRobust > 0 ? medW : mean(wkHist)
       if (sdW === 0) { ev.consolidation = 'no_weekly_variance'; continue }
       const current = typeof ev.current === 'number' ? ev.current : (typeof ev.mean === 'number' ? ev.mean : null)
       if (current === null) { ev.consolidation = 'no_current_value'; continue }
-      const wkZ = Math.abs(current - mW) / sdW
+      const wkZ = Math.abs(current - centerW) / sdW
       ev.weekly_z_score = Number(wkZ.toFixed(2))
-      ev.weekly_baseline_mean = Number(mW.toFixed(3))
-      ev.weekly_baseline_stddev = Number(sdW.toFixed(3))
+      ev.weekly_baseline_median = Number(medW.toFixed(3))
+      ev.weekly_baseline_mad = Number(madW.toFixed(3))
       if (wkZ < 1.0) {
         ev.consolidation = 'demoted_no_weekly_confirmation'
         ins.severity = Math.max(1, ins.severity - 2)
