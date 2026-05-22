@@ -91,6 +91,62 @@ export type Database = {
           },
         ]
       }
+      device_period_stats: {
+        Row: {
+          alarm_event_count: number | null
+          count_points: number | null
+          created_at: string
+          device_id: string
+          id: string
+          max: number | null
+          mean: number | null
+          median: number | null
+          min: number | null
+          period_kind: string
+          period_start: string
+          stddev: number | null
+          variable_name: string
+        }
+        Insert: {
+          alarm_event_count?: number | null
+          count_points?: number | null
+          created_at?: string
+          device_id: string
+          id?: string
+          max?: number | null
+          mean?: number | null
+          median?: number | null
+          min?: number | null
+          period_kind: string
+          period_start: string
+          stddev?: number | null
+          variable_name: string
+        }
+        Update: {
+          alarm_event_count?: number | null
+          count_points?: number | null
+          created_at?: string
+          device_id?: string
+          id?: string
+          max?: number | null
+          mean?: number | null
+          median?: number | null
+          min?: number | null
+          period_kind?: string
+          period_start?: string
+          stddev?: number | null
+          variable_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_period_stats_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       devices: {
         Row: {
           address: string | null
@@ -231,6 +287,42 @@ export type Database = {
           },
         ]
       }
+      recipient_device_views: {
+        Row: {
+          device_id: string
+          last_acknowledged_insight_at: string | null
+          last_viewed_at: string
+          recipient_id: string
+        }
+        Insert: {
+          device_id: string
+          last_acknowledged_insight_at?: string | null
+          last_viewed_at?: string
+          recipient_id: string
+        }
+        Update: {
+          device_id?: string
+          last_acknowledged_insight_at?: string | null
+          last_viewed_at?: string
+          recipient_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipient_device_views_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipient_device_views_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "recipients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recipients: {
         Row: {
           auth_user_id: string
@@ -277,6 +369,66 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      report_insights: {
+        Row: {
+          body: string | null
+          created_at: string
+          device_id: string
+          evidence: Json
+          id: string
+          kind: string
+          period_kind: string
+          report_id: string
+          score: number | null
+          severity: number
+          title: string
+          variable_name: string | null
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          device_id: string
+          evidence?: Json
+          id?: string
+          kind: string
+          period_kind: string
+          report_id: string
+          score?: number | null
+          severity: number
+          title: string
+          variable_name?: string | null
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          device_id?: string
+          evidence?: Json
+          id?: string
+          kind?: string
+          period_kind?: string
+          report_id?: string
+          score?: number | null
+          severity?: number
+          title?: string
+          variable_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_insights_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_insights_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
             referencedColumns: ["id"]
           },
         ]
@@ -366,6 +518,7 @@ export type Database = {
           vnc_port: number
         }[]
       }
+      is_device_visible: { Args: { d_id: string }; Returns: boolean }
       is_hexa_staff: { Args: never; Returns: boolean }
       is_hexa_staff_admin: { Args: never; Returns: boolean }
       list_company_recipients: {

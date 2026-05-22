@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import DeviceReport from '@/components/DeviceReport.vue'
+import InsightsPopup from '@/components/devices/InsightsPopup.vue'
+import { useDeviceInsights } from '@/composables/useDeviceInsights'
 
 const route = useRoute()
 const router = useRouter()
@@ -154,6 +156,16 @@ async function loadDetail() {
 
 useAutoRefresh(loadDetail, { intervalMs: 120_000 })
 
+// --- Insights intelligents (popup) ------------------------------------------
+const insightsApi = useDeviceInsights(() => device.value?.id ?? null)
+// Lance init dès que le device est chargé pour la 1ère fois
+watch(
+  () => device.value?.id,
+  (id, prev) => {
+    if (id && id !== prev) insightsApi.init()
+  },
+)
+
 // --- Partage avec un destinataire externe -----------------------------------
 const shareOpen = ref(false)
 const shareEmail = ref('')
@@ -255,6 +267,15 @@ async function submitShare() {
         ↗ Partager avec un destinataire
       </button>
     </div>
+
+    <!-- Insights intelligents popup -->
+    <InsightsPopup
+      :open="insightsApi.shouldShowPopup.value"
+      :insights="insightsApi.insights.value"
+      :device-name="device?.name"
+      @acknowledge="insightsApi.acknowledge"
+      @dismiss="insightsApi.dismiss"
+    />
 
     <!-- Share modal -->
     <Teleport to="body">
