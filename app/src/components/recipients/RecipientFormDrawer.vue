@@ -73,21 +73,17 @@ function close() {
 }
 
 function submit() {
-  console.log('[RecipientFormDrawer] submit() called', { name: name.value, email: email.value, role: role.value, isExternal: isExternal.value, isEdit: isEdit.value })
   error.value = null
   if (!name.value.trim()) {
     error.value = 'Nom requis'
-    console.warn('[RecipientFormDrawer] validation failed: name')
     return
   }
   if (!email.value.includes('@')) {
     error.value = 'Email invalide'
-    console.warn('[RecipientFormDrawer] validation failed: email')
     return
   }
   if (isExternal.value && sharedDevicesSelection.value.length === 0) {
     error.value = 'Sélectionne au moins un équipement à partager pour un destinataire externe.'
-    console.warn('[RecipientFormDrawer] validation failed: external without devices')
     return
   }
   submitting.value = true
