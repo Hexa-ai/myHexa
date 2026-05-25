@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import DeviceReport from '@/components/DeviceReport.vue'
 import InsightsPopup from '@/components/devices/InsightsPopup.vue'
+import DeviceDocuments from '@/components/devices/DeviceDocuments.vue'
 import { useDeviceInsights } from '@/composables/useDeviceInsights'
 
 const route = useRoute()
@@ -381,6 +382,13 @@ async function submitShare() {
       :intervention-url="interventionUrl"
       @save-location="onSaveLocation"
       @save-vnc="onSaveVnc"
+    />
+
+    <DeviceDocuments
+      v-if="device && !loading && !error"
+      class="mt-6"
+      :device-id="device.id"
+      :can-edit="canShare"
     />
   </section>
 </template>

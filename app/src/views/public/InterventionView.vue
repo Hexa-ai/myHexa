@@ -6,6 +6,7 @@ import { useTheme } from '@/composables/useTheme'
 import { severityButtonClass, SEVERITY_ICON, SEVERITY_LABEL, type Severity } from '@/lib/utils'
 import { compressImage } from '@/lib/image'
 import KindPicker from '@/components/intervention/KindPicker.vue'
+import PublicDocuments from '@/components/intervention/PublicDocuments.vue'
 
 const MAX_PHOTOS = 5
 
@@ -184,7 +185,10 @@ function submitAnother() {
       </div>
 
       <!-- Step 1: choose kind -->
-      <KindPicker v-if="!kind" @select="kind = $event" />
+      <template v-if="!kind">
+        <KindPicker @select="kind = $event" />
+        <PublicDocuments v-if="deviceId" class="mt-6" :device-id="deviceId" />
+      </template>
 
       <!-- Step 2: success screen -->
       <div

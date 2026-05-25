@@ -91,6 +91,63 @@ export type Database = {
           },
         ]
       }
+      device_documents: {
+        Row: {
+          created_at: string
+          description: string | null
+          device_id: string
+          file_path: string
+          id: string
+          is_public: boolean
+          kind: string
+          mime_type: string | null
+          name: string
+          size_bytes: number | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          device_id: string
+          file_path: string
+          id?: string
+          is_public?: boolean
+          kind: string
+          mime_type?: string | null
+          name: string
+          size_bytes?: number | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          device_id?: string
+          file_path?: string
+          id?: string
+          is_public?: boolean
+          kind?: string
+          mime_type?: string | null
+          name?: string
+          size_bytes?: number | null
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_documents_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "device_documents_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "recipients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       device_period_stats: {
         Row: {
           alarm_event_count: number | null
