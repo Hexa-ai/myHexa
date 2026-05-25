@@ -48,11 +48,19 @@ function setFlash(msg: string) {
 
 async function handleInvite(payload: InvitePayload) {
   try {
-    const res = await invite(payload)
+    // Pour un staff Hexa "act-as" une autre compagnie, on force company_id
+    // = compagnie effective (sinon l'edge function retombe sur la compagnie
+    // native du caller = Hexa-ai, et le recipient atterrit au mauvais endroit).
+    // Si le form a déjà mis company_id (cas externe = null), on respecte.
+    const effectivePayload: InvitePayload =
+      payload.company_id === undefined && auth.isHexaStaff && auth.effectiveCompanyId
+        ? { ...payload, company_id: auth.effectiveCompanyId }
+        : payload
+    const res = await invite(effectivePayload)
     setFlash(
       res.invited
-        ? `Invitation envoyée à ${payload.contact_email}`
-        : `Destinataire ${payload.contact_email} créé`,
+        ? `Invitation envoyée à ${effectivePayload.contact_email}`
+        : `Destinataire ${effectivePayload.contact_email} créé`,
     )
     drawerOpen.value = false
   } catch (e) {
