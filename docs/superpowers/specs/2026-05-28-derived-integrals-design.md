@@ -105,7 +105,7 @@ Pas d'index sur `derived_payload` (pas de requête de filtrage prévue).
 
 ### 5.2 Forme de `derived_payload`
 
-Identique à `payload`, restreinte aux variables produites :
+Identique à `payload`, restreinte aux variables produites. La timeseries est portée par `chart.points` (et **non** `samples`), comme pour toutes les variables existantes consommées par `SeriesChart.vue`. La timeseries dérivée est **pré-bucketisée** comme un bar chart (1 bar/heure en daily, 1 bar/jour en hebdo), valeur = volume/énergie intégré sur la tranche :
 
 ```json
 {
@@ -117,43 +117,63 @@ Identique à `payload`, restreinte aux variables produites :
       "description": "Dérivé de 'Debit_eau' par intégration temporelle",
       "derived_from": "Debit_eau",
       "derived_method": "trapezoidal_integration",
-      "stats": { "last": 12.34, "min": 0, "max": 12.34, "mean": 6.17, "median": 6.10 },
-      "samples": [
-        { "ts": "2026-05-28T00:00:00Z", "value": 0 },
-        { "ts": "2026-05-28T00:15:00Z", "value": 0.75 },
-        { "ts": "2026-05-28T00:30:00Z", "value": 1.50 }
-      ]
+      "stats": { "last": 12.34, "min": 0, "max": 1.05, "mean": 0.51, "median": 0.50 },
+      "has_chart": true,
+      "chart": {
+        "type": "bar",
+        "points": [
+          { "ts": "2026-05-28T00:00:00+02:00", "value": 0.75 },
+          { "ts": "2026-05-28T01:00:00+02:00", "value": 0.82 },
+          { "ts": "2026-05-28T02:00:00+02:00", "value": 0.91 }
+        ]
+      }
     }
   ]
 }
 ```
 
+**Sémantique des stats sur une variable dérivée bucketisée** :
+- `last` = somme de tous les buckets (= volume/énergie total sur la période)
+- `min` = valeur du plus petit bucket
+- `max` = valeur du plus gros bucket
+- `mean` / `median` = sur les valeurs des buckets
+
 Si aucune variable n'est éligible : `{"variables": []}` (et non `null`), pour distinguer « calculé, rien à dériver » de « pas encore traité ».
 
 ## 6. Algorithme d'intégration
 
+**Étape 1 — Série cumulative interne** (jamais émise dans le payload, sert au bucketing) :
+
 Pour chaque variable source éligible (catégorie `measure`, unité whitelistée, ≥ 2 samples triés par `ts` croissant) :
 
 ```
-volume_cumulé ← 0
-samples_dérivés ← [{ ts: t₀, value: 0 }]
+cumul ← 0
+cumulés ← [{ ts: t₀, value: 0 }]
 pour i de 1 à n-1:
     Δt_sec ← (tᵢ - tᵢ₋₁) en secondes
     si Δt_sec > 900 (15 min):
-        samples_dérivés.push({ ts: tᵢ, value: volume_cumulé })   # gap : pas d'intégration
+        cumulés.push({ ts: tᵢ, value: cumul })   # gap : pas d'intégration sur l'intervalle
         continue
     v₁ ← max(0, valeur_source[i-1])
     v₂ ← max(0, valeur_source[i])
     incrément ← ((v₁ + v₂) / 2) × Δt_sec × FACTEUR_UNITÉ
-    volume_cumulé ← volume_cumulé + incrément
-    samples_dérivés.push({ ts: tᵢ, value: volume_cumulé })
+    cumul ← cumul + incrément
+    cumulés.push({ ts: tᵢ, value: cumul })
 ```
 
-**Stats recalculées** sur la série dérivée :
-- `last` = `volume_cumulé` final
-- `min` = 0
-- `max` = `last`
-- `mean`/`median` = calculés sur les valeurs des samples dérivés
+**Étape 2 — Bucketing en bars** (ce qui sort dans `chart.points`) :
+
+- Taille du bucket : `daily` → 1 heure, `weekly` → 1 jour
+- Bornes : alignées sur `reports.period_start` (déjà en timezone locale device dans la pratique), buckets jusqu'à `reports.period_end`
+- Pour chaque borne de bucket `b_k`, interpolation linéaire de `cumul(b_k)` entre les deux samples cumulés encadrants (ou clampée à 0 / au max si hors série)
+- Valeur du bucket k : `cumul(b_{k+1}) − cumul(b_k)`
+- Émission : un point bar par bucket, `ts = b_k` (ISO 8601 en UTC), `value = increment`. Buckets à zéro émis aussi (pour cohérence visuelle).
+
+**Stats émises** sur la variable dérivée bucketisée :
+- `last` = somme de toutes les valeurs des buckets (= volume/énergie total)
+- `min` = min des valeurs des buckets
+- `max` = max des valeurs des buckets
+- `mean` / `median` = calculés sur les valeurs des buckets
 
 **Règles de nommage** :
 - Unité débit → préfixe `Volume_` ; on retire `Debit`/`debit`/`Flow`/`flow` du nom source (insensible casse, séparateurs `_` ou ` `) puis on préfixe. Ex: `Debit_eau` → `Volume_eau` ; `Flow Compresseur` → `Volume_Compresseur` ; nom sans match → `Volume_<nom_source>`.
@@ -167,16 +187,10 @@ pour i de 1 à n-1:
 
 ## 7. Côté frontend
 
-Modification minimale dans `app/src/components/PeriodicReport.vue` et `app/src/components/DeviceReport.vue` :
+Les variables dérivées sont émises au même format que les variables natives (`chart.type='bar'`, `chart.points` pré-bucketisés, `has_chart: true`). Il suffit de fusionner les deux listes avant de les passer à `PeriodicReport.vue` :
 
-```ts
-const allVariables = computed(() => [
-  ...(report.value?.payload?.variables ?? []),
-  ...(report.value?.derived_payload?.variables ?? []),
-])
-```
-
-Les variables dérivées sont déjà au format `counter` cumulatif → le composant bargraphe existant les affiche sans aucune autre modification. Les types TypeScript de `reports` (généré via `supabase gen types`) doivent être régénérés.
+- Dans `app/src/composables/usePeriodicReport.ts` : sélectionner aussi `derived_payload` dans la requête Supabase, et fusionner `payload.variables ⊕ derived_payload.variables` avant de remonter le `PeriodicPayload` au composant. Pas de modification du composant lui-même ni de `SeriesChart.vue`.
+- Régénérer les types TypeScript de la table `reports` (`supabase gen types`).
 
 ## 8. Backfill
 
