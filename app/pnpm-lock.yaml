@@ -4,6 +4,10 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  js-cookie: '>=3.0.6'
+  qs: '>=6.15.2'
+
 importers:
 
   .:
