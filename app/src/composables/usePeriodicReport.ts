@@ -38,7 +38,7 @@ export function usePeriodicReport() {
         (() => {
           let q = supabase
             .from('reports')
-            .select('payload, received_at, period_start, period_end')
+            .select('payload, derived_payload, received_at, period_start, period_end')
             .eq('device_id', deviceId)
             .eq('type', type)
             .order('period_start', { ascending: false, nullsFirst: false })
@@ -59,8 +59,46 @@ export function usePeriodicReport() {
         }
       }
 
+      const basePayload = (reportRes.data?.payload as PeriodicPayload | undefined) ?? null
+      const derived = (reportRes.data as { derived_payload?: PeriodicPayload | null } | null)
+        ?.derived_payload
+      const derivedVars = (derived?.variables ?? []) as Array<
+        PeriodicPayload['variables'] extends (infer V)[] | undefined ? V : never
+      > & Array<{ derived_from?: string }>
+      let mergedPayload: PeriodicPayload | null = basePayload
+      if (basePayload && derivedVars.length > 0) {
+        const derivedBySource = new Map<string, typeof derivedVars>()
+        const orphanDerived: typeof derivedVars = []
+        for (const dv of derivedVars) {
+          const src = dv.derived_from
+          if (src) {
+            const arr = derivedBySource.get(src) ?? []
+            arr.push(dv)
+            derivedBySource.set(src, arr)
+          } else {
+            orphanDerived.push(dv)
+          }
+        }
+        const merged: typeof derivedVars = []
+        for (const v of basePayload.variables ?? []) {
+          merged.push(v as (typeof derivedVars)[number])
+          const vn = v.name
+          if (vn) {
+            const followers = derivedBySource.get(vn)
+            if (followers) {
+              merged.push(...followers)
+              derivedBySource.delete(vn)
+            }
+          }
+        }
+        // Toute dérivée orpheline (source absente) : append à la fin
+        for (const remaining of derivedBySource.values()) merged.push(...remaining)
+        merged.push(...orphanDerived)
+        mergedPayload = { ...basePayload, variables: merged }
+      }
+
       result.value = {
-        payload: (reportRes.data?.payload as PeriodicPayload | undefined) ?? null,
+        payload: mergedPayload,
         periodStart: reportRes.data?.period_start ?? null,
         periodEnd: reportRes.data?.period_end ?? null,
         periods: Array.from(uniq.values()),

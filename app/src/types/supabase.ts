@@ -495,6 +495,7 @@ export type Database = {
       }
       reports: {
         Row: {
+          derived_payload: Json | null
           device_id: string
           id: string
           payload: Json
@@ -504,6 +505,7 @@ export type Database = {
           type: Database["public"]["Enums"]["report_type"]
         }
         Insert: {
+          derived_payload?: Json | null
           device_id: string
           id?: string
           payload: Json
@@ -513,6 +515,7 @@ export type Database = {
           type: Database["public"]["Enums"]["report_type"]
         }
         Update: {
+          derived_payload?: Json | null
           device_id?: string
           id?: string
           payload?: Json
@@ -536,6 +539,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _derived_interpolate_cumul: {
+        Args: { p_target: string; p_ts: string[]; p_val: number[] }
+        Returns: number
+      }
+      compute_derived_variables: {
+        Args: {
+          p_payload: Json
+          p_period_end: string
+          p_period_kind: string
+          p_period_start: string
+          p_timezone?: string
+        }
+        Returns: Json
+      }
+      rebuild_derived: { Args: { p_report_id: string }; Returns: undefined }
       alarm_counts: {
         Args: { p_company_id: string }
         Returns: {
