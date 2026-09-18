@@ -95,6 +95,7 @@ interface Row {
   vnc: string | null
   shared: boolean
   sharedFrom: string | null
+  hasReports: boolean
 }
 
 const rows = computed<Row[]>(() => {
@@ -115,6 +116,7 @@ const rows = computed<Row[]>(() => {
       vnc: online ? vncUrl(d.vnc_host, d.vnc_port) : null,
       shared: eff !== null && d.company_id !== null && d.company_id !== eff,
       sharedFrom: d.company_name,
+      hasReports: d.has_periodic_reports,
     }
   })
 })
@@ -365,8 +367,10 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
                 >
                   …
                 </span>
-                <!-- Reports button: always available -->
+                <!-- Reports button: masqué tant qu'aucun rapport daily/weekly
+                     n'est remonté (has_periodic_reports côté RPC) -->
                 <button
+                  v-if="r.hasReports"
                   type="button"
                   title="Rapports quotidiens / hebdomadaires"
                   class="inline-flex items-center justify-center size-7 border border-border text-muted-foreground rounded-md hover:border-signal/60 hover:text-signal transition"
@@ -487,6 +491,7 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
             </a>
           </template>
           <button
+            v-if="r.hasReports"
             type="button"
             class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] border border-border text-foreground px-2.5 py-1 rounded-md"
             @click.stop="openReports(r.id)"

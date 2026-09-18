@@ -20,6 +20,7 @@ export interface DeviceWithStatus {
   vnc_port: number | null
   status_payload: Record<string, unknown> | null
   status_received_at: string | null
+  has_periodic_reports: boolean
 }
 
 export function useDevices() {
@@ -71,6 +72,7 @@ export function useDevices() {
         vnc_port: d.vnc_port,
         status_payload: d.status_payload as Record<string, unknown> | null,
         status_received_at: d.status_received_at,
+        has_periodic_reports: d.has_periodic_reports ?? false,
       }))
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Unknown error'

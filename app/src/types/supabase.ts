@@ -583,6 +583,7 @@ export type Database = {
           address: string
           company_id: string
           company_name: string | null
+          has_periodic_reports: boolean
           id: string
           last_connection_at: string
           latitude: number
