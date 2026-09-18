@@ -37,8 +37,19 @@ async function loadInterventionCounts() {
   openInterventionsByDevice.value = map
 }
 
+// Set des device_id ayant au moins un rapport périodique remonté.
+const devicesWithReports = ref<Set<string>>(new Set())
+
+async function loadDevicesWithReports() {
+  const { data } = await supabase
+    .from('reports')
+    .select('device_id')
+    .in('type', ['daily', 'weekly'])
+  devicesWithReports.value = new Set((data ?? []).map((row) => row.device_id))
+}
+
 async function loadAll() {
-  await Promise.all([load(), loadInterventionCounts()])
+  await Promise.all([load(), loadInterventionCounts(), loadDevicesWithReports()])
 }
 
 const { reachable: tsReachable, probe: probeTs } = useTailscaleReachable()
@@ -116,7 +127,7 @@ const rows = computed<Row[]>(() => {
       vnc: online ? vncUrl(d.vnc_host, d.vnc_port) : null,
       shared: eff !== null && d.company_id !== null && d.company_id !== eff,
       sharedFrom: d.company_name,
-      hasReports: d.has_periodic_reports,
+      hasReports: devicesWithReports.value.has(d.id),
     }
   })
 })
