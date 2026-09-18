@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, provide, ref } from 'vue'
+import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useTheme } from '@/composables/useTheme'
@@ -18,6 +18,18 @@ async function handleLogout() {
   await auth.signOut()
   router.push({ name: 'login' })
 }
+
+// Les guards du router ne s'exécutent qu'à la navigation : si la session meurt
+// pendant que l'utilisateur reste sur une page, rien ne réagit et l'écran garde
+// des données mortes. On renvoie donc explicitement vers le login.
+watch(
+  () => auth.isAuthenticated,
+  (authenticated) => {
+    if (!authenticated) {
+      router.replace({ name: 'login', query: { redirect: route.fullPath } })
+    }
+  },
+)
 
 const now = ref(new Date())
 let timer: ReturnType<typeof setInterval> | undefined

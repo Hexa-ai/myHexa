@@ -10,6 +10,9 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
 
 const POLL_INTERVAL_MS = 60_000
+// Au-delà de ce délai sans refresh réussi, les compteurs affichés ne sont plus
+// dignes de confiance.
+const STALE_AFTER_MS = 3 * POLL_INTERVAL_MS
 
 export type AlarmCounts = ReturnType<typeof useAlarmCounts>
 export const ALARM_COUNTS_KEY: InjectionKey<AlarmCounts> = Symbol('alarmCounts')
@@ -24,6 +27,18 @@ export function useAlarmCounts() {
   const openSignalements = ref(0)
   const openInterventions = ref(0)
   const maxSeverity = ref<'error' | 'warning' | 'info' | null>(null)
+  // Horodatage du dernier refresh réussi + dernière erreur rencontrée. Sans
+  // ça, un backend qui refuse ou une requête qui ne revient jamais laissent
+  // les compteurs figés sur leur dernière valeur, sans aucun signe visible.
+  const lastSuccessAt = ref<number | null>(null)
+  const lastError = ref<string | null>(null)
+  // Horloge réactive : Date.now() dans un computed ne déclencherait jamais de
+  // recalcul, `stale` resterait faux indéfiniment. Elle avance à chaque tick du
+  // poll et au retour sur l'onglet.
+  const nowTs = ref(Date.now())
+  const stale = computed(
+    () => lastSuccessAt.value !== null && nowTs.value - lastSuccessAt.value > STALE_AFTER_MS,
+  )
   const urgent = computed(() => active.value + openSignalements.value)
   const total = computed(() => urgent.value + openInterventions.value)
 
@@ -39,6 +54,7 @@ export function useAlarmCounts() {
 
   async function refresh() {
     if (stopped) return
+    nowTs.value = Date.now()
     const companyId = auth.effectiveCompanyId
     if (!companyId) {
       reset()
@@ -49,7 +65,13 @@ export function useAlarmCounts() {
       if (import.meta.env.DEV) {
         console.info('[alarm_counts]', new Date().toLocaleTimeString(), { companyId, data, error })
       }
-      if (error) return
+      if (error) {
+        lastError.value = error.message
+        console.warn('[alarm_counts] échec du refresh', error)
+        return
+      }
+      lastError.value = null
+      lastSuccessAt.value = Date.now()
       const row = (data ?? [])[0]
       if (!row) { reset(); return }
       active.value = row.active_alarms ?? 0
@@ -59,12 +81,16 @@ export function useAlarmCounts() {
       maxSeverity.value =
         sev === 'error' || sev === 'warning' || sev === 'info' ? sev : null
     } catch (e) {
-      if (import.meta.env.DEV) console.warn('[alarm_counts] throw', e)
+      lastError.value = e instanceof Error ? e.message : String(e)
+      console.warn('[alarm_counts] throw', e)
     }
   }
 
   function onVisibility() {
-    if (document.visibilityState === 'visible') refresh()
+    if (document.visibilityState === 'visible') {
+      nowTs.value = Date.now()
+      refresh()
+    }
   }
 
   onMounted(() => {
@@ -85,5 +111,16 @@ export function useAlarmCounts() {
     document.removeEventListener('visibilitychange', onVisibility)
   })
 
-  return { active, openSignalements, openInterventions, maxSeverity, urgent, total, refresh }
+  return {
+    active,
+    openSignalements,
+    openInterventions,
+    maxSeverity,
+    urgent,
+    total,
+    refresh,
+    lastSuccessAt,
+    lastError,
+    stale,
+  }
 }
