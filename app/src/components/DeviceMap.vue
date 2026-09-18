@@ -35,11 +35,16 @@ let layer: L.LayerGroup | null = null
 let tileLayer: L.TileLayer | null = null
 const circlesById = new Map<string, Marker>()
 
+const CARTO_KEY = import.meta.env.VITE_CARTO_API_KEY ?? ''
+const cartoTiles = (style: string) =>
+  `https://{s}.basemaps.cartocdn.com/rastertiles/${style}/{z}/{x}/{y}.png?key=${CARTO_KEY}`
 const TILES = {
-  dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-  light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+  dark: cartoTiles('dark_all'),
+  light: cartoTiles('light_all'),
 }
-const ATTR = '&copy; OpenStreetMap &middot; CartoDB'
+const ATTR =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &middot; ' +
+  '&copy; <a href="https://carto.com/attributions">CARTO</a>'
 
 function markerStateClass(m: MarkerInput): string {
   if (m.online === false) return 'hai-marker-offline'
@@ -129,7 +134,7 @@ function applyTiles() {
     map.removeLayer(tileLayer)
   }
   tileLayer = L.tileLayer(theme.value === 'dark' ? TILES.dark : TILES.light, {
-    maxZoom: 19,
+    maxZoom: 20,
     subdomains: 'abcd',
     attribution: ATTR,
   }).addTo(map)
