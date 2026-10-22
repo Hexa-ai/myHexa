@@ -107,7 +107,9 @@ const locationFeedback = ref<{ kind: 'success' | 'error'; message: string } | nu
 
 watch(
   () => props.device.address,
-  (v) => { addressDraft.value = v ?? '' },
+  (v) => {
+    addressDraft.value = v ?? ''
+  },
   { immediate: true },
 )
 
@@ -153,9 +155,15 @@ const activeAlarms = computed(() =>
     (v) => v?.category === 'alarm' && v?.value !== 0 && v?.value !== null && v?.value !== false,
   ),
 )
-const measures = computed(() => (payload.value.variables ?? []).filter((v) => v?.category === 'measure'))
-const counters = computed(() => (payload.value.variables ?? []).filter((v) => v?.category === 'counter'))
-const states = computed(() => (payload.value.variables ?? []).filter((v) => v?.category === 'state'))
+const measures = computed(() =>
+  (payload.value.variables ?? []).filter((v) => v?.category === 'measure'),
+)
+const counters = computed(() =>
+  (payload.value.variables ?? []).filter((v) => v?.category === 'counter'),
+)
+const states = computed(() =>
+  (payload.value.variables ?? []).filter((v) => v?.category === 'state'),
+)
 
 function formatValue(v: unknown, unit?: string): string {
   if (v === null || v === undefined) return '—'
@@ -240,6 +248,27 @@ function submitVnc() {
   })
 }
 
+// URL de base à saisir dans la configuration de la box (Edge Function device-ingress).
+const ingressBaseUrl = `${String(import.meta.env.VITE_SUPABASE_URL ?? '').replace(/\/+$/, '')}/functions/v1/device-ingress`
+const ingressRoutes = computed(() => {
+  const host = props.device.name || '<hostname>'
+  return [
+    { label: 'État', url: `${ingressBaseUrl}/${host}/status` },
+    { label: 'Rapport journalier', url: `${ingressBaseUrl}/${host}/report/daily` },
+    { label: 'Rapport hebdomadaire', url: `${ingressBaseUrl}/${host}/report/weekly` },
+  ]
+})
+const copiedIngress = ref(false)
+async function copyIngressUrl() {
+  try {
+    await navigator.clipboard.writeText(ingressBaseUrl)
+    copiedIngress.value = true
+    setTimeout(() => (copiedIngress.value = false), 1500)
+  } catch {
+    // ignore — clipboard may be unavailable
+  }
+}
+
 const copiedTailscaleIp = ref<string | null>(null)
 async function copyTailscaleIp(ip: string) {
   try {
@@ -294,7 +323,9 @@ async function copyTailscaleIp(ip: string) {
           />
         </div>
         <div>
-          <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-2 flex items-center gap-2">
+          <div
+            class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-2 flex items-center gap-2"
+          >
             <span class="text-signal">⬢</span>
             HAI-P Gateway · {{ isAdmin ? 'admin' : 'lecture' }}
           </div>
@@ -330,9 +361,11 @@ async function copyTailscaleIp(ip: string) {
 
     <!-- Tabs + Periodic links -->
     <div class="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-      <nav class="inline-flex gap-1 p-1 border border-border rounded-md bg-card/40 overflow-x-auto max-w-full self-start">
+      <nav
+        class="inline-flex gap-1 p-1 border border-border rounded-md bg-card/40 overflow-x-auto max-w-full self-start"
+      >
         <button
-          v-for="tab in (['data', 'status', 'config'] as const)"
+          v-for="tab in ['data', 'status', 'config'] as const"
           :key="tab"
           :class="[
             'font-mono text-[10px] sm:text-[11px] uppercase tracking-[0.18em] px-3 sm:px-4 py-1.5 rounded transition whitespace-nowrap',
@@ -351,7 +384,15 @@ async function copyTailscaleIp(ip: string) {
           :href="periodicHref('daily')"
           class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] border border-border text-foreground px-3 py-1.5 rounded-md hover:border-signal/60 hover:text-signal transition"
         >
-          <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg
+            viewBox="0 0 24 24"
+            class="size-3.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
             <path d="M3 3v18h18" />
             <path d="M7 14l4-4 4 4 5-6" />
           </svg>
@@ -370,7 +411,9 @@ async function copyTailscaleIp(ip: string) {
     <section v-if="activeTab === 'data'" class="space-y-6">
       <div class="border border-border rounded-md bg-card/40 p-5 space-y-4">
         <div>
-          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Adresse</div>
+          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+            Adresse
+          </div>
           <div class="text-sm">{{ device.address || '—' }}</div>
         </div>
         <DeviceMap
@@ -383,7 +426,9 @@ async function copyTailscaleIp(ip: string) {
       </div>
 
       <div>
-        <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Alarmes</h2>
+        <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
+          Alarmes
+        </h2>
         <div
           v-if="!activeAlarms.length"
           class="border border-border rounded-md bg-card/40 p-5 text-sm text-muted-foreground"
@@ -393,9 +438,15 @@ async function copyTailscaleIp(ip: string) {
         <div v-else class="border border-offline/40 rounded-md bg-card/60 overflow-x-auto">
           <table class="w-full text-sm">
             <tbody>
-              <tr v-for="(a, i) in activeAlarms" :key="i" class="border-b border-border/50 last:border-0">
+              <tr
+                v-for="(a, i) in activeAlarms"
+                :key="i"
+                class="border-b border-border/50 last:border-0"
+              >
                 <td class="px-4 py-3 font-medium">{{ a.name }}</td>
-                <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">{{ a.description }}</td>
+                <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">
+                  {{ a.description }}
+                </td>
                 <td class="px-4 py-3 text-right font-mono text-xs text-offline tabular">
                   {{ formatValue(a.value, a.unit) }}
                 </td>
@@ -406,14 +457,24 @@ async function copyTailscaleIp(ip: string) {
       </div>
 
       <div v-if="measures.length">
-        <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Mesures</h2>
+        <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
+          Mesures
+        </h2>
         <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
           <table class="w-full text-sm">
             <tbody>
-              <tr v-for="(m, i) in measures" :key="i" class="border-b border-border/50 last:border-0">
+              <tr
+                v-for="(m, i) in measures"
+                :key="i"
+                class="border-b border-border/50 last:border-0"
+              >
                 <td class="px-4 py-3 font-medium">{{ m.name }}</td>
-                <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">{{ m.description }}</td>
-                <td class="px-4 py-3 text-right font-mono text-xs tabular">{{ formatValue(m.value, m.unit) }}</td>
+                <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">
+                  {{ m.description }}
+                </td>
+                <td class="px-4 py-3 text-right font-mono text-xs tabular">
+                  {{ formatValue(m.value, m.unit) }}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -421,14 +482,24 @@ async function copyTailscaleIp(ip: string) {
       </div>
 
       <div v-if="counters.length">
-        <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Compteurs</h2>
+        <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
+          Compteurs
+        </h2>
         <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
           <table class="w-full text-sm">
             <tbody>
-              <tr v-for="(c, i) in counters" :key="i" class="border-b border-border/50 last:border-0">
+              <tr
+                v-for="(c, i) in counters"
+                :key="i"
+                class="border-b border-border/50 last:border-0"
+              >
                 <td class="px-4 py-3 font-medium">{{ c.name }}</td>
-                <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">{{ c.description }}</td>
-                <td class="px-4 py-3 text-right font-mono text-xs tabular">{{ formatValue(c.value, c.unit) }}</td>
+                <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">
+                  {{ c.description }}
+                </td>
+                <td class="px-4 py-3 text-right font-mono text-xs tabular">
+                  {{ formatValue(c.value, c.unit) }}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -436,14 +507,20 @@ async function copyTailscaleIp(ip: string) {
       </div>
 
       <div v-if="states.length">
-        <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">États</h2>
+        <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
+          États
+        </h2>
         <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
           <table class="w-full text-sm">
             <tbody>
               <tr v-for="(s, i) in states" :key="i" class="border-b border-border/50 last:border-0">
                 <td class="px-4 py-3 font-medium">{{ s.name }}</td>
-                <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">{{ s.description }}</td>
-                <td class="px-4 py-3 text-right font-mono text-xs tabular">{{ formatValue(s.value, s.unit) }}</td>
+                <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">
+                  {{ s.description }}
+                </td>
+                <td class="px-4 py-3 text-right font-mono text-xs tabular">
+                  {{ formatValue(s.value, s.unit) }}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -453,25 +530,35 @@ async function copyTailscaleIp(ip: string) {
 
     <!-- État -->
     <section v-if="activeTab === 'status'" class="space-y-5">
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border border border-border rounded-md overflow-hidden">
+      <div
+        class="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border border border-border rounded-md overflow-hidden"
+      >
         <div class="bg-card px-5 py-4">
-          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Version</div>
+          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Version
+          </div>
           <div class="font-mono mt-1">{{ payload.device?.version || '—' }}</div>
         </div>
         <div class="bg-card px-5 py-4">
-          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Uptime</div>
+          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Uptime
+          </div>
           <div class="mt-1 tabular">
             {{ payload.device?.uptime ? Math.floor(payload.device.uptime / 3600) + 'h' : '—' }}
           </div>
         </div>
         <div class="bg-card px-5 py-4">
-          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Timezone</div>
+          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Timezone
+          </div>
           <div class="mt-1">{{ payload.device?.timezone || '—' }}</div>
         </div>
       </div>
 
       <div v-if="networkInterfaces.length">
-        <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Réseau</h2>
+        <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
+          Réseau
+        </h2>
         <div class="grid sm:grid-cols-2 gap-3">
           <div
             v-for="{ key, label, ifc } in networkInterfaces"
@@ -479,9 +566,17 @@ async function copyTailscaleIp(ip: string) {
             class="border border-border rounded-md bg-card/40 p-4 flex flex-col"
           >
             <div class="flex items-center gap-2 flex-wrap">
-              <span :class="['size-1.5 rounded-full shrink-0', ifc.connected ? 'bg-signal pulse-dot' : 'bg-muted-foreground/40']" />
+              <span
+                :class="[
+                  'size-1.5 rounded-full shrink-0',
+                  ifc.connected ? 'bg-signal pulse-dot' : 'bg-muted-foreground/40',
+                ]"
+              />
               <span class="font-medium text-sm">{{ label }}</span>
-              <span class="font-mono text-[10px] text-muted-foreground/70 uppercase tracking-wider">{{ key }}</span>
+              <span
+                class="font-mono text-[10px] text-muted-foreground/70 uppercase tracking-wider"
+                >{{ key }}</span
+              >
               <span
                 v-if="!ifc.connected"
                 class="ml-auto font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
@@ -490,16 +585,11 @@ async function copyTailscaleIp(ip: string) {
               </span>
             </div>
 
-            <dl
-              v-if="interfaceRows(ifc).length"
-              class="mt-3 space-y-1 text-xs"
-            >
-              <div
-                v-for="[k, v] in interfaceRows(ifc)"
-                :key="k"
-                class="flex items-baseline gap-3"
-              >
-                <dt class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70 shrink-0 w-[78px]">
+            <dl v-if="interfaceRows(ifc).length" class="mt-3 space-y-1 text-xs">
+              <div v-for="[k, v] in interfaceRows(ifc)" :key="k" class="flex items-baseline gap-3">
+                <dt
+                  class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70 shrink-0 w-[78px]"
+                >
                   {{ k }}
                 </dt>
                 <dd class="font-mono break-all text-foreground/90">{{ v }}</dd>
@@ -518,7 +608,15 @@ async function copyTailscaleIp(ip: string) {
                 rel="noopener noreferrer"
                 class="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-3 py-1.5 rounded-md hover:brightness-110 transition"
               >
-                <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg
+                  viewBox="0 0 24 24"
+                  class="size-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
                   <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                   <path d="M15 3h6v6" />
                   <path d="M10 14 21 3" />
@@ -538,7 +636,15 @@ async function copyTailscaleIp(ip: string) {
                 :title="vncFullUrl!"
                 class="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] border border-signal/50 text-signal px-3 py-1.5 rounded-md hover:bg-signal-soft transition"
               >
-                <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg
+                  viewBox="0 0 24 24"
+                  class="size-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
                   <rect x="2" y="4" width="20" height="14" rx="2" />
                   <path d="M8 21h8M12 18v3" />
                 </svg>
@@ -549,11 +655,17 @@ async function copyTailscaleIp(ip: string) {
                 class="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] border border-border text-foreground px-3 py-1.5 rounded-md hover:border-signal/60 hover:text-signal transition"
                 @click="copyTailscaleIp(ifc.ip!)"
               >
-                <template v-if="copiedTailscaleIp === ifc.ip">
-                  ✓ Copié
-                </template>
+                <template v-if="copiedTailscaleIp === ifc.ip"> ✓ Copié </template>
                 <template v-else>
-                  <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <svg
+                    viewBox="0 0 24 24"
+                    class="size-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
                     <rect x="9" y="9" width="13" height="13" rx="2" />
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                   </svg>
@@ -566,11 +678,17 @@ async function copyTailscaleIp(ip: string) {
       </div>
 
       <div v-if="payload.services && Object.keys(payload.services).length">
-        <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Services</h2>
+        <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
+          Services
+        </h2>
         <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
           <table class="w-full text-sm">
             <tbody>
-              <tr v-for="(svc, name) in payload.services" :key="name" class="border-b border-border/50 last:border-0">
+              <tr
+                v-for="(svc, name) in payload.services"
+                :key="name"
+                class="border-b border-border/50 last:border-0"
+              >
                 <td class="px-4 py-2.5 font-mono text-xs">{{ name }}</td>
                 <td class="px-4 py-2.5 text-right">
                   <span
@@ -596,15 +714,47 @@ async function copyTailscaleIp(ip: string) {
       </p>
 
       <div v-else class="space-y-5">
+        <!-- Ingestion endpoint block -->
+        <div class="border border-border rounded-md bg-card/40 p-5" data-testid="ingress-endpoint">
+          <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+            <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              Endpoint d'ingestion
+            </div>
+            <button
+              type="button"
+              class="font-mono text-[10px] uppercase tracking-[0.18em] border border-border px-3 py-1.5 rounded-md hover:border-signal transition"
+              @click="copyIngressUrl"
+            >
+              {{ copiedIngress ? 'copié' : 'copier' }}
+            </button>
+          </div>
+          <p class="text-sm text-muted-foreground mb-2">
+            URL de base à saisir dans la configuration de la box.
+          </p>
+          <p class="font-mono text-xs break-all">{{ ingressBaseUrl }}</p>
+          <ul class="mt-3 space-y-1">
+            <li
+              v-for="route in ingressRoutes"
+              :key="route.label"
+              class="font-mono text-[11px] text-muted-foreground/80 break-all"
+            >
+              <span class="text-muted-foreground">{{ route.label }} :</span> {{ route.url }}
+            </li>
+          </ul>
+        </div>
+
         <!-- QR intervention block -->
         <div v-if="interventionUrl" class="border border-border rounded-md bg-card/40 p-5">
           <div class="flex items-start justify-between gap-4 flex-wrap">
             <div class="flex-1 min-w-[200px]">
-              <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+              <div
+                class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2"
+              >
                 QR intervention terrain
               </div>
               <p class="text-sm text-muted-foreground mb-2">
-                À imprimer / coller sur l'équipement. Les techniciens scannent → formulaire mobile pour journaliser une intervention sans avoir besoin d'un compte.
+                À imprimer / coller sur l'équipement. Les techniciens scannent → formulaire mobile
+                pour journaliser une intervention sans avoir besoin d'un compte.
               </p>
               <p class="font-mono text-[11px] text-muted-foreground/80 break-all">
                 {{ interventionUrl }}
@@ -631,7 +781,15 @@ async function copyTailscaleIp(ip: string) {
               :title="vncFullUrl!"
               class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-3 py-1.5 rounded-md hover:brightness-110 transition"
             >
-              <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                viewBox="0 0 24 24"
+                class="size-3.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <rect x="2" y="4" width="20" height="14" rx="2" />
                 <path d="M8 21h8M12 18v3" />
               </svg>
@@ -650,7 +808,9 @@ async function copyTailscaleIp(ip: string) {
             <form class="mt-4 space-y-3" @submit.prevent="submitVnc">
               <div class="grid grid-cols-1 sm:grid-cols-[1fr_120px] gap-3">
                 <div class="space-y-1.5">
-                  <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <label
+                    class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+                  >
                     Hôte VNC (souvent l'IP Tailscale)
                   </label>
                   <input
@@ -661,7 +821,9 @@ async function copyTailscaleIp(ip: string) {
                   />
                 </div>
                 <div class="space-y-1.5">
-                  <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <label
+                    class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+                  >
                     Port
                   </label>
                   <input
@@ -708,68 +870,71 @@ async function copyTailscaleIp(ip: string) {
 
         <!-- Location block -->
         <div class="border border-border rounded-md bg-card/40 p-5">
-        <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
-          Adresse enregistrée
-        </div>
-        <div class="text-sm mb-5 break-words">
-          {{ device.address || 'Aucune adresse renseignée.' }}
-        </div>
+          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+            Adresse enregistrée
+          </div>
+          <div class="text-sm mb-5 break-words">
+            {{ device.address || 'Aucune adresse renseignée.' }}
+          </div>
 
-        <template v-if="canEditLocation">
-          <form class="space-y-3" @submit.prevent="submitAddress">
-            <div class="space-y-1.5">
-              <label
-                for="address-input"
-                class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
-              >
-                Nouvelle adresse
-              </label>
-              <input
-                id="address-input"
-                v-model="addressDraft"
-                type="text"
-                required
-                placeholder="Ex: 12 rue de la Paix, 75002 Paris"
-                class="w-full bg-transparent border-0 border-b border-border focus:border-signal focus:outline-none px-0 py-2 text-sm font-mono placeholder:text-muted-foreground/40 transition"
-              />
-            </div>
+          <template v-if="canEditLocation">
+            <form class="space-y-3" @submit.prevent="submitAddress">
+              <div class="space-y-1.5">
+                <label
+                  for="address-input"
+                  class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+                >
+                  Nouvelle adresse
+                </label>
+                <input
+                  id="address-input"
+                  v-model="addressDraft"
+                  type="text"
+                  required
+                  placeholder="Ex: 12 rue de la Paix, 75002 Paris"
+                  class="w-full bg-transparent border-0 border-b border-border focus:border-signal focus:outline-none px-0 py-2 text-sm font-mono placeholder:text-muted-foreground/40 transition"
+                />
+              </div>
 
-            <p
-              v-if="locationFeedback"
-              :class="[
-                'font-mono text-xs flex items-center gap-2',
-                locationFeedback.kind === 'success' ? 'text-signal' : 'text-offline',
-              ]"
-            >
-              <span
+              <p
+                v-if="locationFeedback"
                 :class="[
-                  'size-1.5 rounded-full',
-                  locationFeedback.kind === 'success' ? 'bg-signal' : 'bg-offline',
+                  'font-mono text-xs flex items-center gap-2',
+                  locationFeedback.kind === 'success' ? 'text-signal' : 'text-offline',
                 ]"
-              />
-              {{ locationFeedback.message }}
-            </p>
+              >
+                <span
+                  :class="[
+                    'size-1.5 rounded-full',
+                    locationFeedback.kind === 'success' ? 'bg-signal' : 'bg-offline',
+                  ]"
+                />
+                {{ locationFeedback.message }}
+              </p>
 
-            <button
-              type="submit"
-              :disabled="savingLocation"
-              class="bg-signal text-primary-foreground font-semibold px-5 py-2.5 rounded-md transition disabled:opacity-60 disabled:cursor-not-allowed hover:brightness-110"
-            >
-              <span class="font-mono text-[11px] uppercase tracking-[0.22em]">
-                <template v-if="savingLocation">
-                  <span class="blink">▍</span> enregistrement
-                </template>
-                <template v-else>Enregistrer</template>
-              </span>
-            </button>
-          </form>
-        </template>
-        <slot v-else name="config-extra" />
+              <button
+                type="submit"
+                :disabled="savingLocation"
+                class="bg-signal text-primary-foreground font-semibold px-5 py-2.5 rounded-md transition disabled:opacity-60 disabled:cursor-not-allowed hover:brightness-110"
+              >
+                <span class="font-mono text-[11px] uppercase tracking-[0.22em]">
+                  <template v-if="savingLocation">
+                    <span class="blink">▍</span> enregistrement
+                  </template>
+                  <template v-else>Enregistrer</template>
+                </span>
+              </button>
+            </form>
+          </template>
+          <slot v-else name="config-extra" />
         </div>
       </div>
     </section>
 
-    <footer v-if="expiresAt" class="pt-6 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+    <footer
+      v-if="expiresAt"
+      class="pt-6 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+    >
       Lien valide jusqu'au {{ new Date(expiresAt).toLocaleString('fr-FR') }}
     </footer>
   </div>
@@ -777,8 +942,15 @@ async function copyTailscaleIp(ip: string) {
 
 <style scoped>
 @keyframes device-halo {
-  0%, 100% { opacity: 0.4; transform: scale(0.95); }
-  50%       { opacity: 0.9; transform: scale(1.05); }
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.05);
+  }
 }
 .device-halo {
   animation: device-halo 2.8s ease-in-out infinite;
@@ -788,8 +960,14 @@ async function copyTailscaleIp(ip: string) {
 }
 
 @keyframes device-ripple {
-  0%   { opacity: 0.6; transform: scale(0.85); }
-  100% { opacity: 0;   transform: scale(1.35); }
+  0% {
+    opacity: 0.6;
+    transform: scale(0.85);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
 }
 .device-ripple {
   animation: device-ripple 2.8s ease-out infinite;
@@ -799,6 +977,9 @@ async function copyTailscaleIp(ip: string) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .device-halo, .device-ripple { animation: none; }
+  .device-halo,
+  .device-ripple {
+    animation: none;
+  }
 }
 </style>

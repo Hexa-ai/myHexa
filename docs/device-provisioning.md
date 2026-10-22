@@ -10,7 +10,9 @@ Document à destination du développeur firmware. Décrit le flux complet entre 
 > https://mlbezfyjbnjyogogqmem.supabase.co/functions/v1/device-ingress
 > ```
 >
-> (les chemins `/provision/<hostname>`, `/ingress/<hostname>/status` et `/ingress/<hostname>/report/<period>` sont inchangés).
+> Chemins : `/provision/<hostname>`, `/<hostname>/status`, `/<hostname>/report/<period>`.
+> L'ancien préfixe `/ingress/` (`/ingress/<hostname>/status`…) reste accepté.
+> L'URL de base est affichée dans l'onglet Configuration de chaque device du portail (admins).
 > Pendant la transition, l'ancienne URL n8n ci-dessous relaie vers cette fonction, le temps de mettre à jour les box.
 >
 > **Comportement réel à conserver** : `/ingress/*` répond toujours `200` (corps `{"message":"Workflow was started"}`),
