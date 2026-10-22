@@ -2,6 +2,21 @@
 
 Document à destination du développeur firmware. Décrit le flux complet entre le device et la plateforme myHexa : du premier boot (provisioning) à l'envoi récurrent du status et des rapports périodiques.
 
+> **Migration n8n → Supabase (octobre 2026).** Ces endpoints sont désormais servis par l'Edge Function
+> `device-ingress` (code : `supabase/functions/device-ingress`, SQL : migration `20261022120000_device_ingress_functions`),
+> avec exactement le même contrat. Nouvelle base d'URL :
+>
+> ```
+> https://mlbezfyjbnjyogogqmem.supabase.co/functions/v1/device-ingress
+> ```
+>
+> (les chemins `/provision/<hostname>`, `/ingress/<hostname>/status` et `/ingress/<hostname>/report/<period>` sont inchangés).
+> Pendant la transition, l'ancienne URL n8n ci-dessous relaie vers cette fonction, le temps de mettre à jour les box.
+>
+> **Comportement réel à conserver** : `/ingress/*` répond toujours `200` (corps `{"message":"Workflow was started"}`),
+> même avec un jeton inconnu — n8n le faisait aussi. Le firmware ne doit donc pas compter sur un 401/403 :
+> sinon il effacerait son jeton, se ré-enregistrerait, recevrait 410 et resterait bloqué.
+
 ---
 
 ## 1. Vue d'ensemble
