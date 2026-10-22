@@ -26,8 +26,9 @@ onMounted(async () => {
     const { data, error: getErr } = await supabase.auth.getSession()
     if (getErr) throw getErr
     if (data.session) {
-      // Le store écoute onAuthStateChange, recipient va se peupler
-      await new Promise((r) => setTimeout(r, 150))
+      // Le recipient est chargé en différé par le store : on l'attend
+      // pour calculer la bonne destination (staff ou client).
+      await auth.ensureRecipient()
       router.replace(targetPath())
       return
     }
@@ -42,7 +43,7 @@ onMounted(async () => {
         type: type as 'magiclink',
       })
       if (vErr) throw vErr
-      await new Promise((r) => setTimeout(r, 150))
+      await auth.ensureRecipient()
       router.replace(targetPath())
       return
     }

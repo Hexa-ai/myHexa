@@ -73,15 +73,43 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // Un seul chargement du recipient à la fois (connexion + événement d'auth
+  // peuvent le demander en même temps).
+  let recipientLoad: Promise<void> | null = null
+  function ensureRecipient(): Promise<void> {
+    if (!recipientLoad) {
+      recipientLoad = loadRecipient().finally(() => {
+        recipientLoad = null
+      })
+    }
+    return recipientLoad
+  }
+
   async function init() {
     const { data } = await supabase.auth.getSession()
     session.value = data.session
-    if (session.value) await loadRecipient()
-    supabase.auth.onAuthStateChange(async (event, newSession) => {
+    if (session.value) await ensureRecipient()
+    // ATTENTION : ce callback doit rester SYNCHRONE et ne jamais attendre
+    // (await) un appel Supabase.
+    //
+    // auth-js l'exécute *à l'intérieur de son verrou d'auth* et attend sa fin
+    // avant de libérer le verrou. Or toute requête Supabase commence par
+    // getSession(), qui réclame ce même verrou : un `await loadRecipient()`
+    // ici attend donc le verrou que l'on détient. Interblocage définitif, sans
+    // erreur ni trafic réseau : plus aucune requête ne part, seul un
+    // rechargement de la page répare.
+    //
+    // Déclencheur courant : au retour sur l'onglet (visibilitychange), auth-js
+    // relit la session sous verrou et émet SIGNED_IN. Le portail "se
+    // déconnectait du backend" ainsi après chaque changement d'onglet, mise en
+    // veille ou verrouillage du poste.
+    //
+    // Recommandation Supabase : différer le travail avec setTimeout(…, 0),
+    // qui s'exécute une fois le verrou libéré.
+    // https://supabase.com/docs/reference/javascript/auth-onauthstatechange
+    supabase.auth.onAuthStateChange((event, newSession) => {
+      const previousUserId = session.value?.user.id
       session.value = newSession
-      // Ne recharger le recipient que lors d'une vraie (dé)connexion ou d'un
-      // changement d'utilisateur. TOKEN_REFRESHED arrive toutes les ~30 min
-      // et déclencherait une race avec les fetches en cours.
       if (!newSession) {
         recipient.value = null
         companyName.value = null
@@ -89,8 +117,17 @@ export const useAuthStore = defineStore('auth', () => {
         actAsCompanyId.value = null
         return
       }
-      if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || !recipient.value) {
-        await loadRecipient()
+      // Ne recharger le recipient que lors d'une vraie (dé)connexion ou d'un
+      // changement d'utilisateur. TOKEN_REFRESHED arrive toutes les ~30 min,
+      // et SIGNED_IN est réémis à chaque retour sur l'onglet pour le même
+      // utilisateur : inutile de recharger dans ces cas-là.
+      const sameUser = previousUserId === newSession.user.id && recipient.value !== null
+      if (
+        event === 'USER_UPDATED' ||
+        !recipient.value ||
+        (event === 'SIGNED_IN' && !sameUser)
+      ) {
+        setTimeout(() => void ensureRecipient(), 0)
       }
     })
   }
@@ -98,12 +135,17 @@ export const useAuthStore = defineStore('auth', () => {
   async function signIn(email: string, password: string) {
     loading.value = true
     error.value = null
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password })
-    loading.value = false
+    const { data, error: err } = await supabase.auth.signInWithPassword({ email, password })
     if (err) {
+      loading.value = false
       error.value = err.message
       return false
     }
+    // Hors du verrou d'auth : on peut attendre le recipient avant de rendre la
+    // main, la page de connexion calcule sa destination avec.
+    session.value = data.session
+    await ensureRecipient()
+    loading.value = false
     return true
   }
 
@@ -174,6 +216,7 @@ export const useAuthStore = defineStore('auth', () => {
     setActAsCompany,
     effectiveCompanyId,
     init,
+    ensureRecipient,
     signIn,
     signOut,
     requestPasswordReset,
