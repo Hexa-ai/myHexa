@@ -27,9 +27,7 @@ onMounted(() => {
 async function handleSubmit() {
   const ok = await auth.signIn(email.value, password.value)
   if (!ok) return
-  // Le recipient est chargé async via onAuthStateChange — petit délai pour
-  // laisser le store se peupler avant de calculer la destination.
-  await new Promise((r) => setTimeout(r, 150))
+  // signIn() rend la main une fois le recipient chargé.
   const redirect = (route.query.redirect as string) || defaultRoute()
   router.push(redirect)
 }
