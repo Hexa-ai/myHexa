@@ -83,6 +83,17 @@ check("weekly avec quota 0 -> 200 mais rien écrit", s == 200 and sql(f"select c
 s, b = post("/ingress/fake-box-01/report/monthly", daily("01/09/2026", "01/10/2026", 6), TOKEN); check("période inconnue -> 200, ignorée", s == 200)
 s, b = post("/autre/chose", {}); check("route inconnue -> 404", s == 404)
 
+print("routes courtes (sans le préfixe /ingress)")
+status["timestamp"] = "2026-10-22T10:02:00+02:00"
+s, b = post("/fake-box-01/status", status, TOKEN); check("/<host>/status -> 200", s == 200 and b == {"message": "Workflow was started"}, (s, b))
+r = sql(f"select payload->>'timestamp' ts from reports where device_id='{D1}' and type='status'")[0]
+check("/<host>/status -> écrit", r["ts"].endswith("10:02:00+02:00"), r)
+sql("update companies set max_daily_reports = 3 where id='00000000-0000-0000-0000-00000000e2e0'")
+s, b = post("/fake-box-01/report/daily", daily("22/10/2026", "23/10/2026", 7), TOKEN); check("/<host>/report/daily -> 200", s == 200, (s, b))
+check("/<host>/report/daily -> écrit", sql(f"select count(*) n from reports where device_id='{D1}' and type='daily' and period_start='2026-10-22'")[0]["n"] == 1)
+s, b = post("/fake-box-01", {}); check("/<host> seul -> 404", s == 404)
+sql("update companies set max_daily_reports = 2 where id='00000000-0000-0000-0000-00000000e2e0'")
+
 print("analyse IA (analyze-report déclenché en arrière-plan)")
 time.sleep(8)
 r = sql(f"select count(*) n from device_period_stats where device_id='{D1}'")[0]
