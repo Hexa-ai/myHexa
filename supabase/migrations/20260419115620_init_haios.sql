@@ -1,3 +1,6 @@
+-- Migration appliquée en production le 2026-04-19 (version 20260419115620), recopiée telle quelle depuis
+-- supabase_migrations.schema_migrations de la prod lors du réalignement du 2026-10-22.
+
 -- ================================================================
 -- Init HaiOS schema (Companies, Recipients, Devices, Reports)
 -- ================================================================
@@ -68,6 +71,7 @@ CREATE TABLE devices (
 );
 
 CREATE INDEX ON devices (company_id);
+
 CREATE INDEX ON devices (token);
 
 CREATE TRIGGER devices_updated_at BEFORE UPDATE ON devices
@@ -86,6 +90,9 @@ CREATE INDEX ON reports (device_id, type, received_at DESC);
 
 -- 7. RLS (activé partout, 0 policy → tout bloqué sauf service_role)
 ALTER TABLE companies  ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE recipients ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE devices    ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE reports    ENABLE ROW LEVEL SECURITY;

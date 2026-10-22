@@ -1,13 +1,8 @@
 // Edge Function: cron-connectivity-alerts (modèle unifié)
-// Triggered every 15min by pg_cron via net.http_post. CRON_SECRET header.
-// Plus de tokens : on génère un magic link Supabase Auth par recipient.
-//
-// Flow :
-//   1. Lire les states devices + dernier received_at
-//   2. Compute transitions lost↔recovered (seuil 1h)
-//   3. Pour chaque transition : trouver les recipients qui ont accès au
-//      device (compagnie native OU shared_devices), générer un magic link,
-//      envoyer mail, upsert connectivity_alerts.
+// Code repris tel quel de la version déployée en prod (v12 du 2026-05-21), plus récente que le dépôt :
+// états d'alerte lus dans connectivity_alerts par une requête séparée (plus de jointure embarquée).
+// Réalignement du 2026-10-22.
+// Magic link redirige vers /auth/callback?next=/admin/devices/:id
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { sendMail, closeMailer } from '../_shared/mailer.ts'
@@ -20,17 +15,69 @@ const LOST_THRESHOLD_MS = 60 * 60 * 1000
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } })
 
-interface DeviceState { id: string; company_id: string; name: string | null; last_seen_at: string | null; last_notified_state: 'lost' | 'recovered' | null }
-interface Transition { device_id: string; hostname: string; company_id: string; last_seen_at: string; transition: 'lost' | 'recovered'; offline_minutes: number }
-interface Recipient { id: string; contact_email: string; name: string | null; company_id: string | null; restrict_to_devices: string[] | null; shared_devices: string[] | null; auth_user_id: string }
+interface DeviceState {
+  id: string
+  company_id: string
+  name: string | null
+  last_seen_at: string | null
+  last_notified_state: 'lost' | 'recovered' | null
+}
+interface Transition {
+  device_id: string
+  hostname: string
+  company_id: string
+  last_seen_at: string
+  transition: 'lost' | 'recovered'
+  offline_minutes: number
+}
+interface Recipient {
+  id: string
+  contact_email: string
+  name: string | null
+  company_id: string | null
+  restrict_to_devices: string[] | null
+  shared_devices: string[] | null
+  auth_user_id: string
+}
 
-function escapeHtml(s: string): string { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!)) }
-function formatDateTime(iso: string): string { const d = new Date(iso); if (Number.isNaN(d.getTime())) return '—'; return d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' }) }
-function formatDuration(minutes: number): string { if (minutes < 60) return `${minutes} min`; const h = Math.floor(minutes / 60); const m = minutes % 60; if (h < 24) return m ? `${h}h ${m}min` : `${h}h`; const d = Math.floor(h / 24); const rh = h % 24; return rh ? `${d}j ${rh}h` : `${d}j` }
+function escapeHtml(s: string): string {
+  return String(s ?? '').replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+  )
+}
+function formatDateTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/Paris',
+  })
+}
+function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (h < 24) return m ? `${h}h ${m}min` : `${h}h`
+  const d = Math.floor(h / 24)
+  const rh = h % 24
+  return rh ? `${d}j ${rh}h` : `${d}j`
+}
 
 async function makeMagicLink(email: string, redirectTo: string): Promise<string | null> {
-  const { data, error } = await admin.auth.admin.generateLink({ type: 'magiclink', email, options: { redirectTo } })
-  if (error) { console.error('[connectivity-alerts] generateLink failed for', email, error.message); return null }
+  const { data, error } = await admin.auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+    options: { redirectTo },
+  })
+  if (error) {
+    console.error('[connectivity-alerts] generateLink failed for', email, error.message)
+    return null
+  }
   return data?.properties?.action_link ?? null
 }
 
@@ -57,18 +104,46 @@ Deno.serve(async (req) => {
   if (!CRON_SECRET || provided !== CRON_SECRET) return new Response('Unauthorized', { status: 401 })
   const startedAt = Date.now()
 
-  const { data: devs, error: devErr } = await admin.from('devices').select('id, company_id, name, connectivity_alerts(state)')
-  if (devErr) { console.error('[connectivity-alerts] load failed', devErr); return new Response(JSON.stringify({ ok: false, error: devErr.message }), { status: 500 }) }
+  const { data: devs, error: devErr } = await admin.from('devices').select('id, company_id, name')
+  if (devErr) {
+    console.error('[connectivity-alerts] load devices failed', devErr)
+    return new Response(JSON.stringify({ ok: false, error: devErr.message }), { status: 500 })
+  }
   const ids = (devs ?? []).map((d) => d.id)
-  const { data: reps } = await admin.from('reports').select('device_id, received_at').eq('type', 'status').in('device_id', ids).order('received_at', { ascending: false })
+  if (ids.length === 0)
+    return new Response(
+      JSON.stringify({ ok: true, transitions: 0, duration_ms: Date.now() - startedAt }),
+      { headers: { 'Content-Type': 'application/json' } },
+    )
+
+  const { data: alerts, error: alertsErr } = await admin
+    .from('connectivity_alerts')
+    .select('device_id, state')
+    .in('device_id', ids)
+  if (alertsErr) {
+    console.error('[connectivity-alerts] load alerts failed', alertsErr)
+    return new Response(JSON.stringify({ ok: false, error: alertsErr.message }), { status: 500 })
+  }
+  const stateById = new Map<string, 'lost' | 'recovered'>()
+  for (const a of alerts ?? [])
+    stateById.set(a.device_id as string, a.state as 'lost' | 'recovered')
+
+  const { data: reps } = await admin
+    .from('reports')
+    .select('device_id, received_at')
+    .eq('type', 'status')
+    .in('device_id', ids)
+    .order('received_at', { ascending: false })
   const lastSeenById = new Map<string, string>()
-  for (const r of reps ?? []) { if (!lastSeenById.has(r.device_id)) lastSeenById.set(r.device_id, r.received_at as string) }
+  for (const r of reps ?? []) {
+    if (!lastSeenById.has(r.device_id)) lastSeenById.set(r.device_id, r.received_at as string)
+  }
   const deviceStates: DeviceState[] = (devs ?? []).map((d: any) => ({
     id: d.id,
     company_id: d.company_id,
     name: d.name,
     last_seen_at: lastSeenById.get(d.id) ?? null,
-    last_notified_state: (d.connectivity_alerts?.[0]?.state ?? null) as 'lost' | 'recovered' | null,
+    last_notified_state: stateById.get(d.id) ?? null,
   }))
 
   const now = Date.now()
@@ -81,29 +156,31 @@ Deno.serve(async (req) => {
     let next: 'lost' | 'recovered' | null = null
     if (isLost && lastState !== 'lost') next = 'lost'
     else if (!isLost && lastState === 'lost') next = 'recovered'
-    if (next) transitions.push({
-      device_id: d.id,
-      hostname: d.name ?? d.id,
-      company_id: d.company_id,
-      last_seen_at: d.last_seen_at,
-      transition: next,
-      offline_minutes: Math.floor((now - lastSeenMs) / 60000),
-    })
+    if (next)
+      transitions.push({
+        device_id: d.id,
+        hostname: d.name ?? d.id,
+        company_id: d.company_id,
+        last_seen_at: d.last_seen_at,
+        transition: next,
+        offline_minutes: Math.floor((now - lastSeenMs) / 60000),
+      })
   }
 
-  if (transitions.length === 0) {
-    return new Response(JSON.stringify({ ok: true, transitions: 0, duration_ms: Date.now() - startedAt }), { headers: { 'Content-Type': 'application/json' } })
-  }
+  if (transitions.length === 0)
+    return new Response(
+      JSON.stringify({ ok: true, transitions: 0, duration_ms: Date.now() - startedAt }),
+      { headers: { 'Content-Type': 'application/json' } },
+    )
 
-  let mailsSent = 0
-  let mailsFailed = 0
+  let mailsSent = 0,
+    mailsFailed = 0
   for (const t of transitions) {
-    // Tous les recipients dont l'accès couvre ce device :
-    //   (company_id = t.company_id ET (restrict_to_devices NULL OR includes t.device_id))
-    //   OR t.device_id ∈ shared_devices
     const { data: recipients, error: recErr } = await admin
       .from('recipients')
-      .select('id, contact_email, name, company_id, restrict_to_devices, shared_devices, auth_user_id')
+      .select(
+        'id, contact_email, name, company_id, restrict_to_devices, shared_devices, auth_user_id',
+      )
       .not('contact_email', 'is', null)
     if (recErr) {
       console.error('[connectivity-alerts] recipients fetch failed', recErr)
@@ -118,10 +195,12 @@ Deno.serve(async (req) => {
         const shared = (r.shared_devices ?? []).includes(t.device_id)
         return inCompany || shared
       })
-
     for (const r of targets) {
       const targetPath = `/admin/devices/${t.device_id}`
-      const link = await makeMagicLink(r.contact_email, `${APP_URL}/auth/callback?next=${encodeURIComponent(targetPath)}`)
+      const link = await makeMagicLink(
+        r.contact_email,
+        `${APP_URL}/auth/callback?next=${encodeURIComponent(targetPath)}`,
+      )
       const viewUrl = link ?? `${APP_URL}${targetPath}`
       const { subject, html } = buildEmail(t, r, viewUrl)
       try {
@@ -130,10 +209,13 @@ Deno.serve(async (req) => {
         console.log('[connectivity-alerts] sent', t.transition, 'to', r.contact_email)
       } catch (e) {
         mailsFailed++
-        console.error('[connectivity-alerts] sendMail failed for', r.contact_email, e instanceof Error ? e.message : String(e))
+        console.error(
+          '[connectivity-alerts] sendMail failed for',
+          r.contact_email,
+          e instanceof Error ? e.message : String(e),
+        )
       }
     }
-
     const { error: upErr } = await admin
       .from('connectivity_alerts')
       .upsert({
@@ -143,13 +225,15 @@ Deno.serve(async (req) => {
       })
     if (upErr) console.error('[connectivity-alerts] upsert state failed', upErr)
   }
-
   await closeMailer()
-  return new Response(JSON.stringify({
-    ok: true,
-    transitions: transitions.length,
-    mails_sent: mailsSent,
-    mails_failed: mailsFailed,
-    duration_ms: Date.now() - startedAt,
-  }), { headers: { 'Content-Type': 'application/json' } })
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      transitions: transitions.length,
+      mails_sent: mailsSent,
+      mails_failed: mailsFailed,
+      duration_ms: Date.now() - startedAt,
+    }),
+    { headers: { 'Content-Type': 'application/json' } },
+  )
 })

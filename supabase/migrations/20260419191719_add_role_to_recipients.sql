@@ -1,3 +1,6 @@
+-- Migration appliquée en production le 2026-04-19 (version 20260419191719), recopiée telle quelle depuis
+-- supabase_migrations.schema_migrations de la prod lors du réalignement du 2026-10-22.
+
 -- Add role column to recipients (viewer / admin)
 -- Viewers can read the Report View page but can't edit the device address.
 -- Admins have full access.
