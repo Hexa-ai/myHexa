@@ -13,6 +13,7 @@ import FleetMapView from '@/views/admin/FleetMapView.vue'
 import AlarmsView from '@/views/admin/AlarmsView.vue'
 import InterventionsView from '@/views/admin/InterventionsView.vue'
 import RecipientsView from '@/views/admin/RecipientsView.vue'
+import AlarmRecipientsView from '@/views/admin/AlarmRecipientsView.vue'
 import StaffCompaniesView from '@/views/admin/staff/CompaniesView.vue'
 import StaffCompanyDetailView from '@/views/admin/staff/CompanyDetailView.vue'
 import StaffDevicesView from '@/views/admin/staff/DevicesView.vue'
@@ -56,6 +57,7 @@ export const router = createRouter({
           component: RecipientsView,
           beforeEnter: requireAdmin,
         },
+        { path: 'alarm-recipients', name: 'admin-alarm-recipients', component: AlarmRecipientsView },
         { path: 'staff/companies', name: 'staff-companies', component: StaffCompaniesView, beforeEnter: requireStaff },
         { path: 'staff/companies/:id', name: 'staff-company-detail', component: StaffCompanyDetailView, beforeEnter: requireStaff },
         { path: 'staff/devices', name: 'staff-devices', component: StaffDevicesView, beforeEnter: requireStaff },

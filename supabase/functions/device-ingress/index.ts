@@ -123,7 +123,7 @@ async function ingest(
   req: Request,
   hostname: string,
   period: string,
-): Promise<void> {
+): Promise<unknown> {
   const token = bearer(req);
   const payload = await readJson(req);
   if (!payload) {
@@ -138,7 +138,23 @@ async function ingest(
     });
     if (error) console.error("ingest_status", hostname, error.message);
     else if (!data) console.warn("ingress status: jeton inconnu", hostname);
-    return;
+    // Pilotage à distance : la box n'envoie le bloc remote que si « Enable remote management » est actif.
+    // Sans bloc remote -> réponse historique (les anciens firmwares ignorent le corps).
+    const remote = payload.remote;
+    if (error || !data || !remote || typeof remote !== "object") return;
+    const device = (payload.device ?? {}) as Record<string, unknown>;
+    const { data: commands, error: rErr } = await admin.rpc("ingest_remote", {
+      p_token: token,
+      p_remote: remote,
+      p_running_version: typeof device.version === "string" ? device.version : null,
+    });
+    if (rErr) {
+      console.error("ingest_remote", hostname, rErr.message);
+      return { commands: [] };
+    }
+    const list = Array.isArray(commands) ? commands : [];
+    if (list.length) console.log("remote: commandes servies", hostname, list.map((c) => c.type).join(","));
+    return { commands: list };
   }
 
   if (period !== "daily" && period !== "weekly") {
@@ -188,7 +204,8 @@ Deno.serve(async (req) => {
     if (r.length === 3 && r[1] === "report") period = r[2];
     if (period) {
       try {
-        await ingest(req, hostname, period);
+        const body = await ingest(req, hostname, period);
+        if (body) return json(200, body); // objet JSON (pas un tableau), cf. doc firmware piège n°1
       } catch (e) {
         console.error("ingress", hostname, period, String(e));
       }

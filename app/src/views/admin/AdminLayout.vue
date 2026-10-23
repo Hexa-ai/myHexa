@@ -53,6 +53,7 @@ const breadcrumb = computed(() => {
     'admin-alarms': 'alarms',
     'admin-interventions': 'interventions',
     'admin-recipients': 'destinataires',
+    'admin-alarm-recipients': "destinataires d'alarme",
     'staff-companies': 'staff / companies',
     'staff-company-detail': 'staff / company',
     'staff-devices': 'staff / devices',
@@ -80,6 +81,7 @@ const urgentDotClass = computed(() => {
 })
 const isInterventions = computed(() => route.name === 'admin-interventions')
 const isRecipients = computed(() => route.name === 'admin-recipients')
+const isAlarmRecipients = computed(() => route.name === 'admin-alarm-recipients')
 
 const sidebarOpen = ref(false)
 function closeSidebar() { sidebarOpen.value = false }
@@ -90,6 +92,7 @@ function goMap() { router.push({ name: 'admin-map' }); closeSidebar() }
 function goAlarms() { router.push({ name: 'admin-alarms' }); closeSidebar() }
 function goInterventions() { router.push({ name: 'admin-interventions' }); closeSidebar() }
 function goRecipients() { router.push({ name: 'admin-recipients' }); closeSidebar() }
+function goAlarmRecipients() { router.push({ name: 'admin-alarm-recipients' }); closeSidebar() }
 function goStaff() { router.push({ name: 'staff-companies' }); closeSidebar() }
 const isDevices = computed(() => route.name === 'admin-devices' || route.name === 'admin-device-detail' || route.name === 'admin-device-periodic')
 const isMap = computed(() => route.name === 'admin-map')
@@ -269,6 +272,28 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
           </svg>
           <span class="tracking-tight">Destinataires</span>
           <span v-if="isRecipients" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
+        </button>
+        <button
+          :class="[
+            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
+            isAlarmRecipients
+              ? 'text-foreground bg-secondary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+          ]"
+          @click="goAlarmRecipients"
+        >
+          <span
+            :class="[
+              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
+              isAlarmRecipients ? 'bg-signal' : 'bg-transparent',
+            ]"
+          />
+          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+          </svg>
+          <span class="tracking-tight">Alertes · destinataires</span>
+          <span v-if="isAlarmRecipients" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
         </button>
         <div class="px-3 py-2.5 text-sm text-muted-foreground/40 cursor-not-allowed select-none flex items-center gap-3">
           <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
