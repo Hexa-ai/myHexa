@@ -3,6 +3,7 @@
 import { computed, ref } from 'vue'
 import { LEVELS, channelLabel, type AlarmConfig, type Device } from '@/composables/useAlarmConfig'
 import EscalationEditor from './EscalationEditor.vue'
+import AlarmPreview from './AlarmPreview.vue'
 
 const props = defineProps<{ device: Device; cfg: AlarmConfig; canEdit: boolean }>()
 const emit = defineEmits<{ close: []; copy: [Device]; changed: []; person: [string] }>()
@@ -200,6 +201,8 @@ const direct = (r: ReturnType<AlarmConfig['receives']>, filters: Record<string, 
           </ul>
         </div>
       </section>
+
+      <AlarmPreview :device="device" :cfg="cfg" />
 
       <EscalationEditor :device="device" :cfg="cfg" :can-edit="canEdit" />
     </aside>

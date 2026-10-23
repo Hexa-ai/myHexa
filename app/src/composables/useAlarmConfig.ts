@@ -28,6 +28,7 @@ export interface Sub {
   box_recipient_id: string
   filters: Filters
   channels_override: Channels | null
+  schedule_days_override: string[] | null
 }
 export interface BoxRecipient {
   id: string
@@ -102,7 +103,8 @@ export const channelLabel = (ch: Channels | null | undefined) =>
 
 const PERSON_COLS =
   'id, company_id, name, contact_email, phone, role, auth_user_id, portal_access, alarm_enabled, alarm_channels, alarm_schedule_days, restrict_to_devices'
-const SUB_COLS = 'recipient_id, device_id, box_recipient_id, filters, channels_override'
+const SUB_COLS =
+  'recipient_id, device_id, box_recipient_id, filters, channels_override, schedule_days_override'
 export const same = (a: unknown, b: unknown) =>
   JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b))
 function sortKeys(v: unknown): unknown {
@@ -464,14 +466,12 @@ export function useAlarmConfig() {
           .from('recipients')
           .update(row as never)
           .eq('id', p.id)
-      : await supabase
-          .from('recipients')
-          .insert({
-            ...row,
-            company_id: p.company_id,
-            role: 'viewer',
-            portal_access: false,
-          } as never)
+      : await supabase.from('recipients').insert({
+          ...row,
+          company_id: p.company_id,
+          role: 'viewer',
+          portal_access: false,
+        } as never)
     if (error) return (fail(error), false)
     setFlash(`${alarm.name} enregistré`)
     return true

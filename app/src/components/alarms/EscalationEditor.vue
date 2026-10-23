@@ -205,7 +205,7 @@ async function save() {
               class="flex-1 min-w-[120px] border border-border bg-secondary/30 rounded px-2 py-1 text-sm"
             />
             <label class="text-xs flex items-center gap-1">
-              {{ i === 0 ? 'après' : 'puis après' }}
+              attendre
               <input
                 :value="minutes(lv.delay_seconds)"
                 :disabled="!canEdit"
