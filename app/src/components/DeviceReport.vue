@@ -57,6 +57,7 @@ const props = withDefaults(
     vncPort?: number | null
     canEditVnc?: boolean
     periodicHref?: ((type: 'daily' | 'weekly') => string) | null
+    historyHref?: string | null
     interventionUrl?: string | null
   }>(),
   {
@@ -67,6 +68,7 @@ const props = withDefaults(
     vncPort: 5900,
     canEditVnc: false,
     periodicHref: null,
+    historyHref: null,
     interventionUrl: null,
   },
 )
@@ -403,6 +405,14 @@ async function copyTailscaleIp(ip: string) {
           class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] border border-border text-foreground px-3 py-1.5 rounded-md hover:border-signal/60 hover:text-signal transition"
         >
           Hebdomadaire
+        </a>
+        <a
+          v-if="historyHref"
+          :href="historyHref"
+          data-testid="history-link"
+          class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] border border-signal/50 text-signal px-3 py-1.5 rounded-md hover:bg-signal/10 transition"
+        >
+          Historique
         </a>
       </div>
     </div>

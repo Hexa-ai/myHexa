@@ -405,3 +405,6 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # Point d entree des box HAI-P200 : le Bearer est le jeton de la box, pas un JWT Supabase.
 [functions.device-ingress]
 verify_jwt = false
+
+[functions.ts-archive]
+verify_jwt = false

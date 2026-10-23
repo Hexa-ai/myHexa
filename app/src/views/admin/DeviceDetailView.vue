@@ -379,6 +379,7 @@ async function submitShare() {
       :vnc-host="device.vnc_host"
       :vnc-port="device.vnc_port"
       :periodic-href="(t) => router.resolve({ name: 'admin-device-periodic', params: { id: device!.id }, query: { type: t } }).href"
+      :history-href="router.resolve({ name: 'admin-device-history', params: { id: device!.id } }).href"
       :intervention-url="interventionUrl"
       @save-location="onSaveLocation"
       @save-vnc="onSaveVnc"

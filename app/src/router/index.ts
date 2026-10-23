@@ -49,6 +49,7 @@ export const router = createRouter({
         { path: 'devices', name: 'admin-devices', component: DevicesView },
         { path: 'devices/:id', name: 'admin-device-detail', component: DeviceDetailView },
         { path: 'devices/:id/periodic', name: 'admin-device-periodic', component: DevicePeriodicView },
+        { path: 'devices/:id/history', name: 'admin-device-history', component: () => import('@/views/admin/DeviceHistoryView.vue') },
         { path: 'map', name: 'admin-map', component: FleetMapView },
         { path: 'alarms', name: 'admin-alarms', component: AlarmsView },
         { path: 'interventions', name: 'admin-interventions', component: InterventionsView },
