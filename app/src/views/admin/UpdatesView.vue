@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// PROTOTYPE — mise à jour du firmware des box à distance (staff Hexa-AI).
+// PROTOTYPE — mise à jour du firmware des box à distance : admins de l'entreprise + staff Hexa-AI.
 // Firmware >= 1.3.7, commande run_update (docs/remote-commands.md) : la box télécharge le paquet,
 // l'installe puis redémarre ; 3 acquittements espacés d'un push (~30 min), 1 à 2 h au total.
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -40,6 +40,12 @@ interface UState {
 }
 
 const auth = useAuthStore()
+// le client gère ses mises à jour (admin de l'entreprise) ; le staff voit tout le parc, ou l'entreprise « vue en tant que »
+const canAct = computed(() => auth.recipient?.role === 'admin' || auth.isHexaStaffAdmin)
+const scopeCompany = computed(
+  () => (auth.isHexaStaff ? auth.actAsCompanyId : auth.companyId) ?? null,
+)
+const fleetView = computed(() => auth.isHexaStaff && !scopeCompany.value)
 const { companies, fetch: fetchCompanies } = useStaffCompanies()
 const boxes = ref<Box[]>([])
 const cmds = ref<Cmd[]>([])
@@ -183,16 +189,20 @@ const TONE: Record<Tone, string> = {
 const stale = (b: Box) =>
   !!b.remote_seen_at && Date.now() - new Date(b.remote_seen_at).getTime() > 2 * 3600e3
 
+const inScope = (b: Box) =>
+  scopeCompany.value
+    ? b.company_id === scopeCompany.value
+    : filterCompany.value === 'all' || b.company_id === filterCompany.value
 const rows = computed(() =>
   boxes.value
-    .filter((b) => filterCompany.value === 'all' || b.company_id === filterCompany.value)
+
+    .filter(inScope)
     .map((b) => ({ b, s: state(b) }))
     .filter((r) => !onlyTodo.value || ['busy', 'reboot', 'available'].includes(r.s.key)),
 )
 const counts = computed(() => {
   const n = { available: 0, busy: 0, reboot: 0, uptodate: 0, none: 0 }
-  for (const b of boxes.value)
-    if (filterCompany.value === 'all' || b.company_id === filterCompany.value) n[state(b).key]++
+  for (const b of boxes.value) if (inScope(b)) n[state(b).key]++
   return n
 })
 const selectable = computed(() =>
@@ -240,7 +250,7 @@ async function cancel(c: Cmd) {
 
 let timer: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
-  fetchCompanies()
+  if (auth.isHexaStaff) fetchCompanies()
   load()
   timer = setInterval(load, 60_000)
 })
@@ -266,6 +276,7 @@ onBeforeUnmount(() => clearInterval(timer))
 
     <div class="flex flex-wrap items-center gap-2 text-sm">
       <select
+        v-if="fleetView"
         v-model="filterCompany"
         class="bg-card border border-border rounded-md px-3 py-1.5 text-sm w-full sm:w-auto"
       >
@@ -281,13 +292,13 @@ onBeforeUnmount(() => clearInterval(timer))
       </span>
       <span v-if="loading" class="text-xs text-muted-foreground">Chargement…</span>
     </div>
+    <p v-if="!canAct" class="text-xs text-muted-foreground" data-testid="update-readonly">
+      Seul un administrateur de votre entreprise peut lancer une mise à jour.
+    </p>
     <p v-if="error" class="text-sm text-offline">{{ error }}</p>
     <p v-if="flash" class="text-sm text-primary" data-testid="update-flash">{{ flash }}</p>
 
-    <div
-      v-if="auth.isHexaStaffAdmin && selectable.length"
-      class="flex flex-wrap items-center gap-2 text-sm"
-    >
+    <div v-if="canAct && selectable.length" class="flex flex-wrap items-center gap-2 text-sm">
       <button
         class="text-xs text-muted-foreground hover:text-signal"
         @click="selected = selected.length === selectable.length ? [] : [...selectable]"
@@ -312,7 +323,7 @@ onBeforeUnmount(() => clearInterval(timer))
         data-testid="update-row"
       >
         <input
-          v-if="auth.isHexaStaffAdmin"
+          v-if="canAct"
           v-model="selected"
           type="checkbox"
           :value="b.id"
@@ -322,7 +333,7 @@ onBeforeUnmount(() => clearInterval(timer))
         />
         <div class="min-w-0 flex-1 sm:flex-none sm:w-64">
           <div class="text-sm font-medium break-words">{{ b.name }}</div>
-          <div class="text-[11px] text-muted-foreground">
+          <div v-if="fleetView" class="text-[11px] text-muted-foreground">
             {{ companyName.get(b.company_id) ?? '—' }}
           </div>
         </div>
@@ -345,7 +356,7 @@ onBeforeUnmount(() => clearInterval(timer))
             pas de nouvelles de la box depuis {{ ago(b.remote_seen_at).replace('il y a ', '') }}
           </div>
         </div>
-        <div v-if="auth.isHexaStaffAdmin" class="flex gap-2 shrink-0 ml-auto">
+        <div v-if="canAct" class="flex gap-2 shrink-0 ml-auto">
           <button
             v-if="s.key === 'available'"
             class="px-2.5 py-1 text-xs border border-signal/60 text-signal rounded-md hover:bg-signal/10"
@@ -370,7 +381,11 @@ onBeforeUnmount(() => clearInterval(timer))
         </div>
       </li>
       <li v-if="!rows.length && !loading" class="px-4 py-3 text-sm text-muted-foreground">
-        {{ onlyTodo ? 'Rien à faire : toutes les box pilotables sont à jour.' : 'Aucune box.' }}
+        {{
+          onlyTodo
+            ? 'Rien à faire : toutes les box pilotables à distance sont à jour.'
+            : 'Aucune box.'
+        }}
       </li>
     </ul>
 

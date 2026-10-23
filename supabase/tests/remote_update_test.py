@@ -68,10 +68,32 @@ print("droits")
 viewer = sql("""select r.auth_user_id u from recipients r join companies c on c.id=r.company_id
   where r.auth_user_id is not null and r.role='admin' and not c.is_hexa_internal
   and not exists (select 1 from recipients x join companies y on y.id=x.company_id where x.auth_user_id=r.auth_user_id and y.is_hexa_internal) limit 1""")
-if viewer:
-    r = rpc(f"queue_run_update('{D1}')", viewer[0]["u"])
-    check("admin client : interdit (staff Hexa-AI seulement)", "forbidden" in json.dumps(r), r)
-r = sql(f"select count(*) n from device_commands where device_id='{D1}'")
+UY = sql("select id from devices where name='UY10-CCBS'")[0]["id"]
+SERPOL = "4a15fe2f-31df-43f4-98e1-a058c25defd7"
+adm = sql(f"""select r.auth_user_id u from recipients r where r.company_id='{SERPOL}' and r.role='admin' and r.auth_user_id is not null
+  and not exists (select 1 from recipients x join companies y on y.id=x.company_id where x.auth_user_id=r.auth_user_id and y.is_hexa_internal) limit 1""")
+vw = sql(f"select auth_user_id u from recipients where company_id='{SERPOL}' and role<>'admin' and auth_user_id is not null limit 1")
+if adm:
+    r = rpc(f"queue_run_update('{D1}')", adm[0]["u"])
+    check("admin client : interdit sur la box d'une autre entreprise", "forbidden" in json.dumps(r), r)
+    uy0 = sql(f"select candidate_version, reboot_required, update_running, remote_seen_at from devices where id='{UY}'")[0]
+    sql(f"update devices set candidate_version='9.9.9', reboot_required=false, update_running=false, remote_seen_at=coalesce(remote_seen_at, now()) where id='{UY}'")
+    sql(f"delete from device_commands where device_id='{UY}' and type in ('run_update','reboot')")
+    r = rpc(f"queue_run_update('{UY}')", adm[0]["u"])
+    check("admin client : peut mettre à jour sa propre box", r.get("status") == "queued", r)
+    r2 = rpc(f"cancel_device_command('{r.get('id')}')", adm[0]["u"])
+    check("admin client : peut annuler sa demande", r2.get("status") == "cancelled", r2)
+    if vw:
+        r = rpc(f"queue_run_update('{UY}')", vw[0]["u"])
+        check("lecteur client : interdit", "forbidden" in json.dumps(r), r)
+        r = rpc(f"queue_reboot('{UY}')", vw[0]["u"])
+        check("lecteur client : redémarrage interdit", "forbidden" in json.dumps(r), r)
+    sql(f"delete from device_commands where device_id='{UY}' and type in ('run_update','reboot')")
+    sets = ", ".join(f"{k}={'null' if v is None else repr(v) if not isinstance(v, bool) else str(v).lower()}" for k, v in uy0.items())
+    sql(f"update devices set {sets} where id='{UY}'")
+else:
+    print("  (pas d'admin Serpol non-staff sur le test)")
+r = sql(f"select count(*) n from device_commands where device_id='{D1}' and state <> 'cancelled'")
 check("aucune commande créée par les refus", r[0]["n"] == 0, r)
 
 print("cycle complet run_update")

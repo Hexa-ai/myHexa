@@ -4,7 +4,8 @@
 --    « installed, waiting for reboot », ok « 1.3.6-i12 -> 1.3.7-i3 »), ~1 à 2 h au total ;
 --  * pas de downgrade ; refusé si une installation tourne, si un reboot est attendu, ou < 1 h après la précédente ;
 --  * reboot {delay_seconds 5..300} : refusé pendant une installation, 1 par heure.
--- Réservé au staff Hexa-AI admin : une mise à jour redémarre la box (supervision coupée quelques minutes).
+-- Autorisé aux admins de l'entreprise de la box et au staff Hexa-AI admin (can_manage_company) ;
+-- une mise à jour redémarre la box (supervision coupée quelques minutes).
 
 alter table public.devices add column if not exists update_running boolean;
 
@@ -70,10 +71,9 @@ create or replace function public.queue_run_update(p_device uuid, p_version text
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare d record; v_cmd text; v_recent timestamptz;
 begin
-  if not is_hexa_staff_admin() then raise exception 'forbidden'; end if;
-  select id, name, remote_seen_at, pkg_version, running_version, candidate_version, reboot_required, update_running
+  select id, name, company_id, remote_seen_at, pkg_version, running_version, candidate_version, reboot_required, update_running
     into d from devices where id = p_device;
-  if d.id is null then raise exception 'not found'; end if;
+  if d.id is null or not can_manage_company(d.company_id) then raise exception 'forbidden'; end if;
   if d.remote_seen_at is null then
     return jsonb_build_object('status', 'refused', 'detail', 'box non pilotable : firmware antérieur à 1.3.7 ou pilotage à distance non activé (mise à jour sur site)');
   end if;
@@ -108,9 +108,8 @@ create or replace function public.queue_reboot(p_device uuid, p_delay int defaul
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare d record; v_cmd text;
 begin
-  if not is_hexa_staff_admin() then raise exception 'forbidden'; end if;
-  select id, remote_seen_at, update_running into d from devices where id = p_device;
-  if d.id is null then raise exception 'not found'; end if;
+  select id, company_id, remote_seen_at, update_running into d from devices where id = p_device;
+  if d.id is null or not can_manage_company(d.company_id) then raise exception 'forbidden'; end if;
   if d.remote_seen_at is null then
     return jsonb_build_object('status', 'refused', 'detail', 'box non pilotable');
   end if;
@@ -131,9 +130,10 @@ $$;
 -- annuler une commande pas encore partie vers la box
 create or replace function public.cancel_device_command(p_id text)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare v_dev uuid;
+declare v_dev uuid; v_company uuid;
 begin
-  if not is_hexa_staff_admin() then raise exception 'forbidden'; end if;
+  select d.company_id into v_company from device_commands c join devices d on d.id = c.device_id where c.id = p_id;
+  if v_company is null or not can_manage_company(v_company) then raise exception 'forbidden'; end if;
   update device_commands set state = 'cancelled' where id = p_id and state = 'queued' and type in ('run_update', 'reboot')
   returning device_id into v_dev;
   if v_dev is null then
