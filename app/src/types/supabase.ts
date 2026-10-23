@@ -355,6 +355,7 @@ export type Database = {
           os_version: string | null
           pkg_version: string | null
           reboot_required: boolean | null
+          update_running: boolean | null
           recipients_hash: string | null
           recipients_hash_ref: string | null
           remote_protocol: number | null
@@ -386,6 +387,7 @@ export type Database = {
           os_version?: string | null
           pkg_version?: string | null
           reboot_required?: boolean | null
+          update_running?: boolean | null
           recipients_hash?: string | null
           recipients_hash_ref?: string | null
           remote_protocol?: number | null
@@ -417,6 +419,7 @@ export type Database = {
           os_version?: string | null
           pkg_version?: string | null
           reboot_required?: boolean | null
+          update_running?: boolean | null
           recipients_hash?: string | null
           recipients_hash_ref?: string | null
           remote_protocol?: number | null
@@ -720,6 +723,12 @@ export type Database = {
         Returns: Json
       }
       queue_send_snapshot: { Args: { p_device: string }; Returns: string }
+      queue_run_update: {
+        Args: { p_device: string; p_version?: string; p_reboot?: boolean }
+        Returns: Json
+      }
+      queue_reboot: { Args: { p_device: string; p_delay?: number }; Returns: Json }
+      cancel_device_command: { Args: { p_id: string }; Returns: Json }
       queue_alarm_sync: {
         Args: { p_device: string; p_force?: boolean; p_recipients?: boolean }
         Returns: Json

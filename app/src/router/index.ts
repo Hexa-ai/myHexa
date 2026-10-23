@@ -17,6 +17,7 @@ import AlarmRecipientsView from '@/views/admin/AlarmRecipientsView.vue'
 import StaffCompaniesView from '@/views/admin/staff/CompaniesView.vue'
 import StaffCompanyDetailView from '@/views/admin/staff/CompanyDetailView.vue'
 import StaffDevicesView from '@/views/admin/staff/DevicesView.vue'
+import StaffUpdatesView from '@/views/admin/staff/UpdatesView.vue'
 import StaffDeviceNewView from '@/views/admin/staff/DeviceNewView.vue'
 import StaffDeviceEditView from '@/views/admin/staff/DeviceEditView.vue'
 import InterventionView from '@/views/public/InterventionView.vue'
@@ -61,6 +62,7 @@ export const router = createRouter({
         { path: 'staff/companies', name: 'staff-companies', component: StaffCompaniesView, beforeEnter: requireStaff },
         { path: 'staff/companies/:id', name: 'staff-company-detail', component: StaffCompanyDetailView, beforeEnter: requireStaff },
         { path: 'staff/devices', name: 'staff-devices', component: StaffDevicesView, beforeEnter: requireStaff },
+        { path: 'staff/updates', name: 'staff-updates', component: StaffUpdatesView, beforeEnter: requireStaff },
         { path: 'staff/devices/new', name: 'staff-device-new', component: StaffDeviceNewView, beforeEnter: requireStaffAdmin },
         { path: 'staff/devices/:id/edit', name: 'staff-device-edit', component: StaffDeviceEditView, beforeEnter: requireStaffAdmin },
         { path: '', redirect: { name: 'admin-devices' } },
