@@ -320,14 +320,6 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
           </svg>
           <span class="tracking-tight">Mises à jour</span>
         </button>
-        <div class="px-3 py-2.5 text-sm text-muted-foreground/40 cursor-not-allowed select-none flex items-center gap-3">
-          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
-            <path d="M3 3v18h18" />
-            <path d="M7 14l4-4 4 4 5-6" />
-          </svg>
-          <span>Reports</span>
-          <span class="ml-auto text-[9px] uppercase tracking-widest">soon</span>
-        </div>
 
         <div v-if="auth.isHexaStaff" class="my-3 border-t border-border" />
 
