@@ -1,365 +1,99 @@
 <script setup lang="ts">
-// PROTOTYPE — Destinataires d'alarme pilotés depuis le portail.
-// Le portail stocke l'état VOULU (alarm_contacts + alarm_subscriptions) ; la box rapporte l'état CONSTATÉ
-// (bloc notifications de son dernier status). « Envoyer » met en file une commande set_recipients
-// servie à la box à son prochain push (~30 min).
+// PROTOTYPE — Destinataires d'alarme pilotés depuis le portail (myHexa-test).
+// Vue « liste » : une ligne par box, ses destinataires en étiquettes ; clic -> panneau box (destinataires + escalade).
+// Vue « tableau » : box × contacts, pratique quand l'annuaire est petit.
 import { computed, onMounted, ref, watch } from 'vue'
-import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
-
-type Filters = { info: boolean; warning: boolean; error: boolean }
-type Channels = { email: boolean; sms: boolean; call: boolean }
-interface Contact {
-  id: string
-  company_id: string
-  name: string
-  email: string
-  phone: string
-  enabled: boolean
-  channels: Channels
-  schedule_days: string[]
-  recipient_id: string | null
-}
-interface Sub {
-  contact_id: string
-  device_id: string
-  box_recipient_id: string
-  filters: Filters
-  channels_override: Channels | null
-}
-interface BoxRecipient {
-  id: string
-  name: string
-  email?: string
-  phone?: string
-  enabled?: boolean
-  filters?: Filters
-  channels?: Channels
-}
-interface Device {
-  id: string
-  name: string
-  remote_seen_at: string | null
-  running_version: string | null
-  recipients_hash: string | null
-  recipients_hash_ref: string | null
-  reported: BoxRecipient[] | null
-  escalation: {
-    mode?: string
-    levels?: { name: string; delay_seconds: number; members: string[] }[]
-  } | null
-  pending: number
-  lastAck: { status: string; detail: string | null; at: string | null } | null
-}
-
-const DAYS = [
-  ['monday', 'L'],
-  ['tuesday', 'M'],
-  ['wednesday', 'M'],
-  ['thursday', 'J'],
-  ['friday', 'V'],
-  ['saturday', 'S'],
-  ['sunday', 'D'],
-] as const
-const LEVELS: { key: keyof Filters; label: string; cls: string }[] = [
-  { key: 'error', label: 'E', cls: 'bg-offline/80 text-white' },
-  { key: 'warning', label: 'W', cls: 'bg-amber-500/80 text-black' },
-  { key: 'info', label: 'I', cls: 'bg-signal/70 text-black' },
-]
+import {
+  DAYS,
+  LEVELS,
+  DEFAULT_FILTERS,
+  channelLabel,
+  useAlarmConfig,
+  type Contact,
+  type Device,
+} from '@/composables/useAlarmConfig'
+import BoxAlarmPanel from '@/components/alarms/BoxAlarmPanel.vue'
 
 const auth = useAuthStore()
+const cfg = useAlarmConfig()
+const { loading, flash, contacts, subs, devices } = cfg
 const companyId = computed(() => auth.effectiveCompanyId)
 const canEdit = computed(() => auth.recipient?.role === 'admin' || auth.isHexaStaffAdmin)
+const reload = () => cfg.load(companyId.value)
+onMounted(reload)
+watch(companyId, reload)
 
-const loading = ref(false)
-const flash = ref<string | null>(null)
-const contacts = ref<Contact[]>([])
-const subs = ref<Sub[]>([])
-const devices = ref<Device[]>([])
+const view = ref<'list' | 'table'>('list')
 const showAll = ref(false)
-const companyLabel = ref<string | null>(null)
-
-function setFlash(msg: string) {
-  flash.value = msg
-  setTimeout(() => (flash.value === msg ? (flash.value = null) : null), 4000)
-}
-
-async function load() {
-  if (!companyId.value) return
-  loading.value = true
-  try {
-    const [c, d] = await Promise.all([
-      supabase.from('alarm_contacts').select('*').eq('company_id', companyId.value).order('name'),
-      supabase
-        .from('devices')
-        .select('id, name, remote_seen_at, running_version, recipients_hash, recipients_hash_ref')
-        .eq('company_id', companyId.value)
-        .order('name'),
-    ])
-    if (c.error) throw c.error
-    if (d.error) throw d.error
-    contacts.value = (c.data ?? []) as unknown as Contact[]
-    const co = await supabase
-      .from('companies')
-      .select('name')
-      .eq('id', companyId.value)
-      .maybeSingle()
-    companyLabel.value = co.data?.name ?? null
-    const ids = (d.data ?? []).map((x) => x.id)
-    const [s, r, cmd] = await Promise.all([
-      supabase
-        .from('alarm_subscriptions')
-        .select('contact_id, device_id, box_recipient_id, filters, channels_override')
-        .in('device_id', ids),
-      supabase
-        .from('reports')
-        .select('device_id, notifications:payload->notifications')
-        .eq('type', 'status')
-        .in('device_id', ids),
-      supabase
-        .from('device_commands')
-        .select('device_id, state, ack_status, ack_detail, acked_at, issued_at, type')
-        .in('device_id', ids)
-        .in('type', ['set_recipients', 'set_escalation'])
-        .order('issued_at', { ascending: false }),
-    ])
-    if (s.error) throw s.error
-    subs.value = (s.data ?? []) as unknown as Sub[]
-    type Notif = { recipients?: BoxRecipient[]; mode?: string; escalation?: Device['escalation'] }
-    const notif = new Map<string, Notif | null>()
-    for (const row of (r.data ?? []) as unknown as {
-      device_id: string
-      notifications: Notif | null
-    }[])
-      notif.set(row.device_id, row.notifications)
-    const cmds = cmd.data ?? []
-    devices.value = (d.data ?? []).map((x): Device => {
-      const n = notif.get(x.id)
-      const mine = cmds.filter((k) => k.device_id === x.id)
-      const acked = mine.find((k) => k.ack_status)
-      return {
-        ...x,
-        reported: n ? ((n.recipients ?? []) as BoxRecipient[]) : null,
-        escalation: n?.escalation ? { ...n.escalation, mode: n.mode } : null,
-        pending: mine.filter((k) => ['queued', 'sent', 'in_progress'].includes(k.state)).length,
-        lastAck: acked
-          ? { status: acked.ack_status ?? '', detail: acked.ack_detail, at: acked.acked_at }
-          : null,
-      }
-    })
-  } catch (e) {
-    setFlash(`Erreur : ${(e as Error).message}`)
-  } finally {
-    loading.value = false
-  }
-}
-onMounted(load)
-watch(companyId, load)
-
-// --- lecture -------------------------------------------------------------------------------
-const subKey = (c: string, d: string) => `${c}|${d}`
-const subMap = computed(
-  () => new Map(subs.value.map((s) => [subKey(s.contact_id, s.device_id), s])),
-)
-const contactById = computed(() => new Map(contacts.value.map((c) => [c.id, c])))
-
-const visibleDevices = computed(() =>
-  showAll.value
-    ? devices.value
-    : devices.value.filter(
-        (d) => d.reported !== null || subs.value.some((s) => s.device_id === d.id),
-      ),
-)
-
-// Écart portail ↔ box : on compare la liste voulue et la liste rapportée, destinataire par destinataire.
-function same(a: unknown, b: unknown) {
-  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
-}
-function norm(f?: Filters | Channels) {
-  return f ? Object.fromEntries(Object.entries(f).sort()) : null
-}
-function diffCount(d: Device): number {
-  const wanted = subs.value.filter((s) => s.device_id === d.id)
-  const got = new Map((d.reported ?? []).map((r) => [r.id, r]))
-  let n = 0
-  for (const s of wanted) {
-    const c = contactById.value.get(s.contact_id)
-    const r = got.get(s.box_recipient_id)
-    if (!c || !r) {
-      n++
-      continue
-    }
-    if (r.name !== c.name || (r.email ?? '') !== c.email || !same(norm(r.filters), norm(s.filters)))
-      n++
-    else if (
-      !same(norm(r.channels), norm(s.channels_override ?? c.channels)) ||
-      (r.enabled ?? true) !== c.enabled
+const filter = ref('')
+const visibleDevices = computed(() => {
+  const q = filter.value.trim().toLowerCase()
+  return devices.value
+    .filter(
+      (d) =>
+        showAll.value || q || d.reported !== null || cfg.subsOf(d.id).length || cfg.escOf(d.id),
     )
-      n++
-    got.delete(s.box_recipient_id)
-  }
-  return n + got.size
-}
+    .filter((d) => {
+      if (!q) return true
+      if (d.name.toLowerCase().includes(q)) return true
+      return cfg
+        .subsOf(d.id)
+        .some((s) => cfg.contactById.value.get(s.contact_id)?.name.toLowerCase().includes(q))
+    })
+})
 
-type SyncState = { label: string; cls: string; hint: string }
-function syncState(d: Device): SyncState {
-  if (d.pending)
-    return {
-      label: 'en attente',
-      cls: 'text-amber-400',
-      hint: 'commande envoyée au prochain push de la box (~30 min)',
-    }
-  if (d.recipients_hash && d.recipients_hash_ref && d.recipients_hash !== d.recipients_hash_ref)
-    return {
-      label: 'modifié sur la box',
-      cls: 'text-offline',
-      hint: 'la liste a été changée localement sur la box',
-    }
-  if (d.lastAck && !['ok', 'duplicate', 'pending'].includes(d.lastAck.status) && diffCount(d))
-    return { label: 'refusé', cls: 'text-offline', hint: d.lastAck.detail ?? '' }
-  if (d.reported === null)
-    return {
-      label: 'pas de config reçue',
-      cls: 'text-muted-foreground',
-      hint: "la box n'envoie pas sa configuration de notifications",
-    }
-  const n = diffCount(d)
-  if (n)
-    return {
-      label: `${n} écart${n > 1 ? 's' : ''}`,
-      cls: 'text-amber-400',
-      hint: 'le portail diffère de la box : « envoyer » pour appliquer',
-    }
-  return { label: 'à jour', cls: 'text-online', hint: 'identique à la configuration de la box' }
-}
-function pilotable(d: Device) {
-  return !!d.remote_seen_at
-}
+// --- panneau box ---------------------------------------------------------------------------
+const openBoxId = ref<string | null>(null)
+const openBox = computed(() => devices.value.find((d) => d.id === openBoxId.value) ?? null)
 
-// --- édition --------------------------------------------------------------------------------
-async function toggleFilter(contact: Contact, d: Device, key: keyof Filters) {
-  if (!canEdit.value) return
-  const s = subMap.value.get(subKey(contact.id, d.id))
-  if (!s) {
-    const filters = { info: false, warning: true, error: true }
-    const { data, error } = await supabase
-      .from('alarm_subscriptions')
-      .insert({ contact_id: contact.id, device_id: d.id, filters })
-      .select('contact_id, device_id, box_recipient_id, filters, channels_override')
-      .single()
-    if (error) return setFlash(`Erreur : ${error.message}`)
-    subs.value.push(data as Sub)
-    return
-  }
-  const filters = { ...s.filters, [key]: !s.filters[key] }
-  if (!filters.info && !filters.warning && !filters.error) {
-    // plus aucun type : on retire l'abonnement
-    const { error } = await supabase
-      .from('alarm_subscriptions')
-      .delete()
-      .match({ contact_id: contact.id, device_id: d.id })
-    if (error) return setFlash(`Erreur : ${error.message}`)
-    subs.value = subs.value.filter((x) => x !== s)
-    return
-  }
-  const { error } = await supabase
-    .from('alarm_subscriptions')
-    .update({ filters })
-    .match({ contact_id: contact.id, device_id: d.id })
-  if (error) return setFlash(`Erreur : ${error.message}`)
-  s.filters = filters
-}
-
-async function addToAll(contact: Contact) {
-  const targets = visibleDevices.value.filter((d) => !subMap.value.has(subKey(contact.id, d.id)))
-  if (!targets.length) return setFlash(`${contact.name} est déjà sur toutes les box affichées`)
-  if (!confirm(`Ajouter ${contact.name} (erreurs + warnings) sur ${targets.length} box ?`)) return
-  const rows = targets.map((d) => ({
-    contact_id: contact.id,
-    device_id: d.id,
-    filters: { info: false, warning: true, error: true },
-  }))
-  const { data, error } = await supabase
-    .from('alarm_subscriptions')
-    .insert(rows)
-    .select('contact_id, device_id, box_recipient_id, filters, channels_override')
-  if (error) return setFlash(`Erreur : ${error.message}`)
-  subs.value.push(...((data ?? []) as Sub[]))
-  setFlash(`${contact.name} ajouté sur ${targets.length} box`)
-}
-
+// --- copier vers ---------------------------------------------------------------------------
 const copyFrom = ref<Device | null>(null)
 const copyTo = ref<string[]>([])
 async function doCopy() {
-  const src = copyFrom.value
-  if (!src || !copyTo.value.length) return
-  const srcSubs = subs.value.filter((s) => s.device_id === src.id)
-  const rows = copyTo.value.flatMap((dev) =>
-    srcSubs.map((s) => ({ contact_id: s.contact_id, device_id: dev, filters: s.filters })),
+  if (!copyFrom.value || !copyTo.value.length) return
+  if (
+    !confirm(
+      `Remplacer les destinataires de ${copyTo.value.length} box par ceux de ${copyFrom.value.name} ?`,
+    )
   )
-  // remplace la liste des box cibles par celle de la box source
-  const del = await supabase.from('alarm_subscriptions').delete().in('device_id', copyTo.value)
-  if (del.error) return setFlash(`Erreur : ${del.error.message}`)
-  if (rows.length) {
-    const { error } = await supabase.from('alarm_subscriptions').insert(rows)
-    if (error) return setFlash(`Erreur : ${error.message}`)
-  }
-  setFlash(`Destinataires de ${src.name} copiés sur ${copyTo.value.length} box (à envoyer)`)
+    return
+  await cfg.copySubs(copyFrom.value, copyTo.value)
   copyFrom.value = null
   copyTo.value = []
-  await load()
+  await reload()
 }
 
-async function send(d: Device, force = false) {
-  if (!pilotable(d)) return
-  const { data, error } = await supabase.rpc('queue_alarm_sync', { p_device: d.id, p_force: force })
-  if (error) return setFlash(`Erreur : ${error.message}`)
-  const res = data as { status: string; detail?: string }
-  if (res.status === 'conflict') {
-    if (confirm(`${d.name} : ${res.detail}.\n\nImposer quand même la liste du portail ?`))
-      return send(d, true)
-    return
-  }
-  if (res.status !== 'queued') return setFlash(`${d.name} : ${res.detail ?? res.status}`)
-  setFlash(`${d.name} : envoi programmé (appliqué au prochain push de la box)`)
-  await load()
-}
-
-async function importFromBoxes() {
-  if (!companyId.value) return
-  const { data, error } = await supabase.rpc('import_alarm_config', { p_company: companyId.value })
-  if (error) return setFlash(`Erreur : ${error.message}`)
-  const r = data as { devices: number; contacts_created: number; subscriptions_created: number }
-  setFlash(
-    `Import : ${r.devices} box lues, ${r.contacts_created} contacts et ${r.subscriptions_created} abonnements créés`,
-  )
-  await load()
-}
-
-// --- fiche contact ---------------------------------------------------------------------------
-const editing = ref<Contact | null>(null)
+// --- fiche contact -------------------------------------------------------------------------
 const draft = ref<Contact | null>(null)
+const addTo = ref<string[]>([])
 function openContact(c: Contact | null) {
-  const base: Contact = c ?? {
-    id: '',
-    company_id: companyId.value ?? '',
-    name: '',
-    email: '',
-    phone: '',
-    enabled: true,
-    channels: { email: true, sms: false, call: false },
-    schedule_days: DAYS.map((d) => d[0]),
-    recipient_id: null,
-  }
-  editing.value = c
-  draft.value = JSON.parse(JSON.stringify(base))
+  draft.value = JSON.parse(
+    JSON.stringify(
+      c ?? {
+        id: '',
+        company_id: companyId.value ?? '',
+        name: '',
+        email: '',
+        phone: '',
+        enabled: true,
+        channels: { email: true, sms: false, call: false },
+        schedule_days: DAYS.map((d) => d[0]),
+        recipient_id: null,
+      },
+    ),
+  )
+  addTo.value = []
 }
-const draftBoxes = computed(() =>
+const draftSubs = computed(() =>
   draft.value?.id
     ? subs.value
         .filter((s) => s.contact_id === draft.value!.id)
         .map((s) => ({ s, d: devices.value.find((x) => x.id === s.device_id) }))
     : [],
+)
+const notYetOn = computed(() =>
+  draft.value?.id ? devices.value.filter((d) => !cfg.subOf(draft.value!.id, d.id)) : [],
 )
 function toggleDay(day: string) {
   if (!draft.value) return
@@ -369,44 +103,44 @@ function toggleDay(day: string) {
   draft.value.schedule_days = DAYS.map((d) => d[0]).filter((d) => set.has(d))
 }
 async function saveContact() {
-  const c = draft.value
-  if (!c || !c.name.trim()) return
-  const row = {
-    company_id: c.company_id,
-    name: c.name.trim(),
-    email: c.email.trim(),
-    phone: c.phone.trim(),
-    enabled: c.enabled,
-    channels: c.channels,
-    schedule_days: c.schedule_days,
-    updated_at: new Date().toISOString(),
+  if (!draft.value?.name.trim()) return
+  if (await cfg.saveContact(draft.value)) {
+    draft.value = null
+    await reload()
   }
-  const q = c.id
-    ? supabase.from('alarm_contacts').update(row).eq('id', c.id)
-    : supabase.from('alarm_contacts').insert(row)
-  const { error } = await q
-  if (error) return setFlash(`Erreur : ${error.message}`)
-  setFlash(`${row.name} enregistré`)
-  draft.value = null
-  await load()
+}
+async function addContactToBoxes() {
+  if (!draft.value?.id || !addTo.value.length) return
+  const n = await cfg.addSubs(
+    addTo.value.map((d) => ({
+      contact_id: draft.value!.id,
+      device_id: d,
+      filters: DEFAULT_FILTERS,
+    })),
+  )
+  cfg.setFlash(`${draft.value.name} ajouté sur ${n} box (erreurs + warnings, à envoyer)`)
+  addTo.value = []
 }
 async function deleteContact() {
-  const c = draft.value
-  if (!c?.id || !confirm(`Supprimer ${c.name} de l'annuaire et de toutes ses box ?`)) return
-  const { error } = await supabase.from('alarm_contacts').delete().eq('id', c.id)
-  if (error) return setFlash(`Erreur : ${error.message}`)
-  draft.value = null
-  await load()
+  if (
+    !draft.value?.id ||
+    !confirm(`Supprimer ${draft.value.name} de l'annuaire et de toutes ses box ?`)
+  )
+    return
+  if (await cfg.deleteContact(draft.value)) {
+    draft.value = null
+    await reload()
+  }
 }
-const channelLabel = (ch: Channels) =>
-  [ch.email && 'mail', ch.sms && 'SMS', ch.call && 'appel'].filter(Boolean).join(' · ') ||
-  'aucun canal'
-const memberName = (d: Device, id: string) =>
-  (d.reported ?? []).find((r) => r.id === id)?.name ?? id
-
-const escalationDevices = computed(() =>
-  visibleDevices.value.filter((d) => d.escalation?.levels?.length),
-)
+async function importFromBoxes() {
+  if (!companyId.value) return
+  await cfg.importFromBoxes(companyId.value)
+  await reload()
+}
+async function sendRow(d: Device) {
+  await cfg.send(d)
+  await reload()
+}
 </script>
 
 <template>
@@ -421,9 +155,9 @@ const escalationDevices = computed(() =>
           >
         </h1>
         <p class="text-sm text-muted-foreground max-w-3xl">
-          Qui reçoit les alarmes de quelles box, pour {{ companyLabel ?? '—' }}. Cliquer sur E / W /
-          I (erreur, warning, info) pour changer les types reçus, puis « envoyer » : la box applique
-          la liste à son prochain envoi (~30 min).
+          Qui reçoit les alarmes de quelles box, pour {{ cfg.companyLabel.value ?? '—' }}. Ouvrir
+          une box pour régler ses destinataires et son escalade, puis « envoyer » : la box applique
+          au prochain push (~30 min).
         </p>
       </div>
       <div v-if="canEdit" class="flex gap-2 flex-wrap">
@@ -442,179 +176,212 @@ const escalationDevices = computed(() =>
       </div>
     </header>
 
-    <div class="flex items-center gap-4 text-sm">
+    <div class="flex items-center gap-4 text-sm flex-wrap">
+      <div
+        class="inline-flex border border-border rounded-md overflow-hidden"
+        data-testid="view-switch"
+      >
+        <button
+          :class="['px-3 py-1.5', view === 'list' ? 'bg-secondary' : 'text-muted-foreground']"
+          @click="view = 'list'"
+        >
+          Par box
+        </button>
+        <button
+          :class="['px-3 py-1.5', view === 'table' ? 'bg-secondary' : 'text-muted-foreground']"
+          @click="view = 'table'"
+        >
+          Tableau
+        </button>
+      </div>
+      <input
+        v-model="filter"
+        type="search"
+        placeholder="Filtrer (box ou contact)"
+        autocomplete="off"
+        data-1p-ignore="true"
+        data-lpignore="true"
+        class="border border-border bg-secondary/30 rounded-md px-3 py-1.5 w-56"
+      />
       <label class="flex items-center gap-2 text-muted-foreground cursor-pointer">
-        <input v-model="showAll" type="checkbox" /> afficher toutes les box ({{ devices.length }})
+        <input v-model="showAll" type="checkbox" /> toutes les box ({{ devices.length }})
       </label>
+      <span class="text-muted-foreground">{{ contacts.length }} contacts</span>
       <span v-if="loading" class="text-muted-foreground">Chargement…</span>
       <span v-if="flash" class="text-primary">{{ flash }}</span>
     </div>
 
-    <p v-if="!loading && !contacts.length" class="text-sm text-muted-foreground">
-      Aucun contact d'alarme. « Importer depuis les box » reprend les destinataires déjà configurés
-      sur les box.
-    </p>
+    <!-- Vue par box -->
+    <ul
+      v-if="view === 'list'"
+      class="border border-border rounded-md divide-y divide-border/60"
+      data-testid="alarm-list"
+    >
+      <li
+        v-for="d in visibleDevices"
+        :key="d.id"
+        class="flex items-center gap-4 px-4 py-3 hover:bg-secondary/10 cursor-pointer"
+        @click="openBoxId = d.id"
+      >
+        <div class="w-64 shrink-0">
+          <div class="text-sm font-medium">{{ d.name }}</div>
+          <div class="font-mono text-[10px] text-muted-foreground">
+            {{ d.running_version ? `v${d.running_version}` : '' }}
+            <span
+              v-if="!cfg.pilotable(d)"
+              title="la box n'a pas envoyé d'infos de pilotage à distance"
+              >· non pilotable</span
+            >
+          </div>
+        </div>
+        <div class="flex-1 flex flex-wrap gap-1.5 min-w-0">
+          <span
+            v-for="s in cfg.subsOf(d.id)"
+            :key="s.contact_id"
+            class="inline-flex items-center gap-1 text-xs border border-border rounded-full pl-2 pr-1 py-0.5"
+          >
+            {{ cfg.contactById.value.get(s.contact_id)?.name }}
+            <span class="inline-flex gap-px">
+              <span
+                v-for="l in LEVELS.filter((x) => s.filters[x.key])"
+                :key="l.key"
+                :class="[
+                  'w-3.5 h-3.5 rounded-sm text-[8px] leading-[14px] text-center font-mono',
+                  l.cls,
+                ]"
+                >{{ l.label }}</span
+              >
+            </span>
+          </span>
+          <span v-if="!cfg.subsOf(d.id).length" class="text-xs text-muted-foreground"
+            >aucun destinataire</span
+          >
+          <span
+            v-if="cfg.escOf(d.id) || d.reportedEscalation"
+            class="text-xs text-signal border border-signal/40 rounded-full px-2 py-0.5"
+            title="escalade configurée"
+          >
+            ⇢ escalade {{ (cfg.escOf(d.id)?.config ?? d.reportedEscalation)!.levels.length }} niv.
+            {{
+              (cfg.escOf(d.id)?.config ?? d.reportedEscalation)!.mode === 'immediate'
+                ? '(désactivée)'
+                : ''
+            }}
+          </span>
+        </div>
+        <div class="w-56 shrink-0 flex items-center justify-end gap-2" @click.stop>
+          <span
+            :class="[
+              'font-mono text-[10px] uppercase tracking-wider text-right',
+              cfg.syncState(d).cls,
+            ]"
+            :title="cfg.syncState(d).hint"
+          >
+            {{ cfg.syncState(d).label }}
+          </span>
+          <button
+            v-if="
+              canEdit &&
+              cfg.pilotable(d) &&
+              (cfg.diffCount(d) || cfg.escalationDirty(d.id)) &&
+              !d.pending
+            "
+            class="font-mono text-[9px] uppercase tracking-wider border border-border px-2 py-0.5 rounded hover:border-signal"
+            @click="sendRow(d)"
+          >
+            envoyer
+          </button>
+        </div>
+      </li>
+      <li v-if="!visibleDevices.length" class="px-4 py-3 text-sm text-muted-foreground">
+        Aucune box.
+      </li>
+    </ul>
 
-    <!-- Matrice box × contacts -->
-    <div v-if="contacts.length" class="border border-border rounded-md overflow-x-auto">
+    <!-- Vue tableau (petits annuaires) -->
+    <div v-else class="border border-border rounded-md overflow-x-auto">
+      <p v-if="contacts.length > 12" class="px-3 py-2 text-xs text-amber-400">
+        {{ contacts.length }} contacts : la vue « Par box » est plus lisible.
+      </p>
       <table class="text-sm w-full border-collapse" data-testid="alarm-matrix">
         <thead>
           <tr class="bg-secondary/30">
-            <th class="text-left font-normal px-3 py-2 sticky left-0 bg-card min-w-[230px]">
-              <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
-                >Box</span
-              >
-            </th>
+            <th class="text-left font-normal px-3 py-2 sticky left-0 bg-card min-w-[220px]">Box</th>
             <th
               v-for="c in contacts"
               :key="c.id"
-              class="px-2 py-2 font-normal align-bottom min-w-[96px]"
+              class="px-2 py-2 font-normal align-bottom min-w-[90px]"
             >
               <button
-                class="text-left w-full hover:text-signal"
-                :title="`${c.email} ${c.phone}`"
+                class="text-left w-full hover:text-signal text-xs font-medium"
                 @click="openContact(c)"
               >
-                <div
-                  :class="[
-                    'text-xs font-medium leading-tight',
-                    !c.enabled && 'line-through text-muted-foreground',
-                  ]"
-                >
-                  {{ c.name }}
-                </div>
-                <div class="font-mono text-[9px] text-muted-foreground">
-                  {{ channelLabel(c.channels) }}
-                </div>
+                {{ c.name }}
               </button>
-              <button
-                v-if="canEdit"
-                class="mt-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground hover:text-signal"
-                @click="addToAll(c)"
-              >
-                + toutes
-              </button>
-            </th>
-            <th class="px-3 py-2 font-normal text-left min-w-[270px]">
-              <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
-                >Synchro</span
-              >
             </th>
           </tr>
         </thead>
         <tbody>
-          <tr
-            v-for="d in visibleDevices"
-            :key="d.id"
-            class="border-t border-border/60 hover:bg-secondary/10"
-          >
+          <tr v-for="d in visibleDevices" :key="d.id" class="border-t border-border/60">
             <td class="px-3 py-2 sticky left-0 bg-card">
-              <div class="font-medium text-xs">{{ d.name }}</div>
-              <div class="font-mono text-[9px] text-muted-foreground">
-                {{ d.running_version ? `v${d.running_version}` : '' }}
-                <span
-                  v-if="!pilotable(d)"
-                  title="pas de pilotage à distance reçu (firmware ou option « Enable remote management »)"
-                  >· non pilotable</span
-                >
+              <button class="text-xs font-medium hover:text-signal" @click="openBoxId = d.id">
+                {{ d.name }}
+              </button>
+              <div :class="['font-mono text-[9px] uppercase', cfg.syncState(d).cls]">
+                {{ cfg.syncState(d).label }}
               </div>
             </td>
             <td v-for="c in contacts" :key="c.id" class="px-2 py-2 text-center">
-              <div class="inline-flex gap-0.5">
-                <template v-if="subMap.get(subKey(c.id, d.id))">
-                  <button
-                    v-for="l in LEVELS"
-                    :key="l.key"
-                    :disabled="!canEdit"
-                    :class="[
-                      'w-5 h-5 rounded text-[10px] font-mono transition',
-                      subMap.get(subKey(c.id, d.id))!.filters[l.key]
-                        ? l.cls
-                        : 'bg-secondary/40 text-muted-foreground/40',
-                    ]"
-                    :title="l.key"
-                    @click="toggleFilter(c, d, l.key)"
-                  >
-                    {{ l.label }}
-                  </button>
-                </template>
+              <div v-if="cfg.subOf(c.id, d.id)" class="inline-flex gap-0.5">
                 <button
-                  v-else-if="canEdit"
-                  class="w-5 h-5 rounded text-xs text-muted-foreground/40 hover:text-signal hover:bg-secondary/40"
-                  title="ajouter (erreurs + warnings)"
-                  @click="toggleFilter(c, d, 'error')"
+                  v-for="l in LEVELS"
+                  :key="l.key"
+                  :disabled="!canEdit"
+                  :class="[
+                    'w-5 h-5 rounded text-[10px] font-mono',
+                    cfg.subOf(c.id, d.id)!.filters[l.key]
+                      ? l.cls
+                      : 'bg-secondary/40 text-muted-foreground/40',
+                  ]"
+                  @click="cfg.toggleFilter(cfg.subOf(c.id, d.id)!, l.key)"
                 >
-                  +
+                  {{ l.label }}
                 </button>
               </div>
-            </td>
-            <td class="px-3 py-2">
-              <div class="flex items-center gap-2 flex-wrap">
-                <span
-                  :class="['font-mono text-[10px] uppercase tracking-wider', syncState(d).cls]"
-                  :title="syncState(d).hint"
-                >
-                  {{ syncState(d).label }}
-                </span>
-                <template v-if="canEdit">
-                  <button
-                    v-if="pilotable(d) && subs.some((s) => s.device_id === d.id)"
-                    class="font-mono text-[9px] uppercase tracking-wider border border-border px-2 py-0.5 rounded hover:border-signal"
-                    @click="send(d)"
-                  >
-                    envoyer
-                  </button>
-                  <button
-                    v-if="subs.some((s) => s.device_id === d.id)"
-                    class="font-mono text-[9px] uppercase tracking-wider text-muted-foreground hover:text-signal"
-                    @click="((copyFrom = d), (copyTo = []))"
-                  >
-                    copier vers…
-                  </button>
-                </template>
-              </div>
+              <button
+                v-else-if="canEdit"
+                class="w-5 h-5 rounded text-xs text-muted-foreground/40 hover:text-signal"
+                @click="cfg.addSubs([{ contact_id: c.id, device_id: d.id }])"
+              >
+                +
+              </button>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <!-- Escalades rapportées par les box (lecture seule dans ce prototype) -->
-    <section v-if="escalationDevices.length" class="space-y-2">
-      <h2 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-        Escalade (configurée sur la box)
-      </h2>
-      <div
-        v-for="d in escalationDevices"
-        :key="d.id"
-        class="border border-border rounded-md bg-card/40 p-4"
-      >
-        <div class="text-sm font-medium mb-2">{{ d.name }}</div>
-        <ol class="flex flex-wrap gap-2 items-center text-xs">
-          <template v-for="(lv, i) in d.escalation!.levels" :key="i">
-            <li class="border border-border rounded px-2 py-1">
-              <div class="font-mono text-[9px] uppercase text-muted-foreground">
-                {{ lv.name }} ·
-                {{ i === 0 ? 'immédiat' : `+${Math.round(lv.delay_seconds / 60)} min` }}
-              </div>
-              <div>{{ lv.members.map((m) => memberName(d, m)).join(', ') }}</div>
-            </li>
-            <span v-if="i < d.escalation!.levels!.length - 1" class="text-muted-foreground">→</span>
-          </template>
-        </ol>
-      </div>
-    </section>
+    <BoxAlarmPanel
+      v-if="openBox"
+      :device="openBox"
+      :cfg="cfg"
+      :can-edit="canEdit"
+      @close="((openBoxId = null), reload())"
+      @copy="(d) => ((copyFrom = d), (copyTo = []))"
+      @changed="reload"
+    />
 
     <!-- Copier vers… -->
     <div
       v-if="copyFrom"
-      class="fixed inset-0 z-40 bg-black/50 flex items-center justify-center p-4"
+      class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
       @click.self="copyFrom = null"
     >
       <div class="bg-card border border-border rounded-md p-5 w-full max-w-md space-y-3">
         <h3 class="font-semibold">Copier les destinataires de {{ copyFrom.name }}</h3>
         <p class="text-xs text-muted-foreground">
-          La liste des box cochées sera remplacée par celle-ci (à envoyer ensuite).
+          La liste des box cochées sera remplacée (types d'alarme compris), à envoyer ensuite.
+          L'escalade n'est pas copiée.
         </p>
         <div class="max-h-72 overflow-y-auto space-y-1">
           <label
@@ -675,7 +442,7 @@ const escalationDevices = computed(() =>
           />
         </label>
         <div class="text-sm">
-          Canaux
+          Canaux (sur toutes ses box)
           <div class="flex gap-4 mt-1">
             <label
               v-for="ch in ['email', 'sms', 'call'] as const"
@@ -706,40 +473,23 @@ const escalationDevices = computed(() =>
             </button>
           </div>
         </div>
-        <label class="flex items-center gap-2 text-sm">
-          <input v-model="draft.enabled" :disabled="!canEdit" type="checkbox" /> actif
-        </label>
+        <label class="flex items-center gap-2 text-sm"
+          ><input v-model="draft.enabled" :disabled="!canEdit" type="checkbox" /> actif</label
+        >
         <div class="text-sm">
           Accès au portail :
           <span v-if="draft.recipient_id" class="text-online">oui</span>
           <span v-else class="text-muted-foreground"
-            >non <span class="text-xs">(invitation : étape suivante du prototype)</span></span
+            >non <span class="text-xs">(invitation : étape suivante)</span></span
           >
         </div>
-        <div v-if="draftBoxes.length" class="text-sm">
-          Box ({{ draftBoxes.length }})
-          <ul class="mt-1 space-y-1">
-            <li
-              v-for="{ s, d } in draftBoxes"
-              :key="s.device_id"
-              class="flex justify-between text-xs"
-            >
-              <span>{{ d?.name }}</span>
-              <span class="font-mono">{{
-                LEVELS.filter((l) => s.filters[l.key])
-                  .map((l) => l.label)
-                  .join(' ')
-              }}</span>
-            </li>
-          </ul>
-        </div>
-        <div v-if="canEdit" class="flex justify-between pt-2">
+        <div v-if="canEdit" class="flex justify-between">
           <button v-if="draft.id" class="text-sm text-offline" @click="deleteContact">
             Supprimer
           </button>
           <span v-else />
           <div class="flex gap-2">
-            <button class="px-3 py-1.5 text-sm" @click="draft = null">Annuler</button>
+            <button class="px-3 py-1.5 text-sm" @click="draft = null">Fermer</button>
             <button
               class="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md"
               @click="saveContact"
@@ -747,6 +497,57 @@ const escalationDevices = computed(() =>
               Enregistrer
             </button>
           </div>
+        </div>
+
+        <div v-if="draft.id" class="text-sm space-y-2 border-t border-border pt-4">
+          <div>Ses box ({{ draftSubs.length }})</div>
+          <ul class="space-y-1">
+            <li
+              v-for="{ s, d } in draftSubs"
+              :key="s.device_id"
+              class="flex justify-between items-center text-xs"
+            >
+              <span>{{ d?.name }}</span>
+              <span class="font-mono"
+                >{{
+                  LEVELS.filter((l) => s.filters[l.key])
+                    .map((l) => l.label)
+                    .join(' ')
+                }}
+                <span
+                  v-if="cfg.levelsUsing(s.device_id, s.box_recipient_id).length"
+                  class="text-signal"
+                  >· escalade</span
+                >
+              </span>
+            </li>
+          </ul>
+          <div v-if="canEdit && notYetOn.length" class="space-y-1" data-testid="add-to-boxes">
+            <div class="text-muted-foreground">Ajouter à des box (erreurs + warnings)</div>
+            <div class="max-h-48 overflow-y-auto space-y-1 border border-border rounded-md p-2">
+              <label v-for="d in notYetOn" :key="d.id" class="flex items-center gap-2 text-xs">
+                <input v-model="addTo" type="checkbox" :value="d.id" /> {{ d.name }}
+              </label>
+            </div>
+            <div class="flex gap-2 justify-end">
+              <button
+                class="text-xs text-muted-foreground hover:text-signal"
+                @click="addTo = notYetOn.map((d) => d.id)"
+              >
+                tout cocher
+              </button>
+              <button
+                class="px-3 py-1 text-xs bg-primary text-primary-foreground rounded-md disabled:opacity-40"
+                :disabled="!addTo.length"
+                @click="addContactToBoxes"
+              >
+                Ajouter sur {{ addTo.length }} box
+              </button>
+            </div>
+          </div>
+          <p class="text-xs text-muted-foreground">
+            Canaux actuels : {{ channelLabel(draft.channels) }}
+          </p>
         </div>
       </aside>
     </div>

@@ -40,9 +40,13 @@ create table public.alarm_subscriptions (
 create index alarm_subscriptions_device_idx on public.alarm_subscriptions (device_id);
 
 -- 3. Chaîne d'escalade voulue, par box (format set_escalation, sans runs)
+--    baseline = ce que la box applique (import, ou dernier set_escalation acquitté ok).
+--    config ≠ baseline -> « à envoyer » ; on n'envoie que les clés modifiées, et levels seulement s'il a changé
+--    (levels REMPLACE la chaîne côté boîtier, cf. doc firmware).
 create table public.device_escalation (
   device_id uuid primary key references public.devices(id) on delete cascade,
   config jsonb not null,
+  baseline jsonb,
   updated_by uuid,
   updated_at timestamptz not null default now()
 );
@@ -188,8 +192,9 @@ begin
       if found then v_subs := v_subs + 1; end if;
     end loop;
     if d.notif -> 'escalation' is not null and jsonb_array_length(coalesce(d.notif -> 'escalation' -> 'levels', '[]')) > 0 then
-      insert into device_escalation (device_id, config, updated_by)
-      values (d.id, (d.notif -> 'escalation') - 'runs' || jsonb_build_object('mode', d.notif ->> 'mode'), auth.uid())
+      insert into device_escalation (device_id, config, baseline, updated_by)
+      values (d.id, (d.notif -> 'escalation') - 'runs' || jsonb_build_object('mode', d.notif ->> 'mode'),
+                    (d.notif -> 'escalation') - 'runs' || jsonb_build_object('mode', d.notif ->> 'mode'), auth.uid())
       on conflict (device_id) do nothing;
     end if;
     update devices set recipients_hash_ref = recipients_hash, escalation_hash_ref = escalation_hash where id = d.id;
@@ -198,34 +203,81 @@ begin
 end;
 $$;
 
--- Met en file un set_recipients (et set_escalation si une chaîne est définie) construit depuis l'état voulu.
--- Refuse si la liste a été modifiée sur la box depuis la dernière prise en main (sauf p_force).
-create or replace function public.queue_alarm_sync(p_device uuid, p_force boolean default false)
+-- Met en file ce qui a changé dans le portail pour une box :
+--   p_recipients : set_recipients (liste complète, fusion par id côté boîtier)
+--   escalade     : set_escalation différentiel si config ≠ baseline (validée avant envoi)
+-- Refuse si la box a été modifiée localement depuis la dernière prise en main (sauf p_force).
+create or replace function public.queue_alarm_sync(p_device uuid, p_force boolean default false, p_recipients boolean default true)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  v_company uuid; v_hash text; v_ref text; v_list jsonb; v_cmd text; v_esc jsonb; v_esc_cmd text;
+  v_company uuid; v_hash text; v_ref text; v_ehash text; v_eref text;
+  v_list jsonb; v_cmd text; v_esc jsonb; v_base jsonb; v_payload jsonb; v_esc_cmd text; v_ids text[]; v_bad text;
 begin
-  select company_id, recipients_hash, recipients_hash_ref into v_company, v_hash, v_ref from devices where id = p_device;
+  select company_id, recipients_hash, recipients_hash_ref, escalation_hash, escalation_hash_ref
+    into v_company, v_hash, v_ref, v_ehash, v_eref from devices where id = p_device;
   if v_company is null or not can_manage_company(v_company) then raise exception 'forbidden'; end if;
-  if not p_force and v_ref is not null and v_hash is distinct from v_ref then
-    return jsonb_build_object('status', 'conflict', 'detail', 'liste modifiée sur la box depuis la dernière synchro');
+
+  select config - 'runs', baseline into v_esc, v_base from device_escalation where device_id = p_device;
+  if v_esc is not null and v_esc is distinct from v_base then
+    if v_base is null or (v_esc -> 'levels') is distinct from (v_base -> 'levels') then
+      v_payload := v_esc;
+    else
+      select coalesce(jsonb_object_agg(k, v), '{}'::jsonb) into v_payload
+      from jsonb_each(v_esc) as e(k, v) where v is distinct from (v_base -> k);
+    end if;
   end if;
-  v_list := alarm_desired_recipients(p_device);
-  if jsonb_array_length(v_list) = 0 then
-    -- le firmware refuse une liste vide : supprimer le dernier destinataire reste une action locale
-    return jsonb_build_object('status', 'refused', 'detail', 'liste vide : le boîtier la refuserait');
+
+  if not p_recipients and v_payload is null then
+    return jsonb_build_object('status', 'nothing', 'detail', 'rien à envoyer');
   end if;
+  if not p_force and p_recipients and v_ref is not null and v_hash is distinct from v_ref then
+    return jsonb_build_object('status', 'conflict', 'detail', 'liste des destinataires modifiée sur la box depuis la dernière synchro');
+  end if;
+  if not p_force and v_payload is not null and v_eref is not null and v_ehash is distinct from v_eref then
+    return jsonb_build_object('status', 'conflict', 'detail', 'escalade modifiée sur la box depuis la dernière synchro');
+  end if;
+
+  -- validation de l'escalade (mêmes règles que le boîtier, pour refuser avant d'envoyer)
+  if v_payload ? 'levels' then
+    v_ids := array(select box_recipient_id from alarm_subscriptions where device_id = p_device);
+    if exists (select 1 from jsonb_array_elements(v_payload -> 'levels') l
+               where jsonb_array_length(coalesce(l -> 'members', '[]')) = 0) then
+      return jsonb_build_object('status', 'refused', 'detail', 'un niveau d''escalade n''a aucun membre');
+    end if;
+    select m into v_bad from jsonb_array_elements(v_payload -> 'levels') l, jsonb_array_elements_text(l -> 'members') m
+    where m <> all (v_ids) limit 1;
+    if v_bad is not null then
+      return jsonb_build_object('status', 'refused', 'detail', 'un membre de l''escalade n''est plus destinataire de la box (' || v_bad || ')');
+    end if;
+    select k into v_bad from jsonb_array_elements(v_payload -> 'levels') l, jsonb_object_keys(coalesce(l -> 'member_channels', '{}')) k
+    where not (l -> 'members') ? k limit 1;
+    if v_bad is not null then
+      return jsonb_build_object('status', 'refused', 'detail', 'canaux définis pour un non-membre du niveau (' || v_bad || ')');
+    end if;
+  end if;
+
+  if p_recipients then
+    v_list := alarm_desired_recipients(p_device);
+    if jsonb_array_length(v_list) = 0 then
+      -- le firmware refuse une liste vide : supprimer le dernier destinataire reste une action locale
+      return jsonb_build_object('status', 'refused', 'detail', 'liste vide : le boîtier la refuserait');
+    end if;
+  end if;
+
   -- une seule commande en attente par type : on remplace l'ancienne
   update device_commands set state = 'cancelled'
-  where device_id = p_device and type in ('set_recipients', 'set_escalation') and state = 'queued';
-  v_cmd := 'cmd_' || replace(gen_random_uuid()::text, '-', '');
-  insert into device_commands (id, device_id, type, payload) values (v_cmd, p_device, 'set_recipients', jsonb_build_object('recipients', v_list));
-  select config into v_esc from device_escalation where device_id = p_device;
-  if v_esc is not null then
-    v_esc_cmd := 'cmd_' || replace(gen_random_uuid()::text, '-', '');
-    insert into device_commands (id, device_id, type, payload) values (v_esc_cmd, p_device, 'set_escalation', v_esc - 'runs');
+  where device_id = p_device and state = 'queued'
+    and ((p_recipients and type = 'set_recipients') or (v_payload is not null and type = 'set_escalation'));
+  -- ordre : la liste d'abord (les membres de l'escalade doivent exister sur la box)
+  if p_recipients then
+    v_cmd := 'cmd_' || replace(gen_random_uuid()::text, '-', '');
+    insert into device_commands (id, device_id, type, payload) values (v_cmd, p_device, 'set_recipients', jsonb_build_object('recipients', v_list));
   end if;
-  return jsonb_build_object('status', 'queued', 'set_recipients', v_cmd, 'set_escalation', v_esc_cmd);
+  if v_payload is not null then
+    v_esc_cmd := 'cmd_' || replace(gen_random_uuid()::text, '-', '');
+    insert into device_commands (id, device_id, type, payload) values (v_esc_cmd, p_device, 'set_escalation', v_payload);
+  end if;
+  return jsonb_build_object('status', 'queued', 'set_recipients', v_cmd, 'set_escalation', v_esc_cmd, 'escalation_payload', v_payload);
 end;
 $$;
 
@@ -247,7 +299,7 @@ $$;
 create or replace function public.ingest_remote(p_token text, p_remote jsonb, p_running_version text default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  v_device uuid; a jsonb; st jsonb := p_remote -> 'state'; v_cmds jsonb; v_type text;
+  v_device uuid; a jsonb; st jsonb := p_remote -> 'state'; v_cmds jsonb; v_type text; v_payload jsonb;
 begin
   select id into v_device from devices where token = p_token limit 1;
   if v_device is null then return '[]'::jsonb; end if;
@@ -270,13 +322,15 @@ begin
                    else 'failed'::device_command_state end,
       acked_at = now(), ack_status = a ->> 'status', ack_detail = left(a ->> 'detail', 512)
     where id = a ->> 'id' and device_id = v_device and state <> 'cancelled'
-    returning type into v_type;
+    returning type, payload into v_type, v_payload;
     -- liste acceptée par la box : le hash courant devient la référence (fait au push suivant via hash_ref)
     if found and a ->> 'status' = 'ok' and v_type = 'set_recipients' then
       update devices set recipients_hash_ref = null where id = v_device;
     end if;
     if found and a ->> 'status' = 'ok' and v_type = 'set_escalation' then
       update devices set escalation_hash_ref = null where id = v_device;
+      -- la box applique désormais ces clés : elles rejoignent la référence
+      update device_escalation set baseline = coalesce(baseline, '{}'::jsonb) || v_payload where device_id = v_device;
     end if;
   end loop;
   -- référence vide = on reprend le hash constaté (après import manquant ou après un ok)
@@ -302,8 +356,8 @@ $$;
 revoke all on function public.ingest_remote(text, jsonb, text) from public, anon, authenticated;
 grant execute on function public.ingest_remote(text, jsonb, text) to service_role;
 revoke all on function public.import_alarm_config(uuid) from public, anon;
-revoke all on function public.queue_alarm_sync(uuid, boolean) from public, anon;
+revoke all on function public.queue_alarm_sync(uuid, boolean, boolean) from public, anon;
 revoke all on function public.queue_send_snapshot(uuid) from public, anon;
-grant execute on function public.import_alarm_config(uuid), public.queue_alarm_sync(uuid, boolean), public.queue_send_snapshot(uuid) to authenticated;
+grant execute on function public.import_alarm_config(uuid), public.queue_alarm_sync(uuid, boolean, boolean), public.queue_send_snapshot(uuid) to authenticated;
 grant select, insert, update, delete on public.alarm_contacts, public.alarm_subscriptions, public.device_escalation to authenticated;
 grant select on public.device_commands to authenticated;

@@ -16,18 +16,21 @@ export type Database = {
     Tables: {
       device_escalation: {
         Row: {
+          baseline: Json | null
           config: Json
           device_id: string
           updated_at: string
           updated_by: string | null
         }
         Insert: {
+          baseline?: Json | null
           config: Json
           device_id: string
           updated_at?: string
           updated_by?: string | null
         }
         Update: {
+          baseline?: Json | null
           config?: Json
           device_id?: string
           updated_at?: string
@@ -755,7 +758,7 @@ export type Database = {
     Functions: {
       queue_send_snapshot: { Args: { p_device: string }; Returns: string }
       queue_alarm_sync: {
-        Args: { p_device: string; p_force?: boolean }
+        Args: { p_device: string; p_force?: boolean; p_recipients?: boolean }
         Returns: Json
       }
       import_alarm_config: { Args: { p_company: string }; Returns: Json }
