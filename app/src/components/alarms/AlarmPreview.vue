@@ -1,19 +1,30 @@
 <script setup lang="ts">
 // PROTOTYPE — aperçu « qui reçoit quoi » d'une box, selon les règles actuelles du firmware.
 import { computed, ref } from 'vue'
-import { LEVELS, type AlarmConfig, type Device, type Filters } from '@/composables/useAlarmConfig'
+import {
+  LEVELS,
+  type AlarmConfig,
+  type Device,
+  type Escalation,
+  type Filters,
+} from '@/composables/useAlarmConfig'
 import { buildPreview, chList, fmtMin } from '@/composables/alarmPreview'
 
-const props = defineProps<{ device: Device; cfg: AlarmConfig }>()
+const props = defineProps<{
+  device: Device
+  cfg: AlarmConfig
+  esc?: Escalation | null
+  title?: string
+}>()
 const type = ref<keyof Filters>('error')
-const p = computed(() => buildPreview(props.cfg, props.device, type.value))
+const p = computed(() => buildPreview(props.cfg, props.device, type.value, props.esc))
 </script>
 
 <template>
   <section class="space-y-2" data-testid="alarm-preview">
     <div class="flex items-center justify-between gap-2">
       <h4 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-        Aperçu : qui reçoit quoi
+        {{ title ?? 'Aperçu : qui reçoit quoi' }}
       </h4>
       <div class="flex gap-1 items-center text-xs">
         si une alarme

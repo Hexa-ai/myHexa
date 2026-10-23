@@ -13,6 +13,7 @@ import {
   type Device,
   type Escalation,
 } from '@/composables/useAlarmConfig'
+import AlarmPreview from './AlarmPreview.vue'
 
 const props = defineProps<{ device: Device; cfg: AlarmConfig; canEdit: boolean }>()
 
@@ -36,12 +37,51 @@ const changed = computed(
 )
 
 const members = computed(() =>
-  props.cfg.subsOf(props.device.id).map((s) => ({
-    id: s.box_recipient_id,
-    name: props.cfg.personById.value.get(s.recipient_id)?.name ?? s.box_recipient_id,
-    channels: props.cfg.channelsOn(s),
-  })),
+  props.cfg.subsOf(props.device.id).map((s) => {
+    const p = props.cfg.personById.value.get(s.recipient_id)
+    const reported = props.device.reported?.find((r) => r.id === s.box_recipient_id)
+    const ch = props.cfg.channelsOn(s)
+    const hasPhone = !!(p?.phone || reported?.phone)
+    // canaux réellement utilisables (cochés sur la fiche ET coordonnée présente)
+    const usable = CHANNELS.filter(
+      (c) => ch?.[c.key] && (c.key === 'email' ? !!p?.contact_email : hasPhone),
+    )
+    return {
+      id: s.box_recipient_id,
+      name: p?.name ?? s.box_recipient_id,
+      channels: ch,
+      usable: usable.map((c) => c.key),
+      enabled: p?.alarm_enabled ?? true,
+      filters: s.filters,
+    }
+  }),
 )
+type Member = (typeof members.value)[number]
+const escalatedTypes = computed(() => LEVELS.filter((l) => draft.value?.types[l.key]))
+/** pourquoi ce membre ne recevrait rien dans la chaîne (null = joignable) */
+function unreachable(m: Member): string | null {
+  if (!m.enabled) return 'alarmes désactivées sur sa fiche'
+  if (!escalatedTypes.value.some((l) => m.filters[l.key]))
+    return `ne reçoit pas les ${escalatedTypes.value.map((l) => l.label).join('/') || '—'} sur cette box`
+  if (!m.usable.length) return 'aucun canal utilisable (fiche ou coordonnées)'
+  return null
+}
+/** types escaladés qu'il ne reçoit pas (joignable seulement pour une partie) */
+const partial = (m: Member) =>
+  escalatedTypes.value.filter((l) => !m.filters[l.key]).map((l) => l.label)
+/** abonnés à un type escaladé qui ne sont dans aucun niveau : ils ne recevront plus rien pour ce type */
+const leftOut = computed(() => {
+  const d = draft.value
+  if (!d || d.mode !== 'escalation') return []
+  const inChain = new Set(d.levels.flatMap((l) => l.members))
+  return members.value
+    .filter((m) => m.enabled && !inChain.has(m.id))
+    .map((m) => ({
+      name: m.name,
+      types: escalatedTypes.value.filter((l) => m.filters[l.key]).map((l) => l.label),
+    }))
+    .filter((x) => x.types.length)
+})
 const memberOf = (id: string) => members.value.find((m) => m.id === id)
 
 function create() {
@@ -110,7 +150,11 @@ const problems = computed(() => {
         out.push(
           `niveau ${i + 1} : ${props.cfg.memberName(props.device.id, m)} n'est plus destinataire de la box`,
         )
-      else if (!CHANNELS.some((c) => eff(i, m)[c.key]))
+      else if (unreachable(memberOf(m)!))
+        out.push(
+          `niveau ${i + 1} : ${memberOf(m)!.name} ne serait pas prévenu (${unreachable(memberOf(m)!)})`,
+        )
+      else if (!CHANNELS.some((c) => eff(i, m)[c.key] && memberOf(m)!.usable.includes(c.key)))
         out.push(`niveau ${i + 1} : ${memberOf(m)!.name} ne serait prévenu par aucun canal`)
     }
   })
@@ -179,6 +223,12 @@ async function save() {
           </button>
         </div>
       </div>
+      <p v-if="leftOut.length" class="text-xs text-amber-400" data-testid="left-out">
+        ⚠ Pendant l'escalade, personne n'est prévenu en direct. Ne recevront rien :
+        <span v-for="(x, k) in leftOut" :key="x.name"
+          >{{ k ? ', ' : '' }}<b>{{ x.name }}</b> ({{ x.types.join('/') }})</span
+        >. Ajoute-les à un niveau si besoin.
+      </p>
       <p class="text-xs text-muted-foreground">
         <template v-if="draft.mode === 'immediate'"
           >Mode immédiat : la chaîne reste enregistrée sur la box, prête à être réactivée.</template
@@ -195,6 +245,7 @@ async function save() {
           v-for="(lv, i) in draft.levels"
           :key="i"
           class="border border-border rounded-md p-3 bg-card/40 space-y-2"
+          data-testid="esc-level"
         >
           <div class="flex items-center gap-2 flex-wrap">
             <span class="font-mono text-[10px] text-muted-foreground">{{ i + 1 }}.</span>
@@ -269,16 +320,18 @@ async function save() {
                   :disabled="
                     !canEdit ||
                     !memberOf(m) ||
-                    (!memberOf(m)!.channels?.[c.key] && !eff(i, m)[c.key])
+                    (!memberOf(m)!.usable.includes(c.key) && !eff(i, m)[c.key])
                   "
                   :title="
-                    memberOf(m) && !memberOf(m)!.channels?.[c.key]
-                      ? 'pas activé sur sa fiche : la box ne l\'utilisera pas (l\'escalade ne peut que restreindre ses canaux)'
+                    memberOf(m) && !memberOf(m)!.usable.includes(c.key)
+                      ? memberOf(m)!.channels?.[c.key]
+                        ? 'pas de coordonnée (email ou numéro) : la box ne pourra pas l\'utiliser'
+                        : 'pas coché sur sa fiche : la box ne l\'utilisera pas (l\'escalade ne peut que retirer des canaux)'
                       : ''
                   "
                   :class="[
                     'px-1.5 py-0.5 rounded border',
-                    eff(i, m)[c.key] && memberOf(m) && !memberOf(m)!.channels?.[c.key]
+                    eff(i, m)[c.key] && memberOf(m) && !memberOf(m)!.usable.includes(c.key)
                       ? 'border-offline/60 text-offline line-through'
                       : eff(i, m)[c.key]
                         ? 'border-signal bg-signal/15 text-foreground'
@@ -315,10 +368,36 @@ async function save() {
             <button
               v-for="m in members.filter((x) => !lv.members.includes(x.id))"
               :key="m.id"
-              class="text-xs px-2 py-0.5 rounded-full border border-border text-muted-foreground hover:border-signal hover:text-foreground"
+              :disabled="!!unreachable(m)"
+              :title="unreachable(m) ? `Ne peut pas être prévenu : ${unreachable(m)}` : ''"
+              data-testid="add-member"
+              :class="[
+                'text-xs px-2 py-0.5 rounded-full border',
+                unreachable(m)
+                  ? 'border-border/50 text-muted-foreground/40 cursor-not-allowed'
+                  : 'border-border text-muted-foreground hover:border-signal hover:text-foreground',
+              ]"
               @click="toggleMember(i, m.id)"
             >
               + {{ m.name }}
+              <span class="text-[10px] opacity-70">
+                {{
+                  unreachable(m)
+                    ? `— ${unreachable(m)}`
+                    : m.usable
+                        .map((k) =>
+                          channelLabel({
+                            email: k === 'email',
+                            sms: k === 'sms',
+                            call: k === 'call',
+                          }),
+                        )
+                        .join(' · ')
+                }}
+                {{
+                  !unreachable(m) && partial(m).length ? `(pas les ${partial(m).join('/')})` : ''
+                }}
+              </span>
             </button>
           </div>
         </li>
@@ -342,6 +421,13 @@ async function save() {
         >
       </div>
 
+      <AlarmPreview
+        v-if="changed"
+        :device="device"
+        :cfg="cfg"
+        :esc="draft"
+        title="Aperçu avec tes modifications (pas encore enregistrées)"
+      />
       <ul v-if="problems.length" class="text-xs text-offline list-disc pl-5">
         <li v-for="p in problems" :key="p">{{ p }}</li>
       </ul>

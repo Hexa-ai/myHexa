@@ -539,8 +539,32 @@ async function sendRow(d: Device) {
                   type="checkbox"
                 />
                 {{ ch.label }}
+                <span v-if="ch.key === 'call'" class="text-[10px] text-muted-foreground"
+                  >(escalade seulement)</span
+                >
               </label>
             </div>
+            <ul
+              class="mt-1 text-[11px] text-muted-foreground space-y-0.5"
+              data-testid="channel-help"
+            >
+              <li>
+                Alarmes non escaladées : envoi immédiat par mail et SMS cochés (jamais d'appel).
+              </li>
+              <li>
+                Alarmes escaladées : seulement s'il est dans un niveau, et seulement par les canaux
+                cochés ici.
+              </li>
+              <li
+                v-if="(draft.alarm_channels.sms || draft.alarm_channels.call) && !draft.phone"
+                class="text-amber-400"
+              >
+                SMS / appel cochés mais pas de numéro : vérifier le téléphone.
+              </li>
+              <li v-if="draft.alarm_channels.email && !draft.contact_email" class="text-amber-400">
+                Mail coché mais pas d'email.
+              </li>
+            </ul>
           </div>
           <div>
             Jours de réception

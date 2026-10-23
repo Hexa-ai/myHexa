@@ -30,7 +30,12 @@ const CH_LABEL: Record<keyof Channels, string> = { email: 'mail', sms: 'SMS', ca
 export const chList = (c: (keyof Channels)[]) => c.map((k) => CH_LABEL[k]).join(' + ')
 export const fmtMin = (s: number) => (s === 0 ? 'tout de suite' : `+${Math.round(s / 60)} min`)
 
-export function buildPreview(cfg: AlarmConfig, d: Device, type: keyof Filters): Preview {
+export function buildPreview(
+  cfg: AlarmConfig,
+  d: Device,
+  type: keyof Filters,
+  escOverride?: Escalation | null,
+): Preview {
   const warnings: string[] = []
   const notes: string[] = []
   const rows = cfg
@@ -40,7 +45,8 @@ export function buildPreview(cfg: AlarmConfig, d: Device, type: keyof Filters): 
   // le portail n'envoie pas le téléphone (masqué par la box) : la box garde le sien
   const hasPhone = (s: Sub, p: Person) => !!(p.phone || reported.get(s.box_recipient_id)?.phone)
   const hasEmail = (p: Person) => !!p.contact_email
-  const esc: Escalation | null = cfg.escOf(d.id)?.config ?? d.reportedEscalation
+  const esc: Escalation | null =
+    escOverride !== undefined ? escOverride : (cfg.escOf(d.id)?.config ?? d.reportedEscalation)
   const label = type === 'error' ? 'erreurs' : type === 'warning' ? 'warnings' : 'infos'
 
   // jours : la box saute la personne le jour où elle n'est pas de service
