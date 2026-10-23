@@ -56,6 +56,44 @@ export interface Escalation {
   closure_notice: boolean
   levels: EscLevel[]
 }
+// --- compatibilité firmware ----------------------------------------------------------------
+// Pilotage à distance des destinataires (set_recipients) : firmware >= 1.3.7.
+// Escalade (set_escalation) : firmware >= 1.3.10. La box le prouve elle-même : bloc `remote`
+// reçu (remote_seen_at) et `escalation_hash` présent dans son état (absent avant 1.3.10).
+export const FW_RECIPIENTS = '1.3.7'
+export const FW_ESCALATION = '1.3.10'
+export function versionLt(a: string, b: string): boolean {
+  const pa = a
+    .replace(/^v/, '')
+    .split(/[.-]/)
+    .map((x) => parseInt(x, 10) || 0)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== pb[i]) return (pa[i] ?? 0) < pb[i]
+  return false
+}
+export type Capability = { level: 'none' | 'recipients' | 'full'; label: string; hint: string }
+export function capability(
+  d: Pick<Device, 'remote_seen_at' | 'running_version' | 'escalation_hash'>,
+): Capability {
+  const v = d.running_version ? ` (box en v${d.running_version})` : ''
+  if (!d.remote_seen_at)
+    return {
+      level: 'none',
+      label: 'non pilotable',
+      hint:
+        d.running_version && versionLt(d.running_version, FW_RECIPIENTS)
+          ? `Firmware trop ancien${v} : réglage à distance à partir de la ${FW_RECIPIENTS}. Mettre la box à jour.`
+          : `La box n'envoie pas d'infos de pilotage : firmware antérieur à ${FW_RECIPIENTS}, ou option « Remote management » désactivée sur la box.`,
+    }
+  if (d.escalation_hash === null)
+    return {
+      level: 'recipients',
+      label: 'destinataires seulement',
+      hint: `l'escalade se règle à distance à partir du firmware ${FW_ESCALATION}${v}. Les destinataires, eux, sont réglables ici.`,
+    }
+  return { level: 'full', label: 'pilotable', hint: '' }
+}
+
 export interface Device {
   id: string
   name: string
@@ -63,6 +101,7 @@ export interface Device {
   running_version: string | null
   recipients_hash: string | null
   recipients_hash_ref: string | null
+  escalation_hash: string | null
   reported: BoxRecipient[] | null
   reportedEscalation: Escalation | null
   pending: number
@@ -141,7 +180,9 @@ export function useAlarmConfig() {
         supabase.from('recipients').select(PERSON_COLS).eq('company_id', companyId).order('name'),
         supabase
           .from('devices')
-          .select('id, name, remote_seen_at, running_version, recipients_hash, recipients_hash_ref')
+          .select(
+            'id, name, remote_seen_at, running_version, recipients_hash, recipients_hash_ref, escalation_hash',
+          )
           .eq('company_id', companyId)
           .order('name'),
         supabase.from('companies').select('name').eq('id', companyId).maybeSingle(),
@@ -212,7 +253,8 @@ export function useAlarmConfig() {
     subs.value.find((x) => x.device_id === deviceId && x.box_recipient_id === boxId)
   const escOf = (deviceId: string) =>
     escalations.value.find((e) => e.device_id === deviceId) ?? null
-  const pilotable = (d: Device) => !!d.remote_seen_at
+  const pilotable = (d: Device) => capability(d).level !== 'none'
+  const escalationPilotable = (d: Device) => capability(d).level === 'full'
   /** canaux d'une personne sur une box : exception box, sinon sa fiche */
   const channelsOn = (s: Sub) =>
     s.channels_override ?? personById.value.get(s.recipient_id)?.alarm_channels ?? null
@@ -428,14 +470,17 @@ export function useAlarmConfig() {
       p_recipients: recipients,
     })
     if (error) return fail(error)
-    const res = data as { status: string; detail?: string }
+    const res = data as { status: string; detail?: string; escalation_skipped?: boolean }
     if (res.status === 'conflict') {
       if (confirm(`${d.name} : ${res.detail}.\n\nImposer quand même la configuration du portail ?`))
         return send(d, true)
       return
     }
     if (res.status !== 'queued') return setFlash(`${d.name} : ${res.detail ?? res.status}`)
-    setFlash(`${d.name} : envoi programmé (appliqué au prochain push de la box)`)
+    setFlash(
+      `${d.name} : envoi programmé (appliqué au prochain push de la box)` +
+        (res.escalation_skipped ? ' — escalade non envoyée (firmware antérieur à 1.3.10)' : ''),
+    )
   }
 
   async function importFromBoxes(companyId: string) {
@@ -527,6 +572,8 @@ export function useAlarmConfig() {
     subOf,
     escOf,
     pilotable,
+    escalationPilotable,
+    capability,
     channelsOn,
     memberName,
     memberChannels,

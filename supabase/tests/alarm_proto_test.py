@@ -50,6 +50,9 @@ update devices set recipients_hash=null, recipients_hash_ref=null, escalation_ha
 
 print("préparation : 2 personnes « alarmes seulement » (Alice : mail ; Bob : mail + SMS)")
 cleanup()
+seen0 = sql(f"select remote_seen_at from devices where id='{D1}'")[0]["remote_seen_at"]
+# D1 joue une box >= 1.3.10 (bloc remote reçu + escalation_hash dans son état)
+sql(f"update devices set remote_seen_at=now(), escalation_hash='e0', escalation_hash_ref='e0' where id='{D1}'")
 r = sql(f"""insert into recipients (id, company_id, name, contact_email, role, portal_access, alarm_channels) values
  ('{A}','{CO}','Alice Test','alice@example.invalid','viewer',false,'{J(EMAIL)}'),
  ('{B}','{CO}','Bob Test','bob@example.invalid','viewer',false,'{J(EMAIL_SMS)}');
@@ -164,6 +167,18 @@ r = sql(f"select count(*) n from recipients where company_id='{SERPOL}' and cont
 r2 = sql(f"select count(*) n from recipients where company_id='{SERPOL}' and contact_email is not null")
 check("filtre portal_access : écarte les personnes « alarmes seulement » avec email", r[0]["n"] < r2[0]["n"], (r, r2))
 
+print("compatibilité firmware")
+sql(f"update device_escalation set config = jsonb_set(config, '{{cumulative}}', to_jsonb(not coalesce((config->>'cumulative')::boolean, false))) where device_id='{D1}'")
+sql(f"update devices set escalation_hash=null, escalation_hash_ref=null where id='{D1}'")
+r = queue(recipients=False)
+check("firmware < 1.3.10 (pas d'escalation_hash) : escalade refusée", r.get("status") == "refused" and "1.3.10" in r.get("detail", ""), r)
+r = queue(recipients=True)
+check("firmware < 1.3.10 : la liste part, l'escalade est écartée", r.get("status") == "queued" and r.get("set_escalation") is None and r.get("escalation_skipped") is True, r)
+sql(f"update devices set remote_seen_at=null where id='{D1}'")
+r = queue(recipients=True)
+check("box sans bloc remote (< 1.3.7 ou pilotage désactivé) : refus", r.get("status") == "refused" and "1.3.7" in r.get("detail", ""), r)
+
 cleanup()
+sql(f"update devices set remote_seen_at={('null' if seen0 is None else repr(seen0))} where id='{D1}'")
 print(f"\n{ok} OK, {ko} échec(s)")
 sys.exit(1 if ko else 0)

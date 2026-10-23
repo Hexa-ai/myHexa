@@ -33,6 +33,10 @@ async function add(personId: string) {
   search.value = ''
 }
 const state = computed(() => props.cfg.syncState(props.device))
+// compatibilité firmware : pas de réglage possible sur une box qui ne saurait pas l'appliquer
+const cap = computed(() => props.cfg.capability(props.device))
+const edit = computed(() => props.canEdit && cap.value.level !== 'none')
+const escEdit = computed(() => props.canEdit && cap.value.level === 'full')
 async function send() {
   await props.cfg.send(props.device)
   emit('changed')
@@ -54,10 +58,23 @@ const direct = (r: ReturnType<AlarmConfig['receives']>, filters: Record<string, 
           <div class="font-mono text-[10px] text-muted-foreground">
             {{ device.running_version ? `v${device.running_version} · ` : '' }}
             <span :class="state.cls" :title="state.hint">{{ state.label }}</span>
-            <span v-if="!cfg.pilotable(device)">
-              · non pilotable (modifications enregistrées, envoi impossible)</span
-            >
           </div>
+          <p
+            v-if="cap.level !== 'full'"
+            :class="[
+              'text-xs mt-1 rounded border px-2 py-1',
+              cap.level === 'none'
+                ? 'border-offline/50 text-offline'
+                : 'border-amber-400/50 text-amber-400',
+            ]"
+            data-testid="fw-compat"
+          >
+            {{ cap.level === 'none' ? 'Lecture seule' : 'Escalade en lecture seule' }}
+            — {{ cap.hint }}
+            <template v-if="cap.level === 'none'">
+              Affichage en lecture seule de ce que la box a déclaré.</template
+            >
+          </p>
           <p
             v-if="device.lastAck && ['error', 'rejected'].includes(device.lastAck.status)"
             class="text-xs text-offline mt-1"
@@ -90,7 +107,7 @@ const direct = (r: ReturnType<AlarmConfig['receives']>, filters: Record<string, 
             Destinataires ({{ rows.length }})
           </h4>
           <button
-            v-if="canEdit && rows.length"
+            v-if="edit && rows.length"
             class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-signal"
             @click="emit('copy', device)"
           >
@@ -148,7 +165,7 @@ const direct = (r: ReturnType<AlarmConfig['receives']>, filters: Record<string, 
               <button
                 v-for="l in LEVELS"
                 :key="l.key"
-                :disabled="!canEdit"
+                :disabled="!edit"
                 :title="l.key"
                 :class="[
                   'w-6 h-6 rounded text-[10px] font-mono',
@@ -160,7 +177,7 @@ const direct = (r: ReturnType<AlarmConfig['receives']>, filters: Record<string, 
               </button>
             </div>
             <button
-              v-if="canEdit"
+              v-if="edit"
               class="text-xs text-muted-foreground hover:text-offline"
               title="retirer de la box"
               @click="cfg.removeSub(s)"
@@ -172,7 +189,7 @@ const direct = (r: ReturnType<AlarmConfig['receives']>, filters: Record<string, 
             Aucun destinataire.
           </li>
         </ul>
-        <div v-if="canEdit" class="relative">
+        <div v-if="edit" class="relative">
           <input
             v-model="search"
             type="search"
@@ -204,7 +221,7 @@ const direct = (r: ReturnType<AlarmConfig['receives']>, filters: Record<string, 
 
       <AlarmPreview :device="device" :cfg="cfg" />
 
-      <EscalationEditor :device="device" :cfg="cfg" :can-edit="canEdit" />
+      <EscalationEditor :device="device" :cfg="cfg" :can-edit="escEdit" />
     </aside>
   </div>
 </template>

@@ -259,10 +259,16 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_company uuid; v_hash text; v_ref text; v_ehash text; v_eref text;
   v_list jsonb; v_cmd text; v_esc jsonb; v_base jsonb; v_payload jsonb; v_esc_cmd text; v_ids text[]; v_bad text;
+  v_seen timestamptz; v_esc_skipped boolean := false;
 begin
-  select company_id, recipients_hash, recipients_hash_ref, escalation_hash, escalation_hash_ref
-    into v_company, v_hash, v_ref, v_ehash, v_eref from devices where id = p_device;
+  select company_id, recipients_hash, recipients_hash_ref, escalation_hash, escalation_hash_ref, remote_seen_at
+    into v_company, v_hash, v_ref, v_ehash, v_eref, v_seen from devices where id = p_device;
   if v_company is null or not can_manage_company(v_company) then raise exception 'forbidden'; end if;
+  -- compatibilité firmware : pilotage à distance (set_recipients) >= 1.3.7, escalade (set_escalation) >= 1.3.10.
+  -- La box le prouve elle-même : bloc remote reçu (remote_seen_at), escalation_hash présent dans son état.
+  if v_seen is null then
+    return jsonb_build_object('status', 'refused', 'detail', 'box non pilotable : firmware antérieur à 1.3.7 ou pilotage à distance non activé');
+  end if;
 
   select alarm_resolve_escalation(p_device, config), baseline into v_esc, v_base
   from device_escalation where device_id = p_device;
@@ -274,8 +280,14 @@ begin
       from jsonb_each(v_esc) as e(k, v) where v is distinct from (v_base -> k);
     end if;
   end if;
+  if v_payload is not null and v_ehash is null then
+    v_payload := null; v_esc_skipped := true; -- firmware < 1.3.10 : il répondrait « unsupported »
+  end if;
 
   if not p_recipients and v_payload is null then
+    if v_esc_skipped then
+      return jsonb_build_object('status', 'refused', 'detail', 'escalade non pilotable à distance : firmware antérieur à 1.3.10');
+    end if;
     return jsonb_build_object('status', 'nothing', 'detail', 'rien à envoyer');
   end if;
   if not p_force and p_recipients and v_ref is not null and v_hash is distinct from v_ref then
@@ -321,7 +333,8 @@ begin
     v_esc_cmd := 'cmd_' || replace(gen_random_uuid()::text, '-', '');
     insert into device_commands (id, device_id, type, payload) values (v_esc_cmd, p_device, 'set_escalation', v_payload);
   end if;
-  return jsonb_build_object('status', 'queued', 'set_recipients', v_cmd, 'set_escalation', v_esc_cmd, 'escalation_payload', v_payload);
+  return jsonb_build_object('status', 'queued', 'set_recipients', v_cmd, 'set_escalation', v_esc_cmd, 'escalation_payload', v_payload,
+                            'escalation_skipped', v_esc_skipped);
 end;
 $$;
 

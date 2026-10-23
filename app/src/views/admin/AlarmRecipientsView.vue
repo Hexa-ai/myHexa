@@ -259,9 +259,16 @@ async function sendRow(d: Device) {
           <div class="font-mono text-[10px] text-muted-foreground">
             {{ d.running_version ? `v${d.running_version}` : '' }}
             <span
-              v-if="!cfg.pilotable(d)"
-              title="la box n'a pas envoyé d'infos de pilotage à distance"
-              >· non pilotable</span
+              v-if="cfg.capability(d).level !== 'full'"
+              :title="cfg.capability(d).hint"
+              data-testid="fw-badge"
+              :class="[
+                'ml-1 px-1 rounded border',
+                cfg.capability(d).level === 'none'
+                  ? 'border-offline/50 text-offline'
+                  : 'border-amber-400/50 text-amber-400',
+              ]"
+              >{{ cfg.capability(d).label }}</span
             >
           </div>
         </div>
@@ -357,13 +364,23 @@ async function sendRow(d: Device) {
               <div :class="['font-mono text-[9px] uppercase', cfg.syncState(d).cls]">
                 {{ cfg.syncState(d).label }}
               </div>
+              <div
+                v-if="cfg.capability(d).level !== 'full'"
+                :title="cfg.capability(d).hint"
+                :class="[
+                  'font-mono text-[9px]',
+                  cfg.capability(d).level === 'none' ? 'text-offline' : 'text-amber-400',
+                ]"
+              >
+                {{ cfg.capability(d).label }}
+              </div>
             </td>
             <td v-for="c in people" :key="c.id" class="px-2 py-2 text-center">
               <div v-if="cfg.subOf(c.id, d.id)" class="inline-flex gap-0.5">
                 <button
                   v-for="l in LEVELS"
                   :key="l.key"
-                  :disabled="!canEdit"
+                  :disabled="!canEdit || !cfg.pilotable(d)"
                   :class="[
                     'w-5 h-5 rounded text-[10px] font-mono',
                     cfg.subOf(c.id, d.id)!.filters[l.key]
@@ -376,7 +393,7 @@ async function sendRow(d: Device) {
                 </button>
               </div>
               <button
-                v-else-if="canEdit"
+                v-else-if="canEdit && cfg.pilotable(d)"
                 class="w-5 h-5 rounded text-xs text-muted-foreground/40 hover:text-signal"
                 @click="cfg.addSubs([{ recipient_id: c.id, device_id: d.id }])"
               >
@@ -413,7 +430,7 @@ async function sendRow(d: Device) {
         </p>
         <div class="max-h-72 overflow-y-auto space-y-1">
           <label
-            v-for="d in devices.filter((x) => x.id !== copyFrom!.id)"
+            v-for="d in devices.filter((x) => x.id !== copyFrom!.id && cfg.pilotable(x))"
             :key="d.id"
             class="flex items-center gap-2 text-sm"
           >
@@ -614,14 +631,31 @@ async function sendRow(d: Device) {
             <div v-if="canEdit && notYetOn.length" class="space-y-1" data-testid="add-to-boxes">
               <div class="text-muted-foreground">Ajouter à des box (erreurs + warnings)</div>
               <div class="max-h-48 overflow-y-auto space-y-1 border border-border rounded-md p-2">
-                <label v-for="d in notYetOn" :key="d.id" class="flex items-center gap-2 text-xs">
-                  <input v-model="addTo" type="checkbox" :value="d.id" /> {{ d.name }}
+                <label
+                  v-for="d in notYetOn"
+                  :key="d.id"
+                  :title="cfg.capability(d).hint"
+                  :class="[
+                    'flex items-center gap-2 text-xs',
+                    !cfg.pilotable(d) && 'text-muted-foreground/50 cursor-not-allowed',
+                  ]"
+                >
+                  <input
+                    v-model="addTo"
+                    type="checkbox"
+                    :value="d.id"
+                    :disabled="!cfg.pilotable(d)"
+                  />
+                  {{ d.name }}
+                  <span v-if="!cfg.pilotable(d)" class="text-[10px]"
+                    >firmware non compatible</span
+                  >
                 </label>
               </div>
               <div class="flex gap-2 justify-end">
                 <button
                   class="text-xs text-muted-foreground hover:text-signal"
-                  @click="addTo = notYetOn.map((d) => d.id)"
+                  @click="addTo = notYetOn.filter((d) => cfg.pilotable(d)).map((d) => d.id)"
                 >
                   tout cocher
                 </button>
