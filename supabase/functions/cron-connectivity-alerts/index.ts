@@ -182,6 +182,7 @@ Deno.serve(async (req) => {
         'id, contact_email, name, company_id, restrict_to_devices, shared_devices, auth_user_id',
       )
       .not('contact_email', 'is', null)
+      .eq('portal_access', true) // personnes « alarmes de box seulement » : pas de mail du portail
     if (recErr) {
       console.error('[connectivity-alerts] recipients fetch failed', recErr)
       continue

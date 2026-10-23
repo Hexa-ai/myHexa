@@ -1,8 +1,13 @@
 <script setup lang="ts">
 // PROTOTYPE — éditeur de la chaîne d'escalade d'une box (format set_escalation du firmware).
+// Canaux : un membre suit SES canaux (fiche personne, ou exception sur la box) ; on ne règle ici
+// que des exceptions explicites. Le portail envoie à la box chaque membre avec ses canaux résolus.
 import { computed, ref, watch } from 'vue'
 import {
+  CHANNELS,
   LEVELS,
+  channelLabel,
+  same,
   type AlarmConfig,
   type Channels,
   type Device,
@@ -19,29 +24,25 @@ const DEFAULT: Escalation = {
   closure_notice: false,
   levels: [],
 }
-const CH: (keyof Channels)[] = ['email', 'sms', 'call']
-const CH_LABEL: Record<keyof Channels, string> = { email: 'mail', sms: 'SMS', call: 'appel' }
 
-const stored = computed(
-  () => props.cfg.escOf(props.device.id)?.config ?? props.device.reportedEscalation ?? null,
-)
+const stored = computed(() => props.cfg.escOf(props.device.id)?.config ?? null)
 const draft = ref<Escalation | null>(null)
 function reset() {
   draft.value = stored.value ? JSON.parse(JSON.stringify({ ...DEFAULT, ...stored.value })) : null
 }
 watch(() => props.device.id, reset, { immediate: true })
 const changed = computed(
-  () =>
-    JSON.stringify(draft.value) !==
-    JSON.stringify(stored.value ? { ...DEFAULT, ...stored.value } : null),
+  () => !same(draft.value, stored.value ? { ...DEFAULT, ...stored.value } : null),
 )
 
 const members = computed(() =>
   props.cfg.subsOf(props.device.id).map((s) => ({
     id: s.box_recipient_id,
-    name: props.cfg.contactById.value.get(s.contact_id)?.name ?? s.box_recipient_id,
+    name: props.cfg.personById.value.get(s.recipient_id)?.name ?? s.box_recipient_id,
+    channels: props.cfg.channelsOn(s),
   })),
 )
+const memberOf = (id: string) => members.value.find((m) => m.id === id)
 
 function create() {
   draft.value = JSON.parse(JSON.stringify(DEFAULT))
@@ -52,7 +53,7 @@ function addLevel() {
   const n = draft.value.levels.length
   draft.value.levels.push({
     name: `Niveau ${n + 1}`,
-    delay_seconds: n === 0 ? 0 : 300,
+    delay_seconds: n === 0 ? 60 : 300,
     reminders: 0,
     members: [],
     channels: { email: true, sms: false, call: false },
@@ -74,26 +75,44 @@ function toggleMember(i: number, id: string) {
     delete lv.member_channels[id]
   } else lv.members.push(id)
 }
+/** canaux effectifs d'un membre à ce niveau */
+const eff = (i: number, id: string): Channels =>
+  draft.value!.levels[i].member_channels[id] ??
+  memberOf(id)?.channels ??
+  draft.value!.levels[i].channels
+function toggleChannel(i: number, id: string, key: keyof Channels) {
+  const lv = draft.value!.levels[i]
+  const next = { ...eff(i, id), [key]: !eff(i, id)[key] }
+  // revenu à ses canaux habituels -> plus d'exception
+  if (same(next, memberOf(id)?.channels)) delete lv.member_channels[id]
+  else lv.member_channels[id] = next
+}
+function resetChannels(i: number, id: string) {
+  delete draft.value!.levels[i].member_channels[id]
+}
 const minutes = (s: number) => Math.round(s / 60)
 function setMinutes(i: number, v: string) {
-  draft.value!.levels[i].delay_seconds = Math.max(0, Math.round(Number(v) || 0)) * 60
+  draft.value!.levels[i].delay_seconds =
+    Math.min(1440, Math.max(1, Math.round(Number(v) || 1))) * 60
 }
 
 const problems = computed(() => {
   const d = draft.value
   if (!d) return []
-  const ids = new Set(members.value.map((m) => m.id))
   const out: string[] = []
-  if (d.mode === 'escalation' && !d.levels.length) out.push('aucun niveau')
+  if (!d.levels.length) out.push('aucun niveau')
+  if (!d.types.error && !d.types.warning && !d.types.info)
+    out.push("aucun type d'alarme ne déclenche la chaîne")
   d.levels.forEach((l, i) => {
     if (!l.members.length) out.push(`niveau ${i + 1} sans membre`)
-    for (const m of l.members)
-      if (!ids.has(m))
+    for (const m of l.members) {
+      if (!memberOf(m))
         out.push(
           `niveau ${i + 1} : ${props.cfg.memberName(props.device.id, m)} n'est plus destinataire de la box`,
         )
-    if (!l.channels.email && !l.channels.sms && !l.channels.call)
-      out.push(`niveau ${i + 1} sans canal`)
+      else if (!CHANNELS.some((c) => eff(i, m)[c.key]))
+        out.push(`niveau ${i + 1} : ${memberOf(m)!.name} ne serait prévenu par aucun canal`)
+    }
   })
   return out
 })
@@ -120,13 +139,12 @@ async function save() {
       <span
         v-if="cfg.escalationDirty(device.id)"
         class="font-mono text-[10px] uppercase text-amber-400"
+        >modifiée — à envoyer</span
       >
-        modifiée — à envoyer
-      </span>
     </div>
 
     <div v-if="!draft" class="text-sm text-muted-foreground">
-      Pas d'escalade : toutes les alarmes partent en même temps à tous les destinataires.
+      Pas d'escalade : chaque alarme part en même temps à tous les destinataires, sur leurs canaux.
       <button v-if="canEdit" class="ml-2 text-signal hover:underline" @click="create">
         Créer une escalade
       </button>
@@ -146,7 +164,7 @@ async function save() {
           </select>
         </label>
         <div class="flex items-center gap-1">
-          Alarmes concernées
+          Alarmes escaladées
           <button
             v-for="l in LEVELS"
             :key="l.key"
@@ -161,8 +179,14 @@ async function save() {
           </button>
         </div>
       </div>
-      <p v-if="draft.mode === 'immediate'" class="text-xs text-muted-foreground">
-        Mode immédiat : la chaîne reste enregistrée sur la box, prête à être réactivée.
+      <p class="text-xs text-muted-foreground">
+        <template v-if="draft.mode === 'immediate'"
+          >Mode immédiat : la chaîne reste enregistrée sur la box, prête à être réactivée.</template
+        >
+        <template v-else>
+          Chaque membre est prévenu sur <b>ses canaux habituels</b> (ceux de sa fiche ou de cette
+          box). Cliquer un canal crée une exception pour ce niveau seulement.
+        </template>
       </p>
 
       <ol class="space-y-2">
@@ -176,6 +200,7 @@ async function save() {
             <input
               v-model="lv.name"
               :disabled="!canEdit"
+              maxlength="64"
               class="flex-1 min-w-[120px] border border-border bg-secondary/30 rounded px-2 py-1 text-sm"
             />
             <label class="text-xs flex items-center gap-1">
@@ -184,7 +209,7 @@ async function save() {
                 :value="minutes(lv.delay_seconds)"
                 :disabled="!canEdit"
                 type="number"
-                min="0"
+                min="1"
                 class="w-14 border border-border bg-secondary/30 rounded px-1 py-0.5"
                 @change="setMinutes(i, ($event.target as HTMLInputElement).value)"
               />
@@ -225,35 +250,64 @@ async function save() {
               </button>
             </template>
           </div>
-          <div class="flex flex-wrap gap-1.5">
+
+          <ul v-if="lv.members.length" class="space-y-1">
+            <li
+              v-for="m in lv.members"
+              :key="m"
+              class="flex items-center gap-2 text-xs"
+              data-testid="level-member"
+            >
+              <span :class="['w-40 truncate', !memberOf(m) && 'text-offline']"
+                >{{ cfg.memberName(device.id, m) }}{{ memberOf(m) ? '' : ' ⚠' }}</span
+              >
+              <span class="inline-flex gap-1">
+                <button
+                  v-for="c in CHANNELS"
+                  :key="c.key"
+                  :disabled="!canEdit || !memberOf(m)"
+                  :class="[
+                    'px-1.5 py-0.5 rounded border',
+                    eff(i, m)[c.key]
+                      ? 'border-signal bg-signal/15 text-foreground'
+                      : 'border-border text-muted-foreground/50',
+                  ]"
+                  @click="toggleChannel(i, m, c.key)"
+                >
+                  {{ c.label }}
+                </button>
+              </span>
+              <span
+                v-if="lv.member_channels[m]"
+                class="text-amber-400"
+                data-testid="channel-exception"
+              >
+                exception (habituellement : {{ channelLabel(memberOf(m)?.channels) }})
+                <button v-if="canEdit" class="underline ml-1" @click="resetChannels(i, m)">
+                  rétablir
+                </button>
+              </span>
+              <span v-else class="text-muted-foreground/60">comme d'habitude</span>
+              <button
+                v-if="canEdit"
+                class="ml-auto text-muted-foreground hover:text-offline"
+                title="retirer du niveau"
+                @click="toggleMember(i, m)"
+              >
+                ✕
+              </button>
+            </li>
+          </ul>
+          <div v-if="canEdit" class="flex flex-wrap gap-1.5 items-center">
+            <span class="text-[10px] text-muted-foreground">ajouter :</span>
             <button
-              v-for="m in members"
+              v-for="m in members.filter((x) => !lv.members.includes(x.id))"
               :key="m.id"
-              :disabled="!canEdit"
-              :class="[
-                'text-xs px-2 py-0.5 rounded-full border transition',
-                lv.members.includes(m.id)
-                  ? 'border-signal text-foreground bg-signal/15'
-                  : 'border-border text-muted-foreground/60',
-              ]"
+              class="text-xs px-2 py-0.5 rounded-full border border-border text-muted-foreground hover:border-signal hover:text-foreground"
               @click="toggleMember(i, m.id)"
             >
-              {{ m.name }}
+              + {{ m.name }}
             </button>
-            <span
-              v-for="m in lv.members.filter((x) => !members.some((y) => y.id === x))"
-              :key="m"
-              class="text-xs px-2 py-0.5 rounded-full border border-offline text-offline"
-              title="n'est plus destinataire de cette box"
-            >
-              {{ cfg.memberName(device.id, m) }} ⚠
-            </span>
-          </div>
-          <div class="flex gap-3 text-xs">
-            <label v-for="ch in CH" :key="ch" class="flex items-center gap-1">
-              <input v-model="lv.channels[ch]" :disabled="!canEdit" type="checkbox" />
-              {{ CH_LABEL[ch] }}
-            </label>
           </div>
         </li>
       </ol>

@@ -2,30 +2,35 @@
 -- Modèle : ~/suivi/projets/myhexa_support/destinataires_alarme_modele.md
 -- Principe : le portail stocke l'état VOULU ; la box rapporte l'état CONSTATÉ (bloc notifications du status) ;
 -- un écart se résout par une commande set_recipients / set_escalation servie au push status suivant.
+--
+-- v3 : UNE SEULE LISTE DE PERSONNES. La table recipients (utilisateurs / destinataires du portail) porte aussi
+-- les réglages d'alarme. Une personne peut avoir l'accès portail, recevoir des alarmes de box, ou les deux.
+-- portal_access = false : personne « alarmes seulement » (ex. portable d'astreinte) — ni compte, ni mails du portail.
+--
+-- Canaux : UNE source de vérité par personne et par box (alarm_channels, ou channels_override sur la box).
+-- Dans l'escalade, un membre suit ces mêmes canaux, sauf exception explicite (member_channels stocké = exceptions
+-- seulement) ; le portail envoie à la box une chaîne « résolue » où chaque membre a ses canaux explicites.
 
 -- ---------------------------------------------------------------------------------------------
--- 1. Annuaire des contacts d'alarme d'une entreprise (≠ utilisateurs du portail, lien optionnel)
-create table public.alarm_contacts (
-  id uuid primary key default gen_random_uuid(),
-  company_id uuid not null references public.companies(id) on delete cascade,
-  name text not null check (char_length(name) between 1 and 128),
-  email text not null default '' check (char_length(email) <= 254),
-  phone text not null default '' check (char_length(phone) <= 32),
-  enabled boolean not null default true,
-  -- profil par défaut, appliqué à toutes ses box (exception possible par box)
-  channels jsonb not null default '{"email": true, "sms": false, "call": false}'::jsonb,
-  schedule_days text[] not null default array['monday','tuesday','wednesday','thursday','friday','saturday','sunday'],
-  recipient_id uuid references public.recipients(id) on delete set null, -- compte portail éventuel
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create index alarm_contacts_company_idx on public.alarm_contacts (company_id);
+-- 1. Personnes : réglages d'alarme sur recipients
+alter table public.recipients
+  add column portal_access boolean not null default true,
+  add column alarm_enabled boolean not null default true,
+  add column alarm_channels jsonb not null default '{"email": true, "sms": false, "call": false}'::jsonb,
+  add column alarm_schedule_days text[] not null
+    default array['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+-- une personne « alarmes seulement » n'a pas de compte ; une personne avec accès portail en a toujours un
+alter table public.recipients alter column auth_user_id drop not null;
+alter table public.recipients add constraint recipients_portal_access_account
+  check (not portal_access or auth_user_id is not null);
+comment on column public.recipients.portal_access is
+  'false = personne « alarmes de box seulement » : pas de compte, exclue des mails du portail (rapports, connectivité)';
 
--- 2. Abonnements : tel contact reçoit tels types d'alarme de telle box
+-- 2. Abonnements : telle personne reçoit tels types d'alarme de telle box
 --    box_recipient_id = l'id (8 hex) du destinataire SUR CETTE BOX. On réutilise l'id existant à l'import :
 --    en changer ferait supprimer le destinataire de la box et le retirerait de ses niveaux d'escalade.
 create table public.alarm_subscriptions (
-  contact_id uuid not null references public.alarm_contacts(id) on delete cascade,
+  recipient_id uuid not null references public.recipients(id) on delete cascade,
   device_id uuid not null references public.devices(id) on delete cascade,
   box_recipient_id text not null default substr(md5(gen_random_uuid()::text), 1, 8)
     check (box_recipient_id ~ '^[0-9a-f]{8}$'),
@@ -34,15 +39,15 @@ create table public.alarm_subscriptions (
   schedule_days_override text[],
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  primary key (contact_id, device_id),
+  primary key (recipient_id, device_id),
   unique (device_id, box_recipient_id)
 );
 create index alarm_subscriptions_device_idx on public.alarm_subscriptions (device_id);
 
--- 3. Chaîne d'escalade voulue, par box (format set_escalation, sans runs)
---    baseline = ce que la box applique (import, ou dernier set_escalation acquitté ok).
---    config ≠ baseline -> « à envoyer » ; on n'envoie que les clés modifiées, et levels seulement s'il a changé
---    (levels REMPLACE la chaîne côté boîtier, cf. doc firmware).
+-- 3. Chaîne d'escalade voulue, par box (format set_escalation, sans runs ; member_channels = exceptions seulement)
+--    baseline = ce que la box applique (forme résolue : import, ou dernier set_escalation acquitté ok).
+--    résolu(config) ≠ baseline -> « à envoyer » ; on n'envoie que les clés modifiées, et levels seulement
+--    s'il a changé (levels REMPLACE la chaîne côté boîtier, cf. doc firmware).
 create table public.device_escalation (
   device_id uuid primary key references public.devices(id) on delete cascade,
   config jsonb not null,
@@ -85,7 +90,7 @@ alter table public.devices
 
 -- ---------------------------------------------------------------------------------------------
 -- RLS : lecture = entreprise du user ou staff ; écriture = admin de l'entreprise ou staff admin
-alter table public.alarm_contacts enable row level security;
+-- (recipients garde ses policies existantes : même règle)
 alter table public.alarm_subscriptions enable row level security;
 alter table public.device_escalation enable row level security;
 alter table public.device_commands enable row level security;
@@ -95,18 +100,13 @@ returns boolean language sql stable security definer set search_path = public as
   select (p_company = current_recipient_company_id() and current_recipient_is_admin()) or is_hexa_staff_admin()
 $$;
 
-create policy alarm_contacts_select on public.alarm_contacts for select
-  using (company_id = current_recipient_company_id() or is_hexa_staff());
-create policy alarm_contacts_write on public.alarm_contacts for all
-  using (can_manage_company(company_id)) with check (can_manage_company(company_id));
-
 create policy alarm_subscriptions_select on public.alarm_subscriptions for select
   using (is_device_visible(device_id));
 create policy alarm_subscriptions_write on public.alarm_subscriptions for all
-  using (exists (select 1 from alarm_contacts c join devices d on d.company_id = c.company_id
-                 where c.id = contact_id and d.id = device_id and can_manage_company(c.company_id)))
-  with check (exists (select 1 from alarm_contacts c join devices d on d.company_id = c.company_id
-                      where c.id = contact_id and d.id = device_id and can_manage_company(c.company_id)));
+  using (exists (select 1 from recipients r join devices d on d.company_id = r.company_id
+                 where r.id = recipient_id and d.id = device_id and can_manage_company(r.company_id)))
+  with check (exists (select 1 from recipients r join devices d on d.company_id = r.company_id
+                      where r.id = recipient_id and d.id = device_id and can_manage_company(r.company_id)));
 
 create policy device_escalation_select on public.device_escalation for select using (is_device_visible(device_id));
 create policy device_escalation_write on public.device_escalation for all
@@ -124,6 +124,29 @@ returns jsonb language sql stable security invoker set search_path = public as $
   where r.device_id = p_device and r.type = 'status'
 $$;
 
+-- Canaux d'une personne sur une box (exception box, sinon sa fiche) ; null si pas destinataire de la box
+create or replace function public.alarm_member_channels(p_device uuid, p_box_id text)
+returns jsonb language sql stable security invoker set search_path = public as $$
+  select coalesce(s.channels_override, r.alarm_channels)
+  from alarm_subscriptions s join recipients r on r.id = s.recipient_id
+  where s.device_id = p_device and s.box_recipient_id = p_box_id
+$$;
+
+-- Chaîne « résolue » : chaque membre reçoit des canaux explicites (exception d'escalade, sinon ses canaux).
+-- p_config null = la config stockée de la box.
+create or replace function public.alarm_resolve_escalation(p_device uuid, p_config jsonb default null)
+returns jsonb language sql stable security invoker set search_path = public as $$
+  with c as (select coalesce(p_config, (select config from device_escalation where device_id = p_device)) - 'runs' as cfg)
+  select case when not (cfg ? 'levels') then cfg else
+    cfg || jsonb_build_object('levels', coalesce((
+      select jsonb_agg(l || jsonb_build_object('member_channels', coalesce((
+               select jsonb_object_agg(m, coalesce(l -> 'member_channels' -> m, alarm_member_channels(p_device, m), l -> 'channels'))
+               from jsonb_array_elements_text(l -> 'members') m), '{}'::jsonb))
+             order by ord)
+      from jsonb_array_elements(cfg -> 'levels') with ordinality x(l, ord)), '[]'::jsonb))
+  end from c
+$$;
+
 -- Liste voulue, au format exact de set_recipients
 create or replace function public.alarm_desired_recipients(p_device uuid)
 returns jsonb language sql stable security invoker set search_path = public as $$
@@ -131,24 +154,26 @@ returns jsonb language sql stable security invoker set search_path = public as $
   -- un champ absent conserve sa valeur locale -> on n'écrase pas le vrai numéro par sa version masquée.
   select coalesce(jsonb_agg(jsonb_build_object(
            'id', s.box_recipient_id,
-           'name', c.name,
-           'email', c.email,
-           'enabled', c.enabled,
+           'name', r.name,
+           'email', coalesce(r.contact_email, ''),
+           'enabled', r.alarm_enabled,
            'filters', s.filters,
-           'channels', coalesce(s.channels_override, c.channels),
-           'schedule_days', to_jsonb(coalesce(s.schedule_days_override, c.schedule_days))
-         ) || case when position('*' in c.phone) > 0 then '{}'::jsonb else jsonb_build_object('phone', c.phone) end
-         order by c.name), '[]'::jsonb)
-  from alarm_subscriptions s join alarm_contacts c on c.id = s.contact_id
+           'channels', coalesce(s.channels_override, r.alarm_channels),
+           'schedule_days', to_jsonb(coalesce(s.schedule_days_override, r.alarm_schedule_days))
+         ) || case when position('*' in coalesce(r.phone, '')) > 0 then '{}'::jsonb
+                   else jsonb_build_object('phone', coalesce(r.phone, '')) end
+         order by r.name), '[]'::jsonb)
+  from alarm_subscriptions s join recipients r on r.id = s.recipient_id
   where s.device_id = p_device
 $$;
 
--- Import : reprend dans l'annuaire ce que les box d'une entreprise ont déjà (dédoublonnage email > téléphone > nom)
+-- Import : reprend dans la liste des personnes ce que les box d'une entreprise ont déjà.
+-- Appariement email > téléphone > nom + 4 derniers chiffres > nom ; sinon nouvelle personne « alarmes seulement ».
 create or replace function public.import_alarm_config(p_company uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  d record; r jsonb; v_contact uuid; v_contacts int := 0; v_subs int := 0; v_devices int := 0;
-  v_channels jsonb; v_days text[];
+  d record; r jsonb; v_person uuid; v_people int := 0; v_subs int := 0; v_devices int := 0;
+  v_channels jsonb; v_days text[]; v_raw jsonb; v_cfg jsonb; v_base jsonb;
 begin
   if not can_manage_company(p_company) then raise exception 'forbidden'; end if;
   for d in
@@ -158,54 +183,76 @@ begin
   loop
     v_devices := v_devices + 1;
     for r in select * from jsonb_array_elements(coalesce(d.notif -> 'recipients', '[]'::jsonb)) loop
-      select c.id into v_contact from alarm_contacts c
-      where c.company_id = p_company and (
-        (nullif(r ->> 'email', '') is not null and lower(c.email) = lower(r ->> 'email'))
-        or (nullif(r ->> 'phone', '') is not null and regexp_replace(c.phone, '\D', '', 'g') = regexp_replace(r ->> 'phone', '\D', '', 'g'))
+      select p.id into v_person from recipients p
+      where p.company_id = p_company and (
+        (nullif(r ->> 'email', '') is not null and lower(p.contact_email) = lower(r ->> 'email'))
+        or (nullif(r ->> 'phone', '') is not null and position('*' in r ->> 'phone') = 0
+            and regexp_replace(coalesce(p.phone, ''), '\D', '', 'g') = regexp_replace(r ->> 'phone', '\D', '', 'g'))
         -- la box masque parfois le numéro (« +336****1814 ») : même nom + 4 derniers chiffres
-        or (lower(c.name) = lower(r ->> 'name') and right(regexp_replace(c.phone, '\D', '', 'g'), 4) = right(regexp_replace(coalesce(r ->> 'phone', ''), '\D', '', 'g'), 4))
-        or (nullif(r ->> 'email', '') is null and nullif(r ->> 'phone', '') is null and lower(c.name) = lower(r ->> 'name')))
-      order by (position('*' in c.phone) > 0)
+        or (lower(p.name) = lower(r ->> 'name') and nullif(r ->> 'phone', '') is not null
+            and right(regexp_replace(coalesce(p.phone, ''), '\D', '', 'g'), 4) = right(regexp_replace(r ->> 'phone', '\D', '', 'g'), 4))
+        or (nullif(r ->> 'email', '') is null and nullif(r ->> 'phone', '') is null and lower(p.name) = lower(r ->> 'name')))
+      order by p.portal_access desc, (position('*' in coalesce(p.phone, '')) > 0)
       limit 1;
-      -- on garde le numéro en clair s'il apparaît sur une autre box
-      if v_contact is not null and position('*' in coalesce(r ->> 'phone', '*')) = 0 then
-        update alarm_contacts set phone = r ->> 'phone' where id = v_contact and position('*' in phone) > 0;
-      end if;
-      v_channels := r -> 'channels';
+      v_channels := coalesce(r -> 'channels', '{"email": true, "sms": false, "call": false}'::jsonb);
       v_days := array(select jsonb_array_elements_text(coalesce(r -> 'schedule_days', '[]'::jsonb)));
-      if v_contact is null then
-        insert into alarm_contacts (company_id, name, email, phone, enabled, channels, schedule_days, recipient_id)
-        values (p_company, coalesce(nullif(r ->> 'name', ''), 'Sans nom'), coalesce(r ->> 'email', ''),
-                coalesce(r ->> 'phone', ''), coalesce((r ->> 'enabled')::boolean, true),
-                coalesce(v_channels, '{"email": true, "sms": false, "call": false}'::jsonb), v_days,
-                (select rc.id from recipients rc where rc.company_id = p_company and nullif(r ->> 'email', '') is not null
-                   and lower(rc.contact_email) = lower(r ->> 'email') limit 1))
-        returning id into v_contact;
-        v_contacts := v_contacts + 1;
+      if v_person is null then
+        insert into recipients (company_id, name, contact_email, phone, role, portal_access,
+                                alarm_enabled, alarm_channels, alarm_schedule_days)
+        values (p_company, coalesce(nullif(r ->> 'name', ''), 'Sans nom'), nullif(r ->> 'email', ''),
+                nullif(r ->> 'phone', ''), 'viewer', false,
+                coalesce((r ->> 'enabled')::boolean, true), v_channels, v_days)
+        returning id into v_person;
+        v_people := v_people + 1;
+      else
+        -- numéro en clair s'il apparaît sur une autre box ; téléphone ajouté s'il manquait
+        if nullif(r ->> 'phone', '') is not null then
+          update recipients set phone = r ->> 'phone'
+          where id = v_person and (nullif(phone, '') is null
+                                   or (position('*' in phone) > 0 and position('*' in r ->> 'phone') = 0));
+        end if;
+        -- première box où on la trouve : ses réglages deviennent ceux de sa fiche
+        if not exists (select 1 from alarm_subscriptions where recipient_id = v_person) then
+          update recipients set alarm_channels = v_channels, alarm_schedule_days = v_days,
+                                alarm_enabled = coalesce((r ->> 'enabled')::boolean, true)
+          where id = v_person;
+        end if;
       end if;
-      insert into alarm_subscriptions (contact_id, device_id, box_recipient_id, filters, channels_override, schedule_days_override)
-      select v_contact, d.id, r ->> 'id', coalesce(r -> 'filters', '{"info": false, "warning": true, "error": true}'::jsonb),
-             case when v_channels is distinct from c.channels then v_channels end,
-             case when v_days is distinct from c.schedule_days then v_days end
-      from alarm_contacts c where c.id = v_contact
-      on conflict (contact_id, device_id) do nothing;
+      insert into alarm_subscriptions (recipient_id, device_id, box_recipient_id, filters, channels_override, schedule_days_override)
+      select v_person, d.id, r ->> 'id', coalesce(r -> 'filters', '{"info": false, "warning": true, "error": true}'::jsonb),
+             case when v_channels is distinct from p.alarm_channels then v_channels end,
+             case when v_days is distinct from p.alarm_schedule_days then v_days end
+      from recipients p where p.id = v_person
+      on conflict (recipient_id, device_id) do nothing;
       if found then v_subs := v_subs + 1; end if;
     end loop;
-    if d.notif -> 'escalation' is not null and jsonb_array_length(coalesce(d.notif -> 'escalation' -> 'levels', '[]')) > 0 then
+    if jsonb_array_length(coalesce(d.notif -> 'escalation' -> 'levels', '[]')) > 0 then
+      v_raw := (d.notif -> 'escalation') - 'runs' || jsonb_build_object('mode', d.notif ->> 'mode');
+      -- baseline : la chaîne de la box, chaque membre avec ses canaux effectifs (exception, sinon canaux du niveau)
+      v_base := v_raw || jsonb_build_object('levels', (
+        select jsonb_agg(l || jsonb_build_object('member_channels', coalesce((
+                 select jsonb_object_agg(m, coalesce(l -> 'member_channels' -> m, l -> 'channels'))
+                 from jsonb_array_elements_text(l -> 'members') m), '{}'::jsonb)) order by ord)
+        from jsonb_array_elements(v_raw -> 'levels') with ordinality x(l, ord)));
+      -- config portail : ne garde en exception que les canaux qui diffèrent de ceux de la personne sur la box
+      v_cfg := v_base || jsonb_build_object('levels', (
+        select jsonb_agg(l || jsonb_build_object('member_channels', coalesce((
+                 select jsonb_object_agg(k, v) from jsonb_each(l -> 'member_channels') e(k, v)
+                 where v is distinct from alarm_member_channels(d.id, k)), '{}'::jsonb)) order by ord)
+        from jsonb_array_elements(v_base -> 'levels') with ordinality x(l, ord)));
       insert into device_escalation (device_id, config, baseline, updated_by)
-      values (d.id, (d.notif -> 'escalation') - 'runs' || jsonb_build_object('mode', d.notif ->> 'mode'),
-                    (d.notif -> 'escalation') - 'runs' || jsonb_build_object('mode', d.notif ->> 'mode'), auth.uid())
+      values (d.id, v_cfg, v_base, auth.uid())
       on conflict (device_id) do nothing;
     end if;
     update devices set recipients_hash_ref = recipients_hash, escalation_hash_ref = escalation_hash where id = d.id;
   end loop;
-  return jsonb_build_object('devices', v_devices, 'contacts_created', v_contacts, 'subscriptions_created', v_subs);
+  return jsonb_build_object('devices', v_devices, 'people_created', v_people, 'subscriptions_created', v_subs);
 end;
 $$;
 
 -- Met en file ce qui a changé dans le portail pour une box :
 --   p_recipients : set_recipients (liste complète, fusion par id côté boîtier)
---   escalade     : set_escalation différentiel si config ≠ baseline (validée avant envoi)
+--   escalade     : set_escalation différentiel si résolu(config) ≠ baseline (validée avant envoi)
 -- Refuse si la box a été modifiée localement depuis la dernière prise en main (sauf p_force).
 create or replace function public.queue_alarm_sync(p_device uuid, p_force boolean default false, p_recipients boolean default true)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -217,7 +264,8 @@ begin
     into v_company, v_hash, v_ref, v_ehash, v_eref from devices where id = p_device;
   if v_company is null or not can_manage_company(v_company) then raise exception 'forbidden'; end if;
 
-  select config - 'runs', baseline into v_esc, v_base from device_escalation where device_id = p_device;
+  select alarm_resolve_escalation(p_device, config), baseline into v_esc, v_base
+  from device_escalation where device_id = p_device;
   if v_esc is not null and v_esc is distinct from v_base then
     if v_base is null or (v_esc -> 'levels') is distinct from (v_base -> 'levels') then
       v_payload := v_esc;
@@ -249,11 +297,7 @@ begin
     if v_bad is not null then
       return jsonb_build_object('status', 'refused', 'detail', 'un membre de l''escalade n''est plus destinataire de la box (' || v_bad || ')');
     end if;
-    select k into v_bad from jsonb_array_elements(v_payload -> 'levels') l, jsonb_object_keys(coalesce(l -> 'member_channels', '{}')) k
-    where not (l -> 'members') ? k limit 1;
-    if v_bad is not null then
-      return jsonb_build_object('status', 'refused', 'detail', 'canaux définis pour un non-membre du niveau (' || v_bad || ')');
-    end if;
+    -- (canaux définis pour un non-membre : écartés par alarm_resolve_escalation, rien à refuser)
   end if;
 
   if p_recipients then
@@ -358,6 +402,7 @@ grant execute on function public.ingest_remote(text, jsonb, text) to service_rol
 revoke all on function public.import_alarm_config(uuid) from public, anon;
 revoke all on function public.queue_alarm_sync(uuid, boolean, boolean) from public, anon;
 revoke all on function public.queue_send_snapshot(uuid) from public, anon;
-grant execute on function public.import_alarm_config(uuid), public.queue_alarm_sync(uuid, boolean, boolean), public.queue_send_snapshot(uuid) to authenticated;
-grant select, insert, update, delete on public.alarm_contacts, public.alarm_subscriptions, public.device_escalation to authenticated;
+grant execute on function public.import_alarm_config(uuid), public.queue_alarm_sync(uuid, boolean, boolean),
+  public.queue_send_snapshot(uuid), public.alarm_resolve_escalation(uuid, jsonb) to authenticated;
+grant select, insert, update, delete on public.alarm_subscriptions, public.device_escalation to authenticated;
 grant select on public.device_commands to authenticated;

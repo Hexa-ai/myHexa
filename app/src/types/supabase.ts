@@ -100,41 +100,34 @@ export type Database = {
         Row: {
           box_recipient_id: string
           channels_override: Json | null
-          contact_id: string
           created_at: string
           device_id: string
           filters: Json
+          recipient_id: string
           schedule_days_override: string[] | null
           updated_at: string
         }
         Insert: {
           box_recipient_id?: string
           channels_override?: Json | null
-          contact_id: string
           created_at?: string
           device_id: string
           filters?: Json
+          recipient_id: string
           schedule_days_override?: string[] | null
           updated_at?: string
         }
         Update: {
           box_recipient_id?: string
           channels_override?: Json | null
-          contact_id?: string
           created_at?: string
           device_id?: string
           filters?: Json
+          recipient_id?: string
           schedule_days_override?: string[] | null
           updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "alarm_subscriptions_contact_id_fkey"
-            columns: ["contact_id"]
-            isOneToOne: false
-            referencedRelation: "alarm_contacts"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "alarm_subscriptions_device_id_fkey"
             columns: ["device_id"]
@@ -142,58 +135,8 @@ export type Database = {
             referencedRelation: "devices"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      alarm_contacts: {
-        Row: {
-          channels: Json
-          company_id: string
-          created_at: string
-          email: string
-          enabled: boolean
-          id: string
-          name: string
-          phone: string
-          recipient_id: string | null
-          schedule_days: string[]
-          updated_at: string
-        }
-        Insert: {
-          channels?: Json
-          company_id: string
-          created_at?: string
-          email?: string
-          enabled?: boolean
-          id?: string
-          name: string
-          phone?: string
-          recipient_id?: string | null
-          schedule_days?: string[]
-          updated_at?: string
-        }
-        Update: {
-          channels?: Json
-          company_id?: string
-          created_at?: string
-          email?: string
-          enabled?: boolean
-          id?: string
-          name?: string
-          phone?: string
-          recipient_id?: string | null
-          schedule_days?: string[]
-          updated_at?: string
-        }
-        Relationships: [
           {
-            foreignKeyName: "alarm_contacts_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "alarm_contacts_recipient_id_fkey"
+            foreignKeyName: "alarm_subscriptions_recipient_id_fkey"
             columns: ["recipient_id"]
             isOneToOne: false
             referencedRelation: "recipients"
@@ -602,39 +545,51 @@ export type Database = {
       }
       recipients: {
         Row: {
-          auth_user_id: string
+          alarm_channels: Json
+          alarm_enabled: boolean
+          alarm_schedule_days: string[]
+          auth_user_id: string | null
           company_id: string | null
           contact_email: string | null
           created_at: string
           id: string
           name: string
           phone: string | null
+          portal_access: boolean
           restrict_to_devices: string[] | null
           role: string
           shared_devices: string[] | null
           updated_at: string
         }
         Insert: {
-          auth_user_id: string
+          alarm_channels?: Json
+          alarm_enabled?: boolean
+          alarm_schedule_days?: string[]
+          auth_user_id?: string | null
           company_id?: string | null
           contact_email?: string | null
           created_at?: string
           id?: string
           name: string
           phone?: string | null
+          portal_access?: boolean
           restrict_to_devices?: string[] | null
           role?: string
           shared_devices?: string[] | null
           updated_at?: string
         }
         Update: {
-          auth_user_id?: string
+          alarm_channels?: Json
+          alarm_enabled?: boolean
+          alarm_schedule_days?: string[]
+          auth_user_id?: string | null
           company_id?: string | null
           contact_email?: string | null
           created_at?: string
           id?: string
           name?: string
           phone?: string | null
+          portal_access?: boolean
           restrict_to_devices?: string[] | null
           role?: string
           shared_devices?: string[] | null
@@ -756,6 +711,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      alarm_resolve_escalation: {
+        Args: { p_config?: Json; p_device: string }
+        Returns: Json
+      }
+      alarm_member_channels: {
+        Args: { p_box_id: string; p_device: string }
+        Returns: Json
+      }
       queue_send_snapshot: { Args: { p_device: string }; Returns: string }
       queue_alarm_sync: {
         Args: { p_device: string; p_force?: boolean; p_recipients?: boolean }
@@ -829,18 +792,28 @@ export type Database = {
       list_company_recipients: {
         Args: { p_company_id: string }
         Returns: {
-          auth_user_id: string
+          alarm_channels: Json
+          alarm_enabled: boolean
+          alarm_schedule_days: string[]
+          auth_user_id: string | null
           company_id: string | null
           contact_email: string | null
           created_at: string
           id: string
           name: string
           phone: string | null
+          portal_access: boolean
           restrict_to_devices: string[] | null
           role: string
           shared_devices: string[] | null
           updated_at: string
         }[]
+        SetofOptions: {
+          from: "*"
+          to: "recipients"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
     }
     Enums: {

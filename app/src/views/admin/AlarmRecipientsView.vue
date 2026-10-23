@@ -1,27 +1,35 @@
 <script setup lang="ts">
 // PROTOTYPE — Destinataires d'alarme pilotés depuis le portail (myHexa-test).
-// Vue « liste » : une ligne par box, ses destinataires en étiquettes ; clic -> panneau box (destinataires + escalade).
-// Vue « tableau » : box × contacts, pratique quand l'annuaire est petit.
+// UNE liste de personnes (recipients) : accès portail et/ou alarmes de box, sur une seule fiche.
+// Vue « Par box » : une ligne par box ; clic -> panneau box (destinataires + escalade).
+// Vue « Tableau » : box × personnes, pratique quand l'entreprise est petite.
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import {
+  CHANNELS,
   DAYS,
   LEVELS,
   DEFAULT_FILTERS,
   channelLabel,
   useAlarmConfig,
-  type Contact,
   type Device,
+  type Person,
 } from '@/composables/useAlarmConfig'
 import BoxAlarmPanel from '@/components/alarms/BoxAlarmPanel.vue'
 
 const auth = useAuthStore()
+const route = useRoute()
 const cfg = useAlarmConfig()
-const { loading, flash, contacts, subs, devices } = cfg
+const { loading, flash, people, subs, devices } = cfg
 const companyId = computed(() => auth.effectiveCompanyId)
 const canEdit = computed(() => auth.recipient?.role === 'admin' || auth.isHexaStaffAdmin)
 const reload = () => cfg.load(companyId.value)
-onMounted(reload)
+onMounted(async () => {
+  await reload()
+  const pid = route.query.person
+  if (typeof pid === 'string') openPerson(cfg.personById.value.get(pid) ?? null)
+})
 watch(companyId, reload)
 
 const view = ref<'list' | 'table'>('list')
@@ -39,9 +47,10 @@ const visibleDevices = computed(() => {
       if (d.name.toLowerCase().includes(q)) return true
       return cfg
         .subsOf(d.id)
-        .some((s) => cfg.contactById.value.get(s.contact_id)?.name.toLowerCase().includes(q))
+        .some((s) => cfg.personById.value.get(s.recipient_id)?.name.toLowerCase().includes(q))
     })
 })
+const portalCount = computed(() => people.value.filter((p) => p.portal_access).length)
 
 // --- panneau box ---------------------------------------------------------------------------
 const openBoxId = ref<string | null>(null)
@@ -64,56 +73,65 @@ async function doCopy() {
   await reload()
 }
 
-// --- fiche contact -------------------------------------------------------------------------
-const draft = ref<Contact | null>(null)
+// --- fiche personne ------------------------------------------------------------------------
+const draft = ref<Person | null>(null)
 const addTo = ref<string[]>([])
-function openContact(c: Contact | null) {
+const inviteRole = ref<'viewer' | 'admin'>('viewer')
+function openPerson(p: Person | null) {
   draft.value = JSON.parse(
     JSON.stringify(
-      c ?? {
+      p ?? {
         id: '',
-        company_id: companyId.value ?? '',
+        company_id: companyId.value ?? null,
         name: '',
-        email: '',
+        contact_email: '',
         phone: '',
-        enabled: true,
-        channels: { email: true, sms: false, call: false },
-        schedule_days: DAYS.map((d) => d[0]),
-        recipient_id: null,
+        role: 'viewer',
+        auth_user_id: null,
+        portal_access: false,
+        alarm_enabled: true,
+        alarm_channels: { email: true, sms: false, call: false },
+        alarm_schedule_days: DAYS.map((d) => d[0]),
+        restrict_to_devices: null,
       },
     ),
   )
   addTo.value = []
 }
+const openPersonById = (id: string) => {
+  openBoxId.value = null
+  openPerson(cfg.personById.value.get(id) ?? null)
+}
 const draftSubs = computed(() =>
   draft.value?.id
     ? subs.value
-        .filter((s) => s.contact_id === draft.value!.id)
+        .filter((s) => s.recipient_id === draft.value!.id)
         .map((s) => ({ s, d: devices.value.find((x) => x.id === s.device_id) }))
     : [],
 )
 const notYetOn = computed(() =>
   draft.value?.id ? devices.value.filter((d) => !cfg.subOf(draft.value!.id, d.id)) : [],
 )
+const invisible = computed(() => (draft.value ? cfg.invisibleBoxes(draft.value) : []))
 function toggleDay(day: string) {
   if (!draft.value) return
-  const set = new Set(draft.value.schedule_days)
+  const set = new Set(draft.value.alarm_schedule_days)
   if (set.has(day)) set.delete(day)
   else set.add(day)
-  draft.value.schedule_days = DAYS.map((d) => d[0]).filter((d) => set.has(d))
+  draft.value.alarm_schedule_days = DAYS.map((d) => d[0]).filter((d) => set.has(d))
 }
-async function saveContact() {
+async function savePerson() {
   if (!draft.value?.name.trim()) return
-  if (await cfg.saveContact(draft.value)) {
+  if (await cfg.savePerson(draft.value)) {
     draft.value = null
     await reload()
   }
 }
-async function addContactToBoxes() {
+async function addPersonToBoxes() {
   if (!draft.value?.id || !addTo.value.length) return
   const n = await cfg.addSubs(
     addTo.value.map((d) => ({
-      contact_id: draft.value!.id,
+      recipient_id: draft.value!.id,
       device_id: d,
       filters: DEFAULT_FILTERS,
     })),
@@ -121,13 +139,23 @@ async function addContactToBoxes() {
   cfg.setFlash(`${draft.value.name} ajouté sur ${n} box (erreurs + warnings, à envoyer)`)
   addTo.value = []
 }
-async function deleteContact() {
+async function deletePerson() {
   if (
     !draft.value?.id ||
-    !confirm(`Supprimer ${draft.value.name} de l'annuaire et de toutes ses box ?`)
+    !confirm(`Supprimer ${draft.value.name} et le retirer de toutes ses box ?`)
   )
     return
-  if (await cfg.deleteContact(draft.value)) {
+  if (await cfg.deletePerson(draft.value)) {
+    draft.value = null
+    await reload()
+  }
+}
+async function invite() {
+  const p = draft.value
+  if (!p?.id || !p.contact_email) return
+  if (!confirm(`Un mail d'invitation au portail sera envoyé à ${p.contact_email}. Continuer ?`))
+    return
+  if (await cfg.invite(p, inviteRole.value)) {
     draft.value = null
     await reload()
   }
@@ -155,9 +183,10 @@ async function sendRow(d: Device) {
           >
         </h1>
         <p class="text-sm text-muted-foreground max-w-3xl">
-          Qui reçoit les alarmes de quelles box, pour {{ cfg.companyLabel.value ?? '—' }}. Ouvrir
-          une box pour régler ses destinataires et son escalade, puis « envoyer » : la box applique
-          au prochain push (~30 min).
+          Qui reçoit les alarmes de quelles box, pour {{ cfg.companyLabel.value ?? '—' }}. Les
+          personnes sont les mêmes que dans « Destinataires » : avec ou sans accès au portail.
+          Ouvrir une box pour régler ses destinataires et son escalade, puis « envoyer » : la box
+          applique au prochain push (~30 min).
         </p>
       </div>
       <div v-if="canEdit" class="flex gap-2 flex-wrap">
@@ -169,9 +198,9 @@ async function sendRow(d: Device) {
         </button>
         <button
           class="px-3 py-2 text-sm bg-primary text-primary-foreground rounded-md"
-          @click="openContact(null)"
+          @click="openPerson(null)"
         >
-          + Contact
+          + Personne
         </button>
       </div>
     </header>
@@ -197,7 +226,7 @@ async function sendRow(d: Device) {
       <input
         v-model="filter"
         type="search"
-        placeholder="Filtrer (box ou contact)"
+        placeholder="Filtrer (box ou personne)"
         autocomplete="off"
         data-1p-ignore="true"
         data-lpignore="true"
@@ -206,7 +235,9 @@ async function sendRow(d: Device) {
       <label class="flex items-center gap-2 text-muted-foreground cursor-pointer">
         <input v-model="showAll" type="checkbox" /> toutes les box ({{ devices.length }})
       </label>
-      <span class="text-muted-foreground">{{ contacts.length }} contacts</span>
+      <span class="text-muted-foreground" data-testid="people-count"
+        >{{ people.length }} personnes · {{ portalCount }} avec accès portail</span
+      >
       <span v-if="loading" class="text-muted-foreground">Chargement…</span>
       <span v-if="flash" class="text-primary">{{ flash }}</span>
     </div>
@@ -237,10 +268,10 @@ async function sendRow(d: Device) {
         <div class="flex-1 flex flex-wrap gap-1.5 min-w-0">
           <span
             v-for="s in cfg.subsOf(d.id)"
-            :key="s.contact_id"
+            :key="s.recipient_id"
             class="inline-flex items-center gap-1 text-xs border border-border rounded-full pl-2 pr-1 py-0.5"
           >
-            {{ cfg.contactById.value.get(s.contact_id)?.name }}
+            {{ cfg.personById.value.get(s.recipient_id)?.name }}
             <span class="inline-flex gap-px">
               <span
                 v-for="l in LEVELS.filter((x) => s.filters[x.key])"
@@ -257,16 +288,12 @@ async function sendRow(d: Device) {
             >aucun destinataire</span
           >
           <span
-            v-if="cfg.escOf(d.id) || d.reportedEscalation"
+            v-if="cfg.escOf(d.id)"
             class="text-xs text-signal border border-signal/40 rounded-full px-2 py-0.5"
             title="escalade configurée"
           >
-            ⇢ escalade {{ (cfg.escOf(d.id)?.config ?? d.reportedEscalation)!.levels.length }} niv.
-            {{
-              (cfg.escOf(d.id)?.config ?? d.reportedEscalation)!.mode === 'immediate'
-                ? '(désactivée)'
-                : ''
-            }}
+            ⇢ escalade {{ cfg.escOf(d.id)!.config.levels.length }} niv.
+            {{ cfg.escOf(d.id)!.config.mode === 'immediate' ? '(désactivée)' : '' }}
           </span>
         </div>
         <div class="w-56 shrink-0 flex items-center justify-end gap-2" @click.stop>
@@ -298,23 +325,23 @@ async function sendRow(d: Device) {
       </li>
     </ul>
 
-    <!-- Vue tableau (petits annuaires) -->
+    <!-- Vue tableau (petites entreprises) -->
     <div v-else class="border border-border rounded-md overflow-x-auto">
-      <p v-if="contacts.length > 12" class="px-3 py-2 text-xs text-amber-400">
-        {{ contacts.length }} contacts : la vue « Par box » est plus lisible.
+      <p v-if="people.length > 12" class="px-3 py-2 text-xs text-amber-400">
+        {{ people.length }} personnes : la vue « Par box » est plus lisible.
       </p>
       <table class="text-sm w-full border-collapse" data-testid="alarm-matrix">
         <thead>
           <tr class="bg-secondary/30">
             <th class="text-left font-normal px-3 py-2 sticky left-0 bg-card min-w-[220px]">Box</th>
             <th
-              v-for="c in contacts"
+              v-for="c in people"
               :key="c.id"
               class="px-2 py-2 font-normal align-bottom min-w-[90px]"
             >
               <button
                 class="text-left w-full hover:text-signal text-xs font-medium"
-                @click="openContact(c)"
+                @click="openPerson(c)"
               >
                 {{ c.name }}
               </button>
@@ -331,7 +358,7 @@ async function sendRow(d: Device) {
                 {{ cfg.syncState(d).label }}
               </div>
             </td>
-            <td v-for="c in contacts" :key="c.id" class="px-2 py-2 text-center">
+            <td v-for="c in people" :key="c.id" class="px-2 py-2 text-center">
               <div v-if="cfg.subOf(c.id, d.id)" class="inline-flex gap-0.5">
                 <button
                   v-for="l in LEVELS"
@@ -351,7 +378,7 @@ async function sendRow(d: Device) {
               <button
                 v-else-if="canEdit"
                 class="w-5 h-5 rounded text-xs text-muted-foreground/40 hover:text-signal"
-                @click="cfg.addSubs([{ contact_id: c.id, device_id: d.id }])"
+                @click="cfg.addSubs([{ recipient_id: c.id, device_id: d.id }])"
               >
                 +
               </button>
@@ -369,6 +396,7 @@ async function sendRow(d: Device) {
       @close="((openBoxId = null), reload())"
       @copy="(d) => ((copyFrom = d), (copyTo = []))"
       @changed="reload"
+      @person="openPersonById"
     />
 
     <!-- Copier vers… -->
@@ -405,7 +433,7 @@ async function sendRow(d: Device) {
       </div>
     </div>
 
-    <!-- Fiche contact -->
+    <!-- Fiche personne -->
     <div
       v-if="draft"
       class="fixed inset-0 z-40 bg-black/50 flex justify-end"
@@ -413,9 +441,9 @@ async function sendRow(d: Device) {
     >
       <aside
         class="bg-card border-l border-border w-full max-w-md h-full overflow-y-auto p-5 space-y-4"
-        data-testid="contact-drawer"
+        data-testid="person-drawer"
       >
-        <h3 class="font-semibold">{{ draft.id ? draft.name : 'Nouveau contact' }}</h3>
+        <h3 class="font-semibold">{{ draft.id ? draft.name : 'Nouvelle personne' }}</h3>
         <label class="block text-sm"
           >Nom
           <input
@@ -427,8 +455,9 @@ async function sendRow(d: Device) {
         <label class="block text-sm"
           >Email
           <input
-            v-model="draft.email"
-            :disabled="!canEdit"
+            v-model="draft.contact_email"
+            :disabled="!canEdit || draft.portal_access"
+            :title="draft.portal_access ? 'identifiant de connexion au portail' : ''"
             type="email"
             class="mt-1 w-full border border-border bg-secondary/30 rounded-md px-3 py-2"
           />
@@ -441,50 +470,155 @@ async function sendRow(d: Device) {
             class="mt-1 w-full border border-border bg-secondary/30 rounded-md px-3 py-2"
           />
         </label>
-        <div class="text-sm">
-          Canaux (sur toutes ses box)
-          <div class="flex gap-4 mt-1">
-            <label
-              v-for="ch in ['email', 'sms', 'call'] as const"
-              :key="ch"
-              class="flex items-center gap-1"
-            >
-              <input v-model="draft.channels[ch]" :disabled="!canEdit" type="checkbox" />
-              {{ { email: 'mail', sms: 'SMS', call: 'appel' }[ch] }}
-            </label>
-          </div>
-        </div>
-        <div class="text-sm">
-          Jours de réception
-          <div class="flex gap-1 mt-1">
-            <button
-              v-for="[day, l] in DAYS"
-              :key="day"
-              :disabled="!canEdit"
-              :class="[
-                'w-8 h-8 rounded text-xs',
-                draft.schedule_days.includes(day)
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-secondary/40 text-muted-foreground',
-              ]"
-              @click="toggleDay(day)"
-            >
-              {{ l }}
-            </button>
-          </div>
-        </div>
-        <label class="flex items-center gap-2 text-sm"
-          ><input v-model="draft.enabled" :disabled="!canEdit" type="checkbox" /> actif</label
+
+        <!-- Volet 1 : accès portail -->
+        <section
+          class="border border-border rounded-md p-3 space-y-2 text-sm"
+          data-testid="portal-section"
         >
-        <div class="text-sm">
-          Accès au portail :
-          <span v-if="draft.recipient_id" class="text-online">oui</span>
-          <span v-else class="text-muted-foreground"
-            >non <span class="text-xs">(invitation : étape suivante)</span></span
+          <h4 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Accès au portail
+          </h4>
+          <template v-if="draft.portal_access">
+            <div>
+              Oui — <b>{{ draft.role === 'admin' ? 'administrateur' : 'lecteur' }}</b
+              >,
+              {{
+                draft.restrict_to_devices?.length
+                  ? `${draft.restrict_to_devices.length} box visibles`
+                  : 'toutes les box'
+              }}. Reçoit aussi les mails du portail (rapports, connectivité).
+            </div>
+            <p v-if="invisible.length" class="text-xs text-amber-400">
+              Reçoit les alarmes de {{ invisible.length }} box qu'il ne voit pas dans le portail :
+              {{ invisible.join(', ') }}.
+            </p>
+            <RouterLink to="/admin/recipients" class="text-xs text-signal hover:underline"
+              >régler son accès dans « Destinataires »</RouterLink
+            >
+          </template>
+          <template v-else>
+            <div class="text-muted-foreground">
+              Non — reçoit seulement les alarmes de ses box, aucun mail du portail.
+            </div>
+            <div v-if="canEdit && draft.id" class="flex items-center gap-2">
+              <select
+                v-model="inviteRole"
+                class="border border-border bg-secondary/30 rounded px-2 py-1 text-xs"
+              >
+                <option value="viewer">lecteur</option>
+                <option value="admin">administrateur</option>
+              </select>
+              <button
+                class="px-3 py-1 text-xs border border-border rounded-md hover:border-signal disabled:opacity-40"
+                :disabled="!draft.contact_email"
+                :title="draft.contact_email ? '' : 'il faut un email'"
+                @click="invite"
+              >
+                Inviter au portail
+              </button>
+            </div>
+          </template>
+        </section>
+
+        <!-- Volet 2 : alarmes des box -->
+        <section
+          class="border border-border rounded-md p-3 space-y-3 text-sm"
+          data-testid="alarm-section"
+        >
+          <h4 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Alarmes des box
+          </h4>
+          <div>
+            Ses canaux (sur toutes ses box, escalade comprise)
+            <div class="flex gap-4 mt-1">
+              <label v-for="ch in CHANNELS" :key="ch.key" class="flex items-center gap-1">
+                <input
+                  v-model="draft.alarm_channels[ch.key]"
+                  :disabled="!canEdit"
+                  type="checkbox"
+                />
+                {{ ch.label }}
+              </label>
+            </div>
+          </div>
+          <div>
+            Jours de réception
+            <div class="flex gap-1 mt-1">
+              <button
+                v-for="[day, l] in DAYS"
+                :key="day"
+                :disabled="!canEdit"
+                :class="[
+                  'w-8 h-8 rounded text-xs',
+                  draft.alarm_schedule_days.includes(day)
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-secondary/40 text-muted-foreground',
+                ]"
+                @click="toggleDay(day)"
+              >
+                {{ l }}
+              </button>
+            </div>
+          </div>
+          <label class="flex items-center gap-2"
+            ><input v-model="draft.alarm_enabled" :disabled="!canEdit" type="checkbox" /> alarmes
+            actives</label
           >
-        </div>
+
+          <div v-if="draft.id" class="space-y-2 border-t border-border pt-3">
+            <div>Ses box ({{ draftSubs.length }})</div>
+            <ul class="space-y-1">
+              <li v-for="{ s, d } in draftSubs" :key="s.device_id" class="text-xs">
+                <div class="flex justify-between items-center">
+                  <span>{{ d?.name }}</span>
+                  <span class="font-mono">{{
+                    LEVELS.filter((l) => s.filters[l.key])
+                      .map((l) => l.label)
+                      .join(' ')
+                  }}</span>
+                </div>
+                <div v-if="s.channels_override" class="text-amber-400">
+                  sur cette box : {{ channelLabel(s.channels_override) }}
+                </div>
+                <div v-for="lv in cfg.receives(s).levels" :key="lv.n" class="text-signal">
+                  escalade niveau {{ lv.n }} : {{ channelLabel(lv.ch)
+                  }}{{ lv.exception ? ' (exception)' : '' }}
+                </div>
+              </li>
+            </ul>
+            <div v-if="canEdit && notYetOn.length" class="space-y-1" data-testid="add-to-boxes">
+              <div class="text-muted-foreground">Ajouter à des box (erreurs + warnings)</div>
+              <div class="max-h-48 overflow-y-auto space-y-1 border border-border rounded-md p-2">
+                <label v-for="d in notYetOn" :key="d.id" class="flex items-center gap-2 text-xs">
+                  <input v-model="addTo" type="checkbox" :value="d.id" /> {{ d.name }}
+                </label>
+              </div>
+              <div class="flex gap-2 justify-end">
+                <button
+                  class="text-xs text-muted-foreground hover:text-signal"
+                  @click="addTo = notYetOn.map((d) => d.id)"
+                >
+                  tout cocher
+                </button>
+                <button
+                  class="px-3 py-1 text-xs bg-primary text-primary-foreground rounded-md disabled:opacity-40"
+                  :disabled="!addTo.length"
+                  @click="addPersonToBoxes"
+                >
+                  Ajouter sur {{ addTo.length }} box
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <div v-if="canEdit" class="flex justify-between">
-          <button v-if="draft.id" class="text-sm text-offline" @click="deleteContact">
+          <button
+            v-if="draft.id && !draft.portal_access"
+            class="text-sm text-offline"
+            @click="deletePerson"
+          >
             Supprimer
           </button>
           <span v-else />
@@ -492,62 +626,11 @@ async function sendRow(d: Device) {
             <button class="px-3 py-1.5 text-sm" @click="draft = null">Fermer</button>
             <button
               class="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md"
-              @click="saveContact"
+              @click="savePerson"
             >
               Enregistrer
             </button>
           </div>
-        </div>
-
-        <div v-if="draft.id" class="text-sm space-y-2 border-t border-border pt-4">
-          <div>Ses box ({{ draftSubs.length }})</div>
-          <ul class="space-y-1">
-            <li
-              v-for="{ s, d } in draftSubs"
-              :key="s.device_id"
-              class="flex justify-between items-center text-xs"
-            >
-              <span>{{ d?.name }}</span>
-              <span class="font-mono"
-                >{{
-                  LEVELS.filter((l) => s.filters[l.key])
-                    .map((l) => l.label)
-                    .join(' ')
-                }}
-                <span
-                  v-if="cfg.levelsUsing(s.device_id, s.box_recipient_id).length"
-                  class="text-signal"
-                  >· escalade</span
-                >
-              </span>
-            </li>
-          </ul>
-          <div v-if="canEdit && notYetOn.length" class="space-y-1" data-testid="add-to-boxes">
-            <div class="text-muted-foreground">Ajouter à des box (erreurs + warnings)</div>
-            <div class="max-h-48 overflow-y-auto space-y-1 border border-border rounded-md p-2">
-              <label v-for="d in notYetOn" :key="d.id" class="flex items-center gap-2 text-xs">
-                <input v-model="addTo" type="checkbox" :value="d.id" /> {{ d.name }}
-              </label>
-            </div>
-            <div class="flex gap-2 justify-end">
-              <button
-                class="text-xs text-muted-foreground hover:text-signal"
-                @click="addTo = notYetOn.map((d) => d.id)"
-              >
-                tout cocher
-              </button>
-              <button
-                class="px-3 py-1 text-xs bg-primary text-primary-foreground rounded-md disabled:opacity-40"
-                :disabled="!addTo.length"
-                @click="addContactToBoxes"
-              >
-                Ajouter sur {{ addTo.length }} box
-              </button>
-            </div>
-          </div>
-          <p class="text-xs text-muted-foreground">
-            Canaux actuels : {{ channelLabel(draft.channels) }}
-          </p>
         </div>
       </aside>
     </div>

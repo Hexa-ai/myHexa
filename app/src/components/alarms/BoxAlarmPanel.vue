@@ -5,24 +5,30 @@ import { LEVELS, channelLabel, type AlarmConfig, type Device } from '@/composabl
 import EscalationEditor from './EscalationEditor.vue'
 
 const props = defineProps<{ device: Device; cfg: AlarmConfig; canEdit: boolean }>()
-const emit = defineEmits<{ close: []; copy: [Device]; changed: [] }>()
+const emit = defineEmits<{ close: []; copy: [Device]; changed: []; person: [string] }>()
 
 const rows = computed(() =>
   props.cfg
     .subsOf(props.device.id)
-    .map((s) => ({ s, c: props.cfg.contactById.value.get(s.contact_id) }))
-    .sort((a, b) => (a.c?.name ?? '').localeCompare(b.c?.name ?? '')),
+    .map((s) => ({
+      s,
+      p: props.cfg.personById.value.get(s.recipient_id),
+      r: props.cfg.receives(s),
+    }))
+    .sort((a, b) => (a.p?.name ?? '').localeCompare(b.p?.name ?? '')),
 )
 const search = ref('')
 const candidates = computed(() => {
   const q = search.value.trim().toLowerCase()
-  return props.cfg.contacts.value
+  return props.cfg.people.value
     .filter((c) => !props.cfg.subOf(c.id, props.device.id))
-    .filter((c) => !q || `${c.name} ${c.email} ${c.phone}`.toLowerCase().includes(q))
+    .filter(
+      (c) => !q || `${c.name} ${c.contact_email ?? ''} ${c.phone ?? ''}`.toLowerCase().includes(q),
+    )
     .slice(0, 8)
 })
-async function add(contactId: string) {
-  await props.cfg.addSubs([{ contact_id: contactId, device_id: props.device.id }])
+async function add(personId: string) {
+  await props.cfg.addSubs([{ recipient_id: personId, device_id: props.device.id }])
   search.value = ''
 }
 const state = computed(() => props.cfg.syncState(props.device))
@@ -30,6 +36,9 @@ async function send() {
   await props.cfg.send(props.device)
   emit('changed')
 }
+/** types d'alarme reçus directement (hors escalade) */
+const direct = (r: ReturnType<AlarmConfig['receives']>, filters: Record<string, boolean>) =>
+  LEVELS.filter((l) => filters[l.key] && !r.escTypes.includes(l.label)).map((l) => l.label)
 </script>
 
 <template>
@@ -64,7 +73,11 @@ async function send() {
           >
             Envoyer à la box
           </button>
-          <button class="px-2 text-muted-foreground hover:text-foreground" @click="emit('close')">
+          <button
+            class="px-2 text-muted-foreground hover:text-foreground"
+            data-testid="box-close"
+            @click="emit('close')"
+          >
             ✕
           </button>
         </div>
@@ -85,23 +98,49 @@ async function send() {
         </div>
         <ul class="divide-y divide-border/60 border border-border rounded-md">
           <li
-            v-for="{ s, c } in rows"
-            :key="s.contact_id"
+            v-for="{ s, p, r } in rows"
+            :key="s.recipient_id"
             class="flex items-center gap-3 px-3 py-2"
+            data-testid="box-recipient"
           >
             <div class="flex-1 min-w-0">
-              <div :class="['text-sm', c && !c.enabled && 'line-through text-muted-foreground']">
-                {{ c?.name }}
-              </div>
-              <div class="font-mono text-[10px] text-muted-foreground truncate">
-                {{ [c?.email, c?.phone].filter(Boolean).join(' · ') }} —
-                {{ channelLabel(s.channels_override ?? c!.channels) }}
+              <button
+                :class="[
+                  'text-sm hover:text-signal text-left',
+                  p && !p.alarm_enabled && 'line-through text-muted-foreground',
+                ]"
+                @click="emit('person', s.recipient_id)"
+              >
+                {{ p?.name }}
                 <span
-                  v-if="cfg.levelsUsing(device.id, s.box_recipient_id).length"
-                  class="text-signal"
+                  v-if="p && !p.portal_access"
+                  class="ml-1 font-mono text-[9px] uppercase text-muted-foreground border border-border rounded px-1"
+                  >sans accès portail</span
                 >
-                  · escalade niv. {{ cfg.levelsUsing(device.id, s.box_recipient_id).join(', ') }}
-                </span>
+              </button>
+              <div class="text-[11px] text-muted-foreground space-y-0.5">
+                <div v-if="direct(r, s.filters).length">
+                  {{ direct(r, s.filters).join(' ') }} : directement, par
+                  {{ channelLabel(r.channels) }}
+                  <span v-if="s.channels_override" class="text-amber-400"
+                    >(propre à cette box)</span
+                  >
+                </div>
+                <div v-for="lv in r.levels" :key="lv.n" class="text-signal">
+                  {{ r.escTypes.join(' ') }} : escalade niveau {{ lv.n }}, par
+                  {{ channelLabel(lv.ch) }}
+                  <span v-if="lv.exception" class="text-amber-400">(exception)</span>
+                </div>
+                <div
+                  v-if="
+                    r.escTypes.length &&
+                    !r.levels.length &&
+                    LEVELS.some((l) => s.filters[l.key] && r.escTypes.includes(l.label))
+                  "
+                  class="text-amber-400"
+                >
+                  {{ r.escTypes.join(' ') }} : passe par l'escalade, dont il ne fait pas partie
+                </div>
               </div>
             </div>
             <div class="flex gap-0.5">
@@ -136,7 +175,7 @@ async function send() {
           <input
             v-model="search"
             type="search"
-            placeholder="Ajouter un contact de l'annuaire…"
+            placeholder="Ajouter une personne de l'entreprise…"
             autocomplete="off"
             data-1p-ignore="true"
             data-lpignore="true"
@@ -152,11 +191,11 @@ async function send() {
                 @click="add(c.id)"
               >
                 {{ c.name }}
-                <span class="text-xs text-muted-foreground">{{ c.email || c.phone }}</span>
+                <span class="text-xs text-muted-foreground">{{ c.contact_email || c.phone }}</span>
               </button>
             </li>
             <li v-if="!candidates.length" class="px-3 py-1.5 text-sm text-muted-foreground">
-              Aucun contact : créez-le avec « + Contact ».
+              Personne : créez-la avec « + Personne ».
             </li>
           </ul>
         </div>

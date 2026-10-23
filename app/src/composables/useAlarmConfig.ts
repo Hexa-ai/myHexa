@@ -1,24 +1,29 @@
 // PROTOTYPE — état et actions de la page « Alertes · destinataires ».
-// Le portail stocke l'état VOULU (alarm_contacts, alarm_subscriptions, device_escalation) ;
+// UNE liste de personnes : la table recipients (portail) porte aussi les réglages d'alarme.
+// Le portail stocke l'état VOULU (recipients.alarm_*, alarm_subscriptions, device_escalation) ;
 // la box rapporte l'état CONSTATÉ (bloc notifications de son dernier status).
 import { computed, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 
 export type Filters = { info: boolean; warning: boolean; error: boolean }
 export type Channels = { email: boolean; sms: boolean; call: boolean }
-export interface Contact {
+/** une personne de l'entreprise (ligne recipients) */
+export interface Person {
   id: string
-  company_id: string
+  company_id: string | null
   name: string
-  email: string
-  phone: string
-  enabled: boolean
-  channels: Channels
-  schedule_days: string[]
-  recipient_id: string | null
+  contact_email: string | null
+  phone: string | null
+  role: string
+  auth_user_id: string | null
+  portal_access: boolean
+  alarm_enabled: boolean
+  alarm_channels: Channels
+  alarm_schedule_days: string[]
+  restrict_to_devices: string[] | null
 }
 export interface Sub {
-  contact_id: string
+  recipient_id: string
   device_id: string
   box_recipient_id: string
   filters: Filters
@@ -39,6 +44,7 @@ export interface EscLevel {
   reminders: number
   members: string[]
   channels: Channels
+  /** dans le portail : EXCEPTIONS seulement (un membre absent suit ses canaux de la box) */
   member_channels: Record<string, Channels>
 }
 export interface Escalation {
@@ -81,13 +87,24 @@ export const LEVELS: { key: keyof Filters; label: string; cls: string }[] = [
   { key: 'warning', label: 'W', cls: 'bg-amber-500/80 text-black' },
   { key: 'info', label: 'I', cls: 'bg-signal/70 text-black' },
 ]
+export const CHANNELS: { key: keyof Channels; label: string }[] = [
+  { key: 'email', label: 'mail' },
+  { key: 'sms', label: 'SMS' },
+  { key: 'call', label: 'appel' },
+]
 export const DEFAULT_FILTERS: Filters = { info: false, warning: true, error: true }
-export const channelLabel = (ch: Channels) =>
-  [ch.email && 'mail', ch.sms && 'SMS', ch.call && 'appel'].filter(Boolean).join(' · ') ||
+export const channelLabel = (ch: Channels | null | undefined) =>
+  (ch &&
+    CHANNELS.filter((c) => ch[c.key])
+      .map((c) => c.label)
+      .join(' · ')) ||
   'aucun canal'
 
-const SUB_COLS = 'contact_id, device_id, box_recipient_id, filters, channels_override'
-const same = (a: unknown, b: unknown) => JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b))
+const PERSON_COLS =
+  'id, company_id, name, contact_email, phone, role, auth_user_id, portal_access, alarm_enabled, alarm_channels, alarm_schedule_days, restrict_to_devices'
+const SUB_COLS = 'recipient_id, device_id, box_recipient_id, filters, channels_override'
+export const same = (a: unknown, b: unknown) =>
+  JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b))
 function sortKeys(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(sortKeys)
   if (v && typeof v === 'object')
@@ -103,14 +120,14 @@ export function useAlarmConfig() {
   const loading = ref(false)
   const flash = ref<string | null>(null)
   const companyLabel = ref<string | null>(null)
-  const contacts = ref<Contact[]>([])
+  const people = ref<Person[]>([])
   const subs = ref<Sub[]>([])
   const devices = ref<Device[]>([])
   const escalations = ref<EscRow[]>([])
 
   function setFlash(msg: string) {
     flash.value = msg
-    setTimeout(() => (flash.value === msg ? (flash.value = null) : null), 5000)
+    setTimeout(() => (flash.value === msg ? (flash.value = null) : null), 6000)
   }
   const fail = (e: { message: string }) => setFlash(`Erreur : ${e.message}`)
 
@@ -118,8 +135,8 @@ export function useAlarmConfig() {
     if (!companyId) return
     loading.value = true
     try {
-      const [c, d, co] = await Promise.all([
-        supabase.from('alarm_contacts').select('*').eq('company_id', companyId).order('name'),
+      const [p, d, co] = await Promise.all([
+        supabase.from('recipients').select(PERSON_COLS).eq('company_id', companyId).order('name'),
         supabase
           .from('devices')
           .select('id, name, remote_seen_at, running_version, recipients_hash, recipients_hash_ref')
@@ -127,10 +144,10 @@ export function useAlarmConfig() {
           .order('name'),
         supabase.from('companies').select('name').eq('id', companyId).maybeSingle(),
       ])
-      if (c.error) throw c.error
+      if (p.error) throw p.error
       if (d.error) throw d.error
       companyLabel.value = co.data?.name ?? null
-      contacts.value = (c.data ?? []) as unknown as Contact[]
+      people.value = (p.data ?? []) as unknown as Person[]
       const ids = (d.data ?? []).map((x) => x.id)
       const [s, r, cmd, esc] = await Promise.all([
         supabase.from('alarm_subscriptions').select(SUB_COLS).in('device_id', ids),
@@ -185,21 +202,43 @@ export function useAlarmConfig() {
   }
 
   // --- lecture -----------------------------------------------------------------------------
-  const contactById = computed(() => new Map(contacts.value.map((c) => [c.id, c])))
+  const personById = computed(() => new Map(people.value.map((c) => [c.id, c])))
   const subsOf = (deviceId: string) => subs.value.filter((s) => s.device_id === deviceId)
-  const subOf = (contactId: string, deviceId: string) =>
-    subs.value.find((s) => s.contact_id === contactId && s.device_id === deviceId)
+  const subOf = (personId: string, deviceId: string) =>
+    subs.value.find((s) => s.recipient_id === personId && s.device_id === deviceId)
+  const subByBoxId = (deviceId: string, boxId: string) =>
+    subs.value.find((x) => x.device_id === deviceId && x.box_recipient_id === boxId)
   const escOf = (deviceId: string) =>
     escalations.value.find((e) => e.device_id === deviceId) ?? null
   const pilotable = (d: Device) => !!d.remote_seen_at
+  /** canaux d'une personne sur une box : exception box, sinon sa fiche */
+  const channelsOn = (s: Sub) =>
+    s.channels_override ?? personById.value.get(s.recipient_id)?.alarm_channels ?? null
   /** nom lisible d'un membre d'escalade (id 8 hex sur la box) */
   function memberName(deviceId: string, boxId: string) {
-    const s = subs.value.find((x) => x.device_id === deviceId && x.box_recipient_id === boxId)
-    if (s) return contactById.value.get(s.contact_id)?.name ?? boxId
+    const s = subByBoxId(deviceId, boxId)
+    if (s) return personById.value.get(s.recipient_id)?.name ?? boxId
     return (
       devices.value.find((d) => d.id === deviceId)?.reported?.find((r) => r.id === boxId)?.name ??
       boxId
     )
+  }
+  /** canaux effectifs d'un membre dans un niveau (même règle que alarm_resolve_escalation côté SQL) */
+  function memberChannels(deviceId: string, lv: EscLevel, boxId: string): Channels {
+    const s = subByBoxId(deviceId, boxId)
+    return lv.member_channels[boxId] ?? (s && channelsOn(s)) ?? lv.channels
+  }
+  /** chaîne telle qu'elle sera envoyée : chaque membre avec ses canaux explicites */
+  function resolveEscalation(deviceId: string, cfg: Escalation): Escalation {
+    return {
+      ...cfg,
+      levels: cfg.levels.map((lv) => ({
+        ...lv,
+        member_channels: Object.fromEntries(
+          lv.members.map((m) => [m, memberChannels(deviceId, lv, m)]),
+        ),
+      })),
+    }
   }
 
   /** nombre d'écarts entre la liste voulue et la liste rapportée par la box */
@@ -207,7 +246,7 @@ export function useAlarmConfig() {
     const got = new Map((d.reported ?? []).map((r) => [r.id, r]))
     let n = 0
     for (const s of subsOf(d.id)) {
-      const c = contactById.value.get(s.contact_id)
+      const c = personById.value.get(s.recipient_id)
       const r = got.get(s.box_recipient_id)
       got.delete(s.box_recipient_id)
       if (!c || !r) {
@@ -216,10 +255,10 @@ export function useAlarmConfig() {
       }
       if (
         r.name !== c.name ||
-        (r.email ?? '') !== c.email ||
-        (r.enabled ?? true) !== c.enabled ||
+        (r.email ?? '') !== (c.contact_email ?? '') ||
+        (r.enabled ?? true) !== c.alarm_enabled ||
         !same(r.filters, s.filters) ||
-        !same(r.channels, s.channels_override ?? c.channels)
+        !same(r.channels, channelsOn(s))
       )
         n++
     }
@@ -227,7 +266,7 @@ export function useAlarmConfig() {
   }
   const escalationDirty = (deviceId: string) => {
     const e = escOf(deviceId)
-    return !!e && !same(e.config, e.baseline)
+    return !!e && !same(resolveEscalation(deviceId, e.config), e.baseline)
   }
 
   type SyncState = { label: string; cls: string; hint: string }
@@ -269,9 +308,36 @@ export function useAlarmConfig() {
     return { label: 'à jour', cls: 'text-online', hint: 'identique à la configuration de la box' }
   }
 
+  /** ce que reçoit une personne d'une box : alarmes directes + rôle dans l'escalade */
+  function receives(s: Sub) {
+    const e = escOf(s.device_id)?.config
+    const levels = (e?.levels ?? []).flatMap((lv, i) =>
+      lv.members.includes(s.box_recipient_id)
+        ? [
+            {
+              n: i + 1,
+              name: lv.name,
+              ch: memberChannels(s.device_id, lv, s.box_recipient_id),
+              exception: !!lv.member_channels[s.box_recipient_id],
+            },
+          ]
+        : [],
+    )
+    const escTypes =
+      e && e.mode === 'escalation' ? LEVELS.filter((l) => e.types[l.key]).map((l) => l.label) : []
+    return { channels: channelsOn(s), levels, escTypes }
+  }
+  /** box auxquelles une personne avec accès portail est abonnée sans pouvoir les voir */
+  function invisibleBoxes(p: Person) {
+    if (!p.portal_access || !p.restrict_to_devices?.length) return []
+    return subs.value
+      .filter((s) => s.recipient_id === p.id && !p.restrict_to_devices!.includes(s.device_id))
+      .map((s) => devices.value.find((d) => d.id === s.device_id)?.name ?? s.device_id)
+  }
+
   // --- abonnements -------------------------------------------------------------------------
-  async function addSubs(rows: { contact_id: string; device_id: string; filters?: Filters }[]) {
-    const fresh = rows.filter((r) => !subOf(r.contact_id, r.device_id))
+  async function addSubs(rows: { recipient_id: string; device_id: string; filters?: Filters }[]) {
+    const fresh = rows.filter((r) => !subOf(r.recipient_id, r.device_id))
     if (!fresh.length) return 0
     const { data, error } = await supabase
       .from('alarm_subscriptions')
@@ -288,7 +354,7 @@ export function useAlarmConfig() {
   }
   async function removeSub(s: Sub) {
     const used = levelsUsing(s.device_id, s.box_recipient_id)
-    const name = contactById.value.get(s.contact_id)?.name ?? ''
+    const name = personById.value.get(s.recipient_id)?.name ?? ''
     if (used.length) {
       if (
         !confirm(
@@ -307,26 +373,30 @@ export function useAlarmConfig() {
     const { error } = await supabase
       .from('alarm_subscriptions')
       .delete()
-      .match({ contact_id: s.contact_id, device_id: s.device_id })
+      .match({ recipient_id: s.recipient_id, device_id: s.device_id })
     if (error) return fail(error)
     subs.value = subs.value.filter((x) => x !== s)
+  }
+  async function updateSub(s: Sub, patch: Partial<Pick<Sub, 'filters' | 'channels_override'>>) {
+    const { error } = await supabase
+      .from('alarm_subscriptions')
+      .update({ ...patch, updated_at: new Date().toISOString() } as never)
+      .match({ recipient_id: s.recipient_id, device_id: s.device_id })
+    if (error) return (fail(error), false)
+    Object.assign(s, patch)
+    return true
   }
   async function toggleFilter(s: Sub, key: keyof Filters) {
     const filters = { ...s.filters, [key]: !s.filters[key] }
     if (!filters.info && !filters.warning && !filters.error) return removeSub(s)
-    const { error } = await supabase
-      .from('alarm_subscriptions')
-      .update({ filters, updated_at: new Date().toISOString() })
-      .match({ contact_id: s.contact_id, device_id: s.device_id })
-    if (error) return fail(error)
-    s.filters = filters
+    await updateSub(s, { filters })
   }
   async function copySubs(from: Device, targets: string[]) {
     const src = subsOf(from.id)
     const del = await supabase.from('alarm_subscriptions').delete().in('device_id', targets)
     if (del.error) return fail(del.error)
     const rows = targets.flatMap((dev) =>
-      src.map((s) => ({ contact_id: s.contact_id, device_id: dev, filters: s.filters })),
+      src.map((s) => ({ recipient_id: s.recipient_id, device_id: dev, filters: s.filters })),
     )
     if (rows.length) {
       const { error } = await supabase.from('alarm_subscriptions').insert(rows)
@@ -369,42 +439,76 @@ export function useAlarmConfig() {
   async function importFromBoxes(companyId: string) {
     const { data, error } = await supabase.rpc('import_alarm_config', { p_company: companyId })
     if (error) return fail(error)
-    const r = data as { devices: number; contacts_created: number; subscriptions_created: number }
+    const r = data as { devices: number; people_created: number; subscriptions_created: number }
     setFlash(
-      `Import : ${r.devices} box lues, ${r.contacts_created} contacts et ${r.subscriptions_created} abonnements créés`,
+      `Import : ${r.devices} box lues, ${r.people_created} personnes et ${r.subscriptions_created} abonnements créés`,
     )
   }
 
-  // --- contacts ----------------------------------------------------------------------------
-  async function saveContact(c: Contact) {
-    const row = {
-      company_id: c.company_id,
-      name: c.name.trim(),
-      email: c.email.trim(),
-      phone: c.phone.trim(),
-      enabled: c.enabled,
-      channels: c.channels,
-      schedule_days: c.schedule_days,
+  // --- personnes ---------------------------------------------------------------------------
+  async function savePerson(p: Person) {
+    const alarm = {
+      name: p.name.trim(),
+      phone: p.phone?.trim() || null,
+      alarm_enabled: p.alarm_enabled,
+      alarm_channels: p.alarm_channels,
+      alarm_schedule_days: p.alarm_schedule_days,
       updated_at: new Date().toISOString(),
     }
-    const { error } = c.id
-      ? await supabase.from('alarm_contacts').update(row).eq('id', c.id)
-      : await supabase.from('alarm_contacts').insert(row)
+    // l'email d'une personne avec accès portail est son identifiant de connexion : non modifiable ici
+    const row = p.portal_access
+      ? alarm
+      : { ...alarm, contact_email: p.contact_email?.trim() || null }
+    const { error } = p.id
+      ? await supabase
+          .from('recipients')
+          .update(row as never)
+          .eq('id', p.id)
+      : await supabase
+          .from('recipients')
+          .insert({
+            ...row,
+            company_id: p.company_id,
+            role: 'viewer',
+            portal_access: false,
+          } as never)
     if (error) return (fail(error), false)
-    setFlash(`${row.name} enregistré`)
+    setFlash(`${alarm.name} enregistré`)
     return true
   }
-  async function deleteContact(c: Contact) {
-    const boxes = subs.value.filter((s) => s.contact_id === c.id)
-    const inEsc = boxes.filter((s) => levelsUsing(s.device_id, s.box_recipient_id).length)
+  async function deletePerson(p: Person) {
+    if (p.portal_access) {
+      setFlash(`${p.name} a un accès portail : le supprimer depuis « Destinataires »`)
+      return false
+    }
+    const inEsc = subs.value.filter(
+      (s) => s.recipient_id === p.id && levelsUsing(s.device_id, s.box_recipient_id).length,
+    )
     if (inEsc.length) {
       setFlash(
-        `${c.name} est dans l'escalade de ${inEsc.length} box : retire-le d'abord de ces escalades`,
+        `${p.name} est dans l'escalade de ${inEsc.length} box : retire-le d'abord de ces escalades`,
       )
       return false
     }
-    const { error } = await supabase.from('alarm_contacts').delete().eq('id', c.id)
+    const { error } = await supabase.from('recipients').delete().eq('id', p.id)
     if (error) return (fail(error), false)
+    return true
+  }
+  /** donne l'accès portail (envoie un mail d'invitation) */
+  async function invite(p: Person, role: 'viewer' | 'admin') {
+    const { data, error } = await supabase.functions.invoke('invite-recipient', {
+      body: {
+        recipient_id: p.id,
+        name: p.name,
+        contact_email: p.contact_email,
+        phone: p.phone,
+        role,
+        company_id: p.company_id,
+      },
+    })
+    if (error || !data?.ok)
+      return (setFlash(`Erreur : ${error?.message ?? data?.error?.message}`), false)
+    setFlash(`Invitation envoyée à ${p.contact_email}`)
     return true
   }
 
@@ -412,31 +516,38 @@ export function useAlarmConfig() {
     loading,
     flash,
     companyLabel,
-    contacts,
+    people,
     subs,
     devices,
     escalations,
     load,
     setFlash,
-    contactById,
+    personById,
     subsOf,
     subOf,
     escOf,
     pilotable,
+    channelsOn,
     memberName,
+    memberChannels,
+    resolveEscalation,
     diffCount,
     escalationDirty,
     syncState,
+    receives,
+    invisibleBoxes,
     addSubs,
     removeSub,
+    updateSub,
     toggleFilter,
     copySubs,
     levelsUsing,
     saveEscalation,
     send,
     importFromBoxes,
-    saveContact,
-    deleteContact,
+    savePerson,
+    deletePerson,
+    invite,
   }
 }
 export type AlarmConfig = ReturnType<typeof useAlarmConfig>
