@@ -185,7 +185,8 @@ async function save() {
         >
         <template v-else>
           Chaque membre est prévenu sur <b>ses canaux habituels</b> (ceux de sa fiche ou de cette
-          box). Cliquer un canal crée une exception pour ce niveau seulement.
+          box). Cliquer un canal crée une exception pour ce niveau seulement (la box ne peut que
+          retirer des canaux, pas en ajouter).
         </template>
       </p>
 
@@ -265,12 +266,23 @@ async function save() {
                 <button
                   v-for="c in CHANNELS"
                   :key="c.key"
-                  :disabled="!canEdit || !memberOf(m)"
+                  :disabled="
+                    !canEdit ||
+                    !memberOf(m) ||
+                    (!memberOf(m)!.channels?.[c.key] && !eff(i, m)[c.key])
+                  "
+                  :title="
+                    memberOf(m) && !memberOf(m)!.channels?.[c.key]
+                      ? 'pas activé sur sa fiche : la box ne l\'utilisera pas (l\'escalade ne peut que restreindre ses canaux)'
+                      : ''
+                  "
                   :class="[
                     'px-1.5 py-0.5 rounded border',
-                    eff(i, m)[c.key]
-                      ? 'border-signal bg-signal/15 text-foreground'
-                      : 'border-border text-muted-foreground/50',
+                    eff(i, m)[c.key] && memberOf(m) && !memberOf(m)!.channels?.[c.key]
+                      ? 'border-offline/60 text-offline line-through'
+                      : eff(i, m)[c.key]
+                        ? 'border-signal bg-signal/15 text-foreground'
+                        : 'border-border text-muted-foreground/50',
                   ]"
                   @click="toggleChannel(i, m, c.key)"
                 >
