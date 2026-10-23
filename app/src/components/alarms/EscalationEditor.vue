@@ -307,13 +307,17 @@ async function save() {
             <li
               v-for="m in lv.members"
               :key="m"
-              class="flex items-center gap-2 text-xs"
+              class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs border-b border-border/40 sm:border-0 pb-1.5 sm:pb-0"
               data-testid="level-member"
             >
-              <span :class="['w-40 truncate', !memberOf(m) && 'text-offline']"
+              <span
+                :class="[
+                  'basis-[calc(100%-2rem)] sm:basis-auto sm:w-40 sm:truncate font-medium sm:font-normal',
+                  !memberOf(m) && 'text-offline',
+                ]"
                 >{{ cfg.memberName(device.id, m) }}{{ memberOf(m) ? '' : ' ⚠' }}</span
               >
-              <span class="inline-flex gap-1">
+              <span class="inline-flex gap-1 order-2 sm:order-none">
                 <button
                   v-for="c in CHANNELS"
                   :key="c.key"
@@ -344,7 +348,7 @@ async function save() {
               </span>
               <span
                 v-if="lv.member_channels[m]"
-                class="text-amber-400"
+                class="text-amber-400 order-3 sm:order-none"
                 data-testid="channel-exception"
               >
                 exception (habituellement : {{ channelLabel(memberOf(m)?.channels) }})
@@ -352,10 +356,12 @@ async function save() {
                   rétablir
                 </button>
               </span>
-              <span v-else class="text-muted-foreground/60">comme d'habitude</span>
+              <span v-else class="text-muted-foreground/60 order-3 sm:order-none"
+                >comme d'habitude</span
+              >
               <button
                 v-if="canEdit"
-                class="ml-auto text-muted-foreground hover:text-offline"
+                class="ml-auto order-1 sm:order-none text-muted-foreground hover:text-offline px-1"
                 title="retirer du niveau"
                 @click="toggleMember(i, m)"
               >

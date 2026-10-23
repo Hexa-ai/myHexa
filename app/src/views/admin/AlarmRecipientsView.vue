@@ -172,7 +172,7 @@ async function sendRow(d: Device) {
 </script>
 
 <template>
-  <div class="p-6 space-y-5" data-testid="alarm-recipients">
+  <div class="p-3 sm:p-6 space-y-4 sm:space-y-5" data-testid="alarm-recipients">
     <header class="flex items-start justify-between gap-4 flex-wrap">
       <div>
         <h1 class="text-xl font-semibold">
@@ -230,7 +230,7 @@ async function sendRow(d: Device) {
         autocomplete="off"
         data-1p-ignore="true"
         data-lpignore="true"
-        class="border border-border bg-secondary/30 rounded-md px-3 py-1.5 w-56"
+        class="border border-border bg-secondary/30 rounded-md px-3 py-1.5 w-full sm:w-56"
       />
       <label class="flex items-center gap-2 text-muted-foreground cursor-pointer">
         <input v-model="showAll" type="checkbox" /> toutes les box ({{ devices.length }})
@@ -251,10 +251,10 @@ async function sendRow(d: Device) {
       <li
         v-for="d in visibleDevices"
         :key="d.id"
-        class="flex items-center gap-4 px-4 py-3 hover:bg-secondary/10 cursor-pointer"
+        class="flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-x-4 gap-y-2 px-3 sm:px-4 py-3 hover:bg-secondary/10 cursor-pointer"
         @click="openBoxId = d.id"
       >
-        <div class="w-64 shrink-0">
+        <div class="min-w-0 flex-1 sm:flex-none sm:w-64 sm:shrink-0">
           <div class="text-sm font-medium">{{ d.name }}</div>
           <div class="font-mono text-[10px] text-muted-foreground">
             {{ d.running_version ? `v${d.running_version}` : '' }}
@@ -272,7 +272,9 @@ async function sendRow(d: Device) {
             >
           </div>
         </div>
-        <div class="flex-1 flex flex-wrap gap-1.5 min-w-0">
+        <div
+          class="order-last sm:order-none basis-full sm:basis-auto flex-1 flex flex-wrap gap-1.5 min-w-0"
+        >
           <span
             v-for="s in cfg.subsOf(d.id)"
             :key="s.recipient_id"
@@ -303,7 +305,7 @@ async function sendRow(d: Device) {
             {{ cfg.escOf(d.id)!.config.mode === 'immediate' ? '(désactivée)' : '' }}
           </span>
         </div>
-        <div class="w-56 shrink-0 flex items-center justify-end gap-2" @click.stop>
+        <div class="shrink-0 sm:w-56 flex items-center justify-end gap-2" @click.stop>
           <span
             :class="[
               'font-mono text-[10px] uppercase tracking-wider text-right',
@@ -334,17 +336,24 @@ async function sendRow(d: Device) {
 
     <!-- Vue tableau (petites entreprises) -->
     <div v-else class="border border-border rounded-md overflow-x-auto">
+      <p class="sm:hidden px-2 py-1.5 text-[11px] text-muted-foreground border-b border-border/60">
+        ← glisser pour voir toutes les personnes →
+      </p>
       <p v-if="people.length > 12" class="px-3 py-2 text-xs text-amber-400">
         {{ people.length }} personnes : la vue « Par box » est plus lisible.
       </p>
       <table class="text-sm w-full border-collapse" data-testid="alarm-matrix">
         <thead>
           <tr class="bg-secondary/30">
-            <th class="text-left font-normal px-3 py-2 sticky left-0 bg-card min-w-[220px]">Box</th>
+            <th
+              class="text-left font-normal px-2 sm:px-3 py-2 sticky left-0 z-10 bg-card w-28 min-w-28 max-w-28 sm:w-auto sm:min-w-[220px] sm:max-w-none"
+            >
+              Box
+            </th>
             <th
               v-for="c in people"
               :key="c.id"
-              class="px-2 py-2 font-normal align-bottom min-w-[90px]"
+              class="px-1.5 sm:px-2 py-2 font-normal align-bottom min-w-[70px] sm:min-w-[90px]"
             >
               <button
                 class="text-left w-full hover:text-signal text-xs font-medium"
@@ -357,8 +366,13 @@ async function sendRow(d: Device) {
         </thead>
         <tbody>
           <tr v-for="d in visibleDevices" :key="d.id" class="border-t border-border/60">
-            <td class="px-3 py-2 sticky left-0 bg-card">
-              <button class="text-xs font-medium hover:text-signal" @click="openBoxId = d.id">
+            <td
+              class="px-2 sm:px-3 py-2 sticky left-0 z-10 bg-card text-left w-28 min-w-28 max-w-28 sm:w-auto sm:min-w-[220px] sm:max-w-none shadow-[1px_0_0_var(--border)]"
+            >
+              <button
+                class="text-xs font-medium hover:text-signal text-left break-words [overflow-wrap:anywhere]"
+                @click="openBoxId = d.id"
+              >
                 {{ d.name }}
               </button>
               <div :class="['font-mono text-[9px] uppercase', cfg.syncState(d).cls]">
@@ -375,7 +389,7 @@ async function sendRow(d: Device) {
                 {{ cfg.capability(d).label }}
               </div>
             </td>
-            <td v-for="c in people" :key="c.id" class="px-2 py-2 text-center">
+            <td v-for="c in people" :key="c.id" class="px-1 sm:px-2 py-2 text-center">
               <div v-if="cfg.subOf(c.id, d.id)" class="inline-flex gap-0.5">
                 <button
                   v-for="l in LEVELS"
@@ -647,9 +661,7 @@ async function sendRow(d: Device) {
                     :disabled="!cfg.pilotable(d)"
                   />
                   {{ d.name }}
-                  <span v-if="!cfg.pilotable(d)" class="text-[10px]"
-                    >firmware non compatible</span
-                  >
+                  <span v-if="!cfg.pilotable(d)" class="text-[10px]">firmware non compatible</span>
                 </label>
               </div>
               <div class="flex gap-2 justify-end">
