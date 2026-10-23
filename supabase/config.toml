@@ -406,5 +406,8 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 [functions.device-ingress]
 verify_jwt = false
 
-[functions.ts-archive]
+[functions.ts-build]
 verify_jwt = false
+
+[functions.ts-read]
+verify_jwt = true

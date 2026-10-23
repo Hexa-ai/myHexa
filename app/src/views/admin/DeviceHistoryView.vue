@@ -11,6 +11,7 @@ import {
   fetchHistory,
   autoLevel,
   LEVEL_LABEL,
+  bucketLabel,
   sourceLabel,
   type HistVar,
   type HistResult,
@@ -35,7 +36,7 @@ const COLORS = [
 const MAX_VARS = 40
 const DAY = 86400e3
 // coupure de courbe : 1 h en 5 min (les statuts arrivent toutes les 30 min), 6 h en horaire, 3 j en journalier
-const GAP: Record<string, number> = { '5m': 3600e3, '1h': 6 * 3600e3, '1d': 3 * DAY }
+const GAP: Record<string, number> = { raw: 3600e3, '1m': 3600e3, '1h': 6 * 3600e3, '1d': 3 * DAY }
 
 const deviceName = ref('')
 const catalog = ref<HistVar[]>([])
@@ -251,8 +252,13 @@ const depth = (v: HistVar) => (v.fine ? 'courbe 5 min' : v.days > 1 ? 'tendance'
         <h1 class="text-xl sm:text-2xl font-semibold">{{ deviceName || '…' }}</h1>
       </div>
       <p class="font-mono text-[11px] text-muted-foreground" data-testid="hist-meta">
-        résolution <span class="text-foreground">{{ LEVEL_LABEL[level] }}</span> ·
-        {{ pointsCount.toLocaleString('fr-FR') }} points
+        <span class="text-foreground">{{ LEVEL_LABEL[level] }}</span>
+        <span v-if="result">
+          · pas {{ bucketLabel(result.bucket_s) }} · {{ result.files }} fichier{{
+            result.files > 1 ? 's' : ''
+          }}</span
+        >
+        · {{ pointsCount.toLocaleString('fr-FR') }} points
         <span v-if="ms"> · {{ ms }} ms</span>
       </p>
     </header>
@@ -377,7 +383,7 @@ const depth = (v: HistVar) => (v.fine ? 'courbe 5 min' : v.days > 1 ? 'tendance'
                   v.description
                 }}</span>
                 <span class="block font-mono text-[10px] text-muted-foreground"
-                  >{{ depth(v) }} · {{ v.days }} j depuis {{ v.first_day }}</span
+                  >{{ depth(v) }} · depuis {{ v.first_day }}</span
                 >
               </span>
             </label>
@@ -431,7 +437,7 @@ const depth = (v: HistVar) => (v.fine ? 'courbe 5 min' : v.days > 1 ? 'tendance'
             :to="range.to"
             :step="['state', 'alarm'].includes(s.meta?.category ?? '')"
             :band="band"
-            :gap-ms="GAP[level]"
+            :gap-ms="Math.max(GAP[level] ?? 0, (result?.bucket_s ?? 0) * 3000)"
             :cursor="cursor"
             :height="shown.length > 8 ? '130px' : '180px'"
             @range="onRange"
