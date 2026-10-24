@@ -6,7 +6,8 @@ import { parquetWriteBuffer } from 'npm:hyparquet-writer@0.17.0'
 import { asyncBufferFromUrl, parquetMetadataAsync, parquetReadObjects } from 'npm:hyparquet@1.31.5'
 
 /** Rang de la source (plus petit = meilleur). STATS = min/moy/max du jour fournis par le rapport. */
-export const SRC = { REPORT: 1, WEEKLY: 2, STATUS: 3, STATS: 9 } as const
+// DERIVED : volume / énergie calculé par ts-build (intégration d'un débit ou d'une puissance)
+export const SRC = { REPORT: 1, WEEKLY: 2, STATUS: 3, DERIVED: 4, STATS: 9 } as const
 
 export interface TsRow {
   ts: number // ms UTC (début de la case pour un agrégat)

@@ -66,6 +66,8 @@ daily = {"metadata": {"timezone": "Europe/Paris"}, "time_range": {"start_ms": T0
     {"name": "NIV", "category": "measure", "unit": "m", "stats": {"min": 1.5, "max": 3.5, "mean": 2.25}, "chart": {"type": "line", "points": []}},
     {"name": "POS", "category": "position", "chart": {"type": "map", "points": [{"ts": T0, "lat": 45, "lon": 4}]}},
 ]}
+daily["variables"].append({"name": "DEBIT_AIR", "category": "measure", "unit": "m³/h", "stats": {"min": 1, "max": 3, "mean": 2},
+     "chart": {"type": "line", "points": []}})  # comme le firmware : favorite hors des 5 courbes
 daily["variables"].append({"name": "Debit_EAU", "category": "measure", "unit": "m3/h", "stats": {"min": 6, "max": 6, "mean": 6},
      "chart": {"type": "line", "points": [{"ts": T0 + i * 300000, "value": 6.0} for i in range(288)]}})
 body = json.dumps(daily).replace("'", "''")
@@ -100,6 +102,11 @@ check("30 jours : Volume_EAU en barres journalières calées sur minuit local �
 st, d, s = read(['Volume_EAU'], T0 - 300 * DAY, T0 + DAY)
 p = s.get('Volume_EAU', {}).get('points', [])
 check("Volume_EAU 1 jour ≈ 144 m3 (somme, pas moyenne)", p and abs(p[0][1] - 144) < 1, p[:2])
+
+check("débit sans courbe : Volume_AIR estimé au catalogue", cat.get('Volume_AIR', {}).get('category') == 'counter', cat.get('Volume_AIR'))
+st, d, s = read(['Volume_AIR'], T0 - 29 * DAY, T0 + DAY)
+p = s.get('Volume_AIR', {}).get('points', [])
+check("Volume_AIR = moyenne 2 m3/h × 24 h = 48 m3", p and abs(p[0][1] - 48) < 0.01, p[:2])
 
 print("lecture ts-read")
 st, d, s = read(['TEMP', 'CPT', 'NIV'], T0, T0 + DAY)

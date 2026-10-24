@@ -136,6 +136,71 @@ function mergeRange(old: TsRow[], fresh: TsRow[], from: number, to: number): TsR
   return [...old.filter((r) => r.ts < from || r.ts >= to), ...fresh]
 }
 
+// ---- volumes / énergies dérivés (même règle que reports.derived_payload, migration 20260528003858) ----
+const UNIT_FACTOR: Record<string, [number, string, 'flow' | 'power']> = {
+  'm3/h': [1 / 3600, 'm³', 'flow'],
+  'l/h': [1 / 3600, 'L', 'flow'],
+  'l/min': [1 / 60, 'L', 'flow'],
+  'l/s': [1, 'L', 'flow'],
+  kw: [1 / 3600, 'kWh', 'power'],
+  w: [1 / 3600, 'Wh', 'power'],
+  kva: [1 / 3600, 'kVAh', 'power'],
+}
+const normUnit = (u: string | null) =>
+  (u ?? '').toLowerCase().replace(/³/g, '3').replace(/\s*\/\s*/g, '/').replace(/\s+/g, '')
+
+function derivedName(src: string, kind: 'flow' | 'power') {
+  const re = kind === 'flow' ? /[_\s]*(debit|flow)[_\s]*/gi : /[_\s]*(puissance|power)[_\s]*/gi
+  const base = src.replace(re, '_').replace(/^_+|_+$/g, '')
+  return (kind === 'flow' ? 'Volume' : 'Energie') + '_' + (base || src)
+}
+
+/** Intègre chaque débit / puissance du jour en total horaire (trapèzes, pas de trou > max(15 min, 3 × pas médian),
+ *  valeurs négatives ramenées à 0). Sans courbe : estimation journalière = moyenne du jour × 24 h. */
+function deriveIntegrals(raw: TsRow[], meta: Map<string, VarMeta>, dayStart: number): TsRow[] {
+  const out: TsRow[] = []
+  const { curve, stats } = bestCurve(raw.filter((r) => r.src !== SRC.DERIVED))
+  const existing = new Set(raw.filter((r) => r.src !== SRC.DERIVED).map((r) => r.var.toLowerCase()))
+  for (const [name, m] of meta) {
+    const f = UNIT_FACTOR[normUnit(m.unit)]
+    if (!f || m.category === 'counter') continue
+    const [factor, outUnit, kind] = f
+    const dn = derivedName(name, kind)
+    if (existing.has(dn.toLowerCase())) continue // déjà fourni par le rapport (derived_payload)
+    const pts = curve.filter((r) => r.var === name && r.v !== null && r.res > 0).sort((a, b) => a.ts - b.ts)
+    if (pts.length >= 2) {
+      const dts = pts.slice(1).map((p, i) => (p.ts - pts[i].ts) / 1000).sort((a, b) => a - b)
+      const gap = Math.max(900, 3 * dts[Math.floor(dts.length / 2)])
+      const hours = new Map<number, number>()
+      for (let i = 1; i < pts.length; i++) {
+        const dt = (pts[i].ts - pts[i - 1].ts) / 1000
+        if (dt <= 0 || dt > gap) continue
+        const inc = ((Math.max(pts[i - 1].v!, 0) + Math.max(pts[i].v!, 0)) / 2) * dt * factor
+        const h = dayStart + Math.floor((pts[i - 1].ts - dayStart) / 3600e3) * 3600e3
+        hours.set(h, (hours.get(h) ?? 0) + inc)
+      }
+      for (const [h, v] of hours) out.push({ ts: h, var: dn, v, vmin: null, vmax: null, n: 1, res: 3600, src: SRC.DERIVED })
+      meta.set(dn, {
+        category: 'counter',
+        unit: outUnit,
+        description: `Dérivé de '${name}' par intégration (pas ${Math.round(dts[Math.floor(dts.length / 2)] / 60)} min)`,
+        res: 3600,
+      })
+    } else {
+      const st = stats.find((r) => r.var === name && r.v !== null)
+      if (!st) continue
+      out.push({ ts: dayStart, var: dn, v: Math.max(st.v!, 0) * 86400 * factor, vmin: null, vmax: null, n: 1, res: 86400, src: SRC.DERIVED })
+      meta.set(dn, {
+        category: 'counter',
+        unit: outUnit,
+        description: `Estimé : moyenne journalière de '${name}' × 24 h (pas de courbe)`,
+        res: 86400,
+      })
+    }
+  }
+  return out
+}
+
 async function buildDay(device: string, company: string, day: string) {
   const [y, m] = day.split('-')
   const base = `company=${company}/device=${device}`
@@ -182,8 +247,15 @@ async function buildDay(device: string, company: string, day: string) {
 
   const rawPath = `raw/${base}/year=${y}/month=${m}/${day}.parquet`
   const oldRaw = await download(rawPath)
-  const raw = mergeSources(oldRaw ? await readAll(oldRaw) : [], fresh)
+  let raw = mergeSources(oldRaw ? await readAll(oldRaw) : [], fresh)
   if (!raw.length) return { day, rows: 0 }
+  // les unités des anciennes variables viennent du catalogue
+  const { data: cat } = await admin.from('ts_vars').select('var, category, unit, description').eq('device_id', device)
+  for (const c of cat ?? []) {
+    if (!meta.has(c.var as string) && !(c.var as string).match(/^(Volume|Energie)_/))
+      meta.set(c.var as string, { category: (c.category as string) || '', unit: c.unit as string, description: c.description as string, res: 300 })
+  }
+  raw = [...raw.filter((r) => r.src !== SRC.DERIVED), ...deriveIntegrals(raw, meta, dayStart)]
   const rawBytes = writeTs(raw, { level: 'raw', day })
   await upload(rawPath, rawBytes)
   await index(device, 'raw', day, rawPath, raw, rawBytes.length)
