@@ -573,20 +573,22 @@ async function buildReport(dash: any, freq: string, compare: string, tz: string,
   // images par URL (blocs image) : téléchargées une fois pour le PDF
   for (const b of blocks) for (const p of b.parts) if (p.k === 'url') (p as any).bytes = await fetchImage(p.url)
   const body = blocks.map(blockHtml).join('\n')
-  const subject = `${FREQ_LABEL[freq] ?? 'Rapport'} · ${scopeName} · ${periodLabel}`
+  // titre = nom du rapport choisi par l'utilisateur ; box / projet en sous-titre
+  const title = reportName.trim() || FREQ_LABEL[freq] || 'Rapport'
+  const subject = `${title} · ${periodLabel}`
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(subject)}</title></head>
 <body style="margin:0;padding:0;background:#f3f4f6">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6"><tr><td align="center" style="padding:20px 10px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px">
 <tr><td style="padding:0 0 14px 0">
   ${logo ? `<img src="cid:logo" height="40" style="display:block;height:40px;width:auto;max-width:200px;border:0;margin:0 0 10px 0" alt="${esc(company?.name ?? '')}">` : ''}
-  <div style="font:600 11px Arial,sans-serif;letter-spacing:2px;color:#00a88a;text-transform:uppercase">myHexa · ${esc(company?.name ?? '')}</div>
-  <div style="font:600 22px Arial,sans-serif;color:#111827;margin-top:4px">${esc(scopeName)}</div>
-  <div style="font:14px Arial,sans-serif;color:#374151;margin-top:2px">${esc(reportName)} — ${esc(periodLabel)}</div>
+  <div style="font:600 11px Arial,sans-serif;letter-spacing:2px;color:#00a88a;text-transform:uppercase">${esc(company?.name ?? '')}</div>
+  <div style="font:600 22px Arial,sans-serif;color:#111827;margin-top:4px">${esc(title)}</div>
+  <div style="font:14px Arial,sans-serif;color:#374151;margin-top:2px">${scopeName && scopeName !== title ? esc(scopeName) + ' — ' : ''}${esc(periodLabel)}</div>
   ${ctx.cmpFrom !== null ? `<div style="font:12px Arial,sans-serif;color:#6b7280;margin-top:2px">Comparaison : ${compare === 'year' ? 'même période l’an dernier' : 'période précédente'}</div>` : ''}
 </td></tr>
 ${body}
-<tr><td style="padding:6px 0 0 0;font:11px Arial,sans-serif;color:#9ca3af">Rapport généré automatiquement par myHexa (Hexa-AI). Heures en ${esc(tz)}.
+<tr><td style="padding:6px 0 0 0;font:11px Arial,sans-serif;color:#9ca3af">Généré avec myHexa · Hexa-AI. Heures en ${esc(tz)}.
 <a href="${esc(APP_URL)}" style="color:#00a88a">Ouvrir le portail</a></td></tr>
 </table></td></tr></table></body></html>`
   const fmtF = new Intl.DateTimeFormat('fr-FR', { timeZone: tz, dateStyle: 'short', timeStyle: 'short' })
@@ -595,11 +597,11 @@ ${body}
   const cmpNote = ctx.cmpFrom !== null ? `Comparaison : ${compare === 'year' ? 'même période l’an dernier' : 'période précédente'}` : undefined
   const pdf = () =>
     buildPdf({
-      brand: `myHexa · ${company?.name ?? ''}`,
-      title: scopeName,
-      subtitle: `${reportName} — ${periodLabel}`,
+      brand: company?.name ?? '',
+      title,
+      subtitle: `${scopeName && scopeName !== title ? scopeName + ' — ' : ''}${periodLabel}`,
       note: cmpNote,
-      footer: `Rapport généré par myHexa (Hexa-AI) le ${fmtF.format(Date.now())} · heures en ${tz}`,
+      footer: `Généré avec myHexa · Hexa-AI, le ${fmtF.format(Date.now())} · heures en ${tz}`,
       logo: logo?.bytes,
       blocks: blocks as PdfBlock[],
     })
