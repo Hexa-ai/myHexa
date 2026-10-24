@@ -220,7 +220,7 @@ onMounted(async () => {
   const vq = String(q.v ?? '')
     .split(',')
     .filter((v) => byVar.value[v])
-  // par défaut : les variables qui ont une courbe fine (rapport journalier), sinon les 5 premières
+  // par défaut : les variables qui ont une courbe fine (rapport journalier), sinon les 5 premières ; + volumes
   selected.value = vq.length
     ? vq
     : (catalog.value.filter((v) => v.fine).length
@@ -231,6 +231,15 @@ onMounted(async () => {
         .map((v) => v.var)
   if (!selected.value.length) showPicker.value = true
 })
+
+// largeur des barres d'un compteur : pas entre deux cases (1 h, 1 j, 1 semaine)
+function barMs(pts: [number, ...unknown[]][]) {
+  let m = Infinity
+  for (let i = 1; i < pts.length; i++) m = Math.min(m, pts[i][0] - pts[i - 1][0])
+  const span = range.value.to - range.value.from
+  const def = span <= 3 * DAY ? 3600e3 : span <= 124 * DAY ? DAY : 7 * DAY
+  return Number.isFinite(m) ? Math.min(m, def) : def
+}
 
 const depth = (v: HistVar) => (v.fine ? 'courbe 5 min' : v.days > 1 ? 'tendance' : 'peu de données')
 </script>
@@ -436,6 +445,7 @@ const depth = (v: HistVar) => (v.fine ? 'courbe 5 min' : v.days > 1 ? 'tendance'
             :from="range.from"
             :to="range.to"
             :step="['state', 'alarm'].includes(s.meta?.category ?? '')"
+            :bars="s.meta?.category === 'counter' ? barMs(s.series.points) : 0"
             :band="band"
             :gap-ms="Math.max(GAP[level] ?? 0, (result?.bucket_s ?? 0) * 3000)"
             :cursor="cursor"

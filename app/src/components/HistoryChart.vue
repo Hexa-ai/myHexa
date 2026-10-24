@@ -32,8 +32,19 @@ const props = withDefaults(
     height?: string
     /** au-delà de cet écart entre deux points, la courbe est coupée (pas de fausse interpolation) */
     gapMs?: number
+    /** compteur / volume : histogramme en cases de cette durée (ms), valeur = total de la case */
+    bars?: number
   }>(),
-  { unit: '', color: '#00d4aa', step: false, band: true, cursor: null, height: '180px', gapMs: 0 },
+  {
+    unit: '',
+    color: '#00d4aa',
+    step: false,
+    band: true,
+    cursor: null,
+    height: '180px',
+    gapMs: 0,
+    bars: 0,
+  },
 )
 const emit = defineEmits<{
   (e: 'range', r: { from: number; to: number }): void
@@ -105,7 +116,31 @@ const withGaps = computed<HistPoint[]>(() => {
   return out
 })
 
+function barDataset(): ChartDataset<'line'>[] {
+  // histogramme : marche « après » remplie jusqu'à 0, chaque case fermée par un retour à 0
+  const data: { x: number; y: number | null }[] = []
+  for (const p of props.points) {
+    // petite marge entre deux barres
+    const end = p[0] + props.bars * 0.85
+    data.push({ x: p[0], y: 0 }, { x: p[0], y: p[1] }, { x: end, y: p[1] }, { x: end, y: 0 })
+  }
+  return [
+    {
+      label: props.label,
+      data,
+      borderColor: props.color,
+      backgroundColor: props.color + '66',
+      borderWidth: 1,
+      pointRadius: 0,
+      pointHoverRadius: 0,
+      fill: 'origin',
+      tension: 0,
+    },
+  ]
+}
+
 function datasets(): ChartDataset<'line'>[] {
+  if (props.bars) return barDataset()
   const pts = withGaps.value
   const avg = pts.map((p) => ({ x: p[0], y: p[1] }))
   const ds: ChartDataset<'line'>[] = []
@@ -169,6 +204,11 @@ function build() {
           callbacks: {
             title: (items) => (items[0] ? fmtFull.format(new Date(items[0].parsed.x ?? 0)) : ''),
             label: (item) => {
+              if (props.bars) {
+                const t = item.parsed.x ?? 0
+                const b = props.points.find((q) => t >= q[0] && t <= q[0] + props.bars)
+                return b ? `${fmtNum(b[1])}${props.unit ? ' ' + props.unit : ''}` : ''
+              }
               const p = withGaps.value[item.dataIndex]
               const u = props.unit ? ' ' + props.unit : ''
               if (!p) return ''
@@ -248,7 +288,7 @@ function done({ chart: c }: { chart: Chart }) {
 onMounted(build)
 onBeforeUnmount(() => chart?.destroy())
 watch(
-  () => [props.points, props.color, props.step, props.band, props.gapMs],
+  () => [props.points, props.color, props.step, props.band, props.gapMs, props.bars],
   () => {
     if (!chart) return build()
     chart.data.datasets = datasets()

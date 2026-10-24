@@ -45,7 +45,13 @@ export async function fetchHistory(
   to: number,
 ): Promise<HistResult> {
   const { data, error } = await supabase.functions.invoke('ts-read', {
-    body: { device: deviceId, vars, from: Math.round(from), to: Math.round(to) },
+    body: {
+      device: deviceId,
+      vars,
+      from: Math.round(from),
+      to: Math.round(to),
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    },
   })
   if (error) {
     const ctx = (error as { context?: Response }).context

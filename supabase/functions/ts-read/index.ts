@@ -9,7 +9,7 @@
 // Seules les variables demandées sont lues (row group par variable, requêtes HTTP Range sur URL signée).
 // Puis réduction à ≤ MAX_POINTS cases par courbe (moyenne + min/max conservés).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { aggregate, bestCurve, readVars, SRC, type TsRow } from '../_shared/tsparquet.ts'
+import { aggregate, bestCurve, readVars, SRC, zonedMidnight, type TsRow } from '../_shared/tsparquet.ts'
 import { ok, fail, preflight } from '../_shared/response.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
@@ -42,7 +42,14 @@ Deno.serve(async (req) => {
     global: { headers: { Authorization: auth } },
   })
   const t0 = Date.now()
-  const body = (await req.json().catch(() => ({}))) as { device?: string; vars?: string[]; from?: number; to?: number; level?: string }
+  const body = (await req.json().catch(() => ({}))) as {
+    device?: string
+    vars?: string[]
+    from?: number
+    to?: number
+    level?: string
+    tz?: string
+  }
   const { device } = body
   const from = Number(body.from)
   const to = Number(body.to)
@@ -96,6 +103,12 @@ Deno.serve(async (req) => {
   // réduction à ≤ MAX_POINTS cases par variable
   const span = to - from
   const bucket = NICE.find((b) => b >= Math.max(LEVEL_MS[level], span / MAX_POINTS)) ?? NICE[NICE.length - 1]
+  let origin = 0
+  try {
+    origin = zonedMidnight('2026-01-05', body.tz || 'Europe/Paris') // un lundi : semaines calées sur le lundi
+  } catch {
+    origin = 0
+  }
   const perVar = new Map<string, TsRow[]>()
   for (const r of rows) {
     if (!perVar.has(r.var)) perVar.set(r.var, [])
@@ -106,9 +119,12 @@ Deno.serve(async (req) => {
     .map((v) => {
       let pts = perVar.get(v)!
       const sources = [...new Set(pts.map((p) => SRC_NAME[p.src] ?? String(p.src)))]
-      if (pts.length > MAX_POINTS || (level !== 'raw' && bucket > LEVEL_MS[level])) {
-        // origine alignée sur l'heure locale approximative (minuit UTC suffit pour le proto)
-        pts = aggregate(pts, bucket, counters)
+      if (counters.has(v)) {
+        // compteurs / volumes : total par heure (≤ 3 j), par jour (≤ 4 mois), sinon par semaine, cases calées sur minuit local
+        const cb = span <= 3 * DAY ? 3600e3 : span <= 124 * DAY ? DAY : 7 * DAY
+        pts = aggregate(pts, Math.max(cb, LEVEL_MS[level]), counters, origin)
+      } else if (pts.length > MAX_POINTS || (level !== 'raw' && bucket > LEVEL_MS[level])) {
+        pts = aggregate(pts, bucket, counters, bucket >= DAY ? origin : 0)
       }
       pts.sort((a, b) => a.ts - b.ts)
       const m = meta.get(v)

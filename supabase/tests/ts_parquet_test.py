@@ -66,6 +66,8 @@ daily = {"metadata": {"timezone": "Europe/Paris"}, "time_range": {"start_ms": T0
     {"name": "NIV", "category": "measure", "unit": "m", "stats": {"min": 1.5, "max": 3.5, "mean": 2.25}, "chart": {"type": "line", "points": []}},
     {"name": "POS", "category": "position", "chart": {"type": "map", "points": [{"ts": T0, "lat": 45, "lon": 4}]}},
 ]}
+daily["variables"].append({"name": "Debit_EAU", "category": "measure", "unit": "m3/h", "stats": {"min": 6, "max": 6, "mean": 6},
+     "chart": {"type": "line", "points": [{"ts": T0 + i * 300000, "value": 6.0} for i in range(288)]}})
 body = json.dumps(daily).replace("'", "''")
 r = sql(f"select ingest_report('{tok}', 'daily', '{body}'::jsonb, '2026-10-22', '2026-10-23') id")
 check("rapport journalier ingéré", isinstance(r, list) and r[0]['id'], r)
@@ -84,6 +86,17 @@ check("marque retirée après construction", sql(f"select count(*) n from ts_dir
 cat = {v['var']: v for v in sql(f"select var, category, best_res, first_day from ts_vars where device_id='{D1}'")}
 check("catalogue : TEMP courbe 5 min, CPT compteur, position ignorée",
       cat.get('TEMP', {}).get('best_res') == 300 and cat.get('CPT', {}).get('category') == 'counter' and 'POS' not in cat, cat)
+
+print("volumes intégrés (derived_payload)")
+dv = sql(f"select v->>'name' n, v->>'unit' u from reports r, jsonb_array_elements(r.derived_payload->'variables') v where r.device_id='{D1}' and r.type::text='daily'")
+check("la base a dérivé Volume_EAU", any(x['n'] == 'Volume_EAU' for x in dv), dv)
+check("Volume_EAU au catalogue, compteur", cat.get('Volume_EAU', {}).get('category') == 'counter', cat.get('Volume_EAU'))
+st, d, s = read(['Volume_EAU'], T0 - 29 * DAY, T0 + DAY)
+p = s.get('Volume_EAU', {}).get('points', [])
+check("Volume_EAU 1 h ≈ 6 m3", p and abs(p[1][1] - 6) < 0.1, p[:3])
+st, d, s = read(['Volume_EAU'], T0 - 300 * DAY, T0 + DAY)
+p = s.get('Volume_EAU', {}).get('points', [])
+check("Volume_EAU 1 jour ≈ 144 m3 (somme, pas moyenne)", p and abs(p[0][1] - 144) < 1, p[:2])
 
 print("lecture ts-read")
 st, d, s = read(['TEMP', 'CPT', 'NIV'], T0, T0 + DAY)
