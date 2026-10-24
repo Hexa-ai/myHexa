@@ -189,7 +189,16 @@ const toAdd = ref<string[]>([])
         class="mt-6 border border-border rounded-md bg-card/40 p-4 sm:p-5"
         data-testid="project-detail"
       >
-        <h3 class="font-semibold mb-3">{{ p.name }} · box du projet</h3>
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <h3 class="font-semibold">{{ p.name }} · box du projet</h3>
+          <RouterLink
+            :to="{ name: 'admin-dashboard', params: { scope: 'project', id: p.id } }"
+            class="font-mono text-[10px] uppercase tracking-[0.18em] border border-signal/50 text-signal px-3 py-1.5 rounded-md hover:bg-signal/10"
+            data-testid="project-dashboard-link"
+          >
+            Tableau de bord
+          </RouterLink>
+        </div>
         <table class="w-full text-sm">
           <tbody>
             <tr v-for="d in p.ds" :key="d.id" class="border-b border-border/50 last:border-0">

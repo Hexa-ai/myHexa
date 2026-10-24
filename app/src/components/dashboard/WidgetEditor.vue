@@ -1,0 +1,337 @@
+<script setup lang="ts">
+// PROTOTYPE — édition d'un bloc : type, titre, largeur, sources (box + variable), opération, options.
+import { computed, ref } from 'vue'
+import type { DeviceWithStatus } from '@/composables/useDevices'
+import type { HistVar } from '@/composables/useHistory'
+import {
+  OP_LABEL,
+  STAT_LABEL,
+  STATUS_FIELDS,
+  WIDGET_LABEL,
+  type Op,
+  type Stat,
+  type Widget,
+  type WidgetType,
+  type WidgetWidth,
+} from '@/composables/useDashboards'
+
+const props = defineProps<{
+  widget: Widget
+  devices: DeviceWithStatus[]
+  catalogs: Record<string, HistVar[]>
+}>()
+const emit = defineEmits<{ (e: 'save', w: Widget): void; (e: 'cancel'): void }>()
+
+const w = ref<Widget>(JSON.parse(JSON.stringify(props.widget)))
+const WIDTHS: WidgetWidth[] = ['1/4', '1/3', '1/2', '2/3', 'full']
+const needsVars = computed(() => !['status', 'image', 'text'].includes(w.value.type))
+const multi = computed(() => props.devices.length > 1)
+
+const newDev = ref(props.devices[0]?.id ?? '')
+const newVar = ref('')
+const vars = computed(() => props.catalogs[newDev.value] ?? [])
+function addSource() {
+  if (!newDev.value || !newVar.value) return
+  if (!w.value.sources.some((s) => s.device === newDev.value && s.var === newVar.value))
+    w.value.sources.push({ device: newDev.value, var: newVar.value })
+  newVar.value = ''
+}
+const devName = (id: string) => props.devices.find((d) => d.id === id)?.name ?? id.slice(0, 8)
+const unitOf = (dev: string, v: string) => props.catalogs[dev]?.find((x) => x.var === v)?.unit ?? ''
+const units = computed(() => [
+  ...new Set(w.value.sources.filter((s) => s.var).map((s) => unitOf(s.device, s.var))),
+])
+
+function setType(t: WidgetType) {
+  w.value.type = t
+  if (t === 'status') {
+    w.value.sources = props.devices.map((d) => ({ device: d.id, var: '' }))
+    w.value.options.fields ??= ['online', 'last_seen', 'uptime', 'version']
+  } else if (['image', 'text'].includes(t)) w.value.sources = []
+  else w.value.sources = w.value.sources.filter((s) => s.var)
+}
+function toggleField(f: string) {
+  const a = w.value.options.fields ?? []
+  w.value.options.fields = a.includes(f) ? a.filter((x) => x !== f) : [...a, f]
+}
+function toggleStatusDevice(id: string) {
+  const has = w.value.sources.some((s) => s.device === id)
+  w.value.sources = has
+    ? w.value.sources.filter((s) => s.device !== id)
+    : [...w.value.sources, { device: id, var: '' }]
+}
+function save() {
+  if (w.value.sources.filter((s) => s.var).length < 2) w.value.op = null
+  emit('save', w.value)
+}
+</script>
+
+<template>
+  <div
+    class="fixed inset-0 z-[600] bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-6"
+    @click.self="emit('cancel')"
+  >
+    <div
+      class="w-full sm:max-w-2xl max-h-[92vh] overflow-auto bg-background border border-border rounded-t-lg sm:rounded-lg p-4 sm:p-5"
+      data-testid="widget-editor"
+    >
+      <h2 class="font-semibold mb-3">Bloc</h2>
+
+      <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
+        Type
+      </div>
+      <div class="flex flex-wrap gap-1.5 mb-4">
+        <button
+          v-for="(lbl, t) in WIDGET_LABEL"
+          :key="t"
+          :class="[
+            'text-xs px-2.5 py-1 rounded border',
+            w.type === t
+              ? 'border-signal text-signal'
+              : 'border-border text-muted-foreground hover:border-signal/50',
+          ]"
+          @click="setType(t as WidgetType)"
+        >
+          {{ lbl }}
+        </button>
+      </div>
+
+      <div class="grid sm:grid-cols-2 gap-3 mb-4">
+        <label class="text-sm">
+          <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+            >Titre (facultatif)</span
+          >
+          <input
+            v-model="w.title"
+            class="mt-1 w-full bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+          />
+        </label>
+        <div>
+          <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+            >Largeur (grand écran)</span
+          >
+          <div class="mt-1 flex gap-1">
+            <button
+              v-for="x in WIDTHS"
+              :key="x"
+              :class="[
+                'flex-1 text-xs py-1.5 rounded border font-mono',
+                w.width === x ? 'border-signal text-signal' : 'border-border text-muted-foreground',
+              ]"
+              @click="w.width = x"
+            >
+              {{ x === 'full' ? 'pleine' : x }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- sources -->
+      <template v-if="needsVars">
+        <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
+          Variables
+        </div>
+        <div class="space-y-1 mb-2">
+          <div
+            v-for="(s, i) in w.sources"
+            :key="s.device + s.var"
+            class="flex items-center gap-2 text-sm"
+          >
+            <span class="flex-1 truncate">
+              <span v-if="multi" class="text-muted-foreground">{{ devName(s.device) }} · </span
+              >{{ s.var }}
+              <span class="font-mono text-[10px] text-muted-foreground">{{
+                unitOf(s.device, s.var)
+              }}</span>
+            </span>
+            <button
+              class="font-mono text-[10px] text-muted-foreground hover:text-offline"
+              @click="w.sources.splice(i, 1)"
+            >
+              retirer
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-2 mb-3">
+          <select
+            v-if="multi"
+            v-model="newDev"
+            class="bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+            data-testid="src-device"
+          >
+            <option v-for="d in devices" :key="d.id" :value="d.id">{{ d.name }}</option>
+          </select>
+          <select
+            v-model="newVar"
+            class="flex-1 bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+            data-testid="src-var"
+          >
+            <option value="">— variable —</option>
+            <option v-for="v in vars" :key="v.var" :value="v.var">
+              {{ v.var }}{{ v.unit ? ` (${v.unit})` : ''
+              }}{{ v.description ? ` — ${v.description}` : '' }}
+            </option>
+          </select>
+          <button
+            class="text-xs px-3 py-1.5 rounded border border-signal/50 text-signal disabled:opacity-40"
+            :disabled="!newVar"
+            data-testid="src-add"
+            @click="addSource"
+          >
+            Ajouter
+          </button>
+        </div>
+        <div v-if="w.sources.length > 1" class="mb-3">
+          <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+            >Plusieurs variables</span
+          >
+          <div class="mt-1 flex flex-wrap gap-1">
+            <button
+              :class="[
+                'text-xs px-2.5 py-1 rounded border',
+                !w.op ? 'border-signal text-signal' : 'border-border text-muted-foreground',
+              ]"
+              @click="w.op = null"
+            >
+              Afficher chacune
+            </button>
+            <button
+              v-for="(lbl, o) in OP_LABEL"
+              :key="o"
+              :class="[
+                'text-xs px-2.5 py-1 rounded border',
+                w.op === o ? 'border-signal text-signal' : 'border-border text-muted-foreground',
+              ]"
+              :data-testid="`op-${o}`"
+              @click="w.op = o as Op"
+            >
+              {{ lbl }}
+            </button>
+          </div>
+          <p v-if="w.op && units.length > 1" class="mt-1 text-[11px] text-offline">
+            Unités différentes ({{ units.join(', ') }}) : le résultat n'aura pas de sens.
+          </p>
+        </div>
+      </template>
+
+      <!-- options -->
+      <div v-if="['value', 'gauge'].includes(w.type)" class="grid sm:grid-cols-2 gap-3 mb-3">
+        <label class="text-sm">
+          <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+            >Valeur affichée</span
+          >
+          <select
+            v-model="w.options.stat"
+            class="mt-1 w-full bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+          >
+            <option v-for="(lbl, s) in STAT_LABEL" :key="s" :value="s as Stat">{{ lbl }}</option>
+          </select>
+        </label>
+        <label v-if="w.type === 'value'" class="text-sm">
+          <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+            >Comparer avec</span
+          >
+          <select
+            v-model="w.options.compare"
+            class="mt-1 w-full bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+          >
+            <option :value="null">rien</option>
+            <option value="previous">période précédente</option>
+            <option value="year">même période l'an dernier</option>
+          </select>
+        </label>
+        <template v-if="w.type === 'gauge'">
+          <label class="text-sm">
+            <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+              >Min (vide = min de la période)</span
+            >
+            <input
+              v-model.number="w.options.min"
+              type="number"
+              class="mt-1 w-full bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+            />
+          </label>
+          <label class="text-sm">
+            <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+              >Max (vide = max de la période)</span
+            >
+            <input
+              v-model.number="w.options.max"
+              type="number"
+              class="mt-1 w-full bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+            />
+          </label>
+        </template>
+      </div>
+      <div v-if="w.type === 'status'" class="mb-3">
+        <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
+          Champs
+        </div>
+        <div class="flex flex-wrap gap-x-4 gap-y-1">
+          <label
+            v-for="(lbl, f) in STATUS_FIELDS"
+            :key="f"
+            class="text-sm flex items-center gap-1.5"
+          >
+            <input
+              type="checkbox"
+              :checked="(w.options.fields ?? []).includes(f as string)"
+              @change="toggleField(f as string)"
+            />
+            {{ lbl }}
+          </label>
+        </div>
+        <template v-if="multi">
+          <div
+            class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mt-3 mb-1"
+          >
+            Box
+          </div>
+          <div class="flex flex-wrap gap-x-4 gap-y-1">
+            <label v-for="d in devices" :key="d.id" class="text-sm flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                :checked="w.sources.some((s) => s.device === d.id)"
+                @change="toggleStatusDevice(d.id)"
+              />
+              {{ d.name }}
+            </label>
+          </div>
+        </template>
+      </div>
+      <label v-if="w.type === 'image'" class="block text-sm mb-3">
+        <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+          >Adresse de l'image</span
+        >
+        <input
+          v-model="w.options.url"
+          placeholder="https://… (envoi de fichier : étape suivante)"
+          class="mt-1 w-full bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+        />
+      </label>
+      <label v-if="w.type === 'text'" class="block text-sm mb-3">
+        <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+          >Texte</span
+        >
+        <textarea
+          v-model="w.options.text"
+          rows="3"
+          class="mt-1 w-full bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+        />
+      </label>
+
+      <div class="flex justify-end gap-2 mt-4">
+        <button class="text-xs px-3 py-1.5 rounded border border-border" @click="emit('cancel')">
+          Annuler
+        </button>
+        <button
+          class="text-xs px-3 py-1.5 rounded border border-signal bg-signal text-primary-foreground"
+          data-testid="widget-ok"
+          @click="save"
+        >
+          Valider
+        </button>
+      </div>
+    </div>
+  </div>
+</template>

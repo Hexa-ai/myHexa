@@ -51,6 +51,7 @@ const breadcrumb = computed(() => {
     'admin-device-periodic': 'devices / rapports',
     'admin-map': 'map',
     'admin-projects': 'projets',
+    'admin-dashboard': 'tableau de bord',
     'admin-alarms': 'alarms',
     'admin-interventions': 'interventions',
     'admin-recipients': 'destinataires',

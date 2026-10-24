@@ -414,6 +414,14 @@ async function copyTailscaleIp(ip: string) {
         >
           Historique
         </a>
+        <a
+          v-if="historyHref"
+          :href="historyHref.replace(/\/devices\/([^/]+)\/history.*/, '/dashboard/device/$1')"
+          data-testid="dashboard-link"
+          class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] border border-signal/50 text-signal px-3 py-1.5 rounded-md hover:bg-signal/10 transition"
+        >
+          Tableau de bord
+        </a>
       </div>
     </div>
 
