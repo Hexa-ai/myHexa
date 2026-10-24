@@ -1,6 +1,7 @@
 // PROTOTYPE — projets : regroupement de box (site, machine…) d'une entreprise.
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { useAuthStore } from '@/stores/auth'
 
 export interface ProjectOverview {
   id: string
@@ -22,7 +23,31 @@ export interface ProjectOverview {
 const sb = supabase as any
 
 export function useProjects() {
-  const projects = ref<ProjectOverview[]>([])
+  const auth = useAuthStore()
+  const allProjects = ref<ProjectOverview[]>([])
+  // Les droits (RLS) limitent déjà un client à ses projets + ceux des box qu'on lui partage.
+  // Le staff voit tout : en « agit comme », on applique la même règle que pour les box
+  // (useDevices) : projets de l'entreprise choisie, plus ceux des box partagées si c'est sa
+  // propre entreprise. Sans « agit comme », filtre explicite par entreprise (load(companyId)).
+  const filterCompany = ref<string | null>(null)
+  const projects = computed<ProjectOverview[]>(() => {
+    let list = allProjects.value
+    const eff = auth.isHexaStaff ? auth.effectiveCompanyId : null
+    if (eff) {
+      const shared = new Set(
+        eff === auth.recipient?.company_id ? (auth.recipient?.shared_devices ?? []) : [],
+      )
+      list = list
+        .filter((p) => p.company_id === eff || p.device_ids.some((id) => shared.has(id)))
+        .map((p) =>
+          p.company_id === eff
+            ? p
+            : { ...p, device_ids: p.device_ids.filter((id) => shared.has(id)), can_manage: false },
+        )
+    }
+    if (filterCompany.value) list = list.filter((p) => p.company_id === filterCompany.value)
+    return list
+  })
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -35,8 +60,8 @@ export function useProjects() {
       error.value = err.message
       return
     }
-    const all = (data ?? []) as ProjectOverview[]
-    projects.value = companyId ? all.filter((p) => p.company_id === companyId) : all
+    filterCompany.value = companyId ?? null
+    allProjects.value = (data ?? []) as ProjectOverview[]
   }
 
   async function create(companyId: string, name: string, description?: string) {
