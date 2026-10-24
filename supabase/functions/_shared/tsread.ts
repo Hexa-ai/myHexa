@@ -67,7 +67,7 @@ export async function readSeries(
   let rows: TsRow[] = []
   if (files?.length) {
     const { data: signed, error: se } = await storage.storage.from('ts-archive').createSignedUrls(
-      files.map((f) => f.path),
+      files.map((f: { path: string }) => f.path),
       120,
     )
     if (se) throw new Error(se.message)

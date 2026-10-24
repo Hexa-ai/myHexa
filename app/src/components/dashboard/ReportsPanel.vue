@@ -21,6 +21,7 @@ import {
   type ReportRun,
   type ReportTemplate,
 } from '@/composables/useReports'
+import { loadLogo, removeLogo, uploadLogo } from '@/composables/useBranding'
 
 const props = defineProps<{
   dashboardId: string
@@ -44,9 +45,28 @@ const fmt = (s?: string | null) =>
 const fmtDay = (s: string) =>
   new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
 
+// logo de l'entreprise (en-tête des mails et des PDF)
+const logo = ref<string | null>(null)
+async function onLogo(ev: Event) {
+  const f = (ev.target as HTMLInputElement).files?.[0]
+  ;(ev.target as HTMLInputElement).value = ''
+  if (!f) return
+  await wrap(async () => {
+    logo.value = await uploadLogo(props.companyId, f)
+    msg.value = 'Logo enregistré : il apparaîtra en tête des rapports.'
+  })
+}
+const dropLogo = () =>
+  wrap(async () => {
+    if (!confirm('Retirer le logo des rapports ?')) return
+    await removeLogo(props.companyId)
+    logo.value = null
+  })
+
 async function refresh() {
   err.value = ''
   try {
+    logo.value = await loadLogo(props.companyId)
     reports.value = await loadReports(props.dashboardId)
     runs.value = await loadRuns(reports.value.map((r) => r.id!))
     if (props.canManage && !recipients.value.length)
@@ -103,6 +123,19 @@ const doPreview = (t: ReportTemplate) =>
     const r = await previewReport(t)
     preview.value = { subject: r.subject, html: r.html, csv: r.csv }
   })
+const previewPdf = (t: ReportTemplate) =>
+  wrap(async () => {
+    const r = await previewReport(t, true)
+    if (!r.pdf) throw new Error('PDF non généré')
+    const bin = Uint8Array.from(atob(r.pdf), (c) => c.charCodeAt(0))
+    const url = URL.createObjectURL(new Blob([bin], { type: 'application/pdf' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${r.subject}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
+    msg.value = 'Aperçu PDF téléchargé.'
+  })
 const sendNow = (r: ReportTemplate) =>
   wrap(async () => {
     const res = await runReport(r.id!)
@@ -150,9 +183,36 @@ const STATUS: Record<ReportRun['status'], [string, string]> = {
     </div>
     <p class="text-xs text-muted-foreground mb-3">
       Le rapport reprend les blocs de ce tableau de bord sur la période écoulée (la veille, la
-      semaine ou le mois précédent) et l'envoie par e-mail : graphiques en images, CSV en pièce
-      jointe en option.
+      semaine ou le mois précédent) et l'envoie par e-mail : graphiques en images, PDF A4 et CSV en
+      pièces jointes en option.
     </p>
+    <div
+      v-if="canManage && !edited"
+      class="flex flex-wrap items-center gap-2 mb-3 text-xs"
+      data-testid="report-logo"
+    >
+      <span class="text-muted-foreground">Logo des rapports :</span>
+      <img
+        v-if="logo"
+        :src="logo"
+        alt="logo"
+        class="h-8 max-w-[140px] object-contain bg-white rounded-sm p-0.5 border border-border"
+        data-testid="report-logo-img"
+      />
+      <span v-else class="text-muted-foreground italic">aucun</span>
+      <label class="px-2.5 py-1 rounded border border-border cursor-pointer hover:border-signal/60">
+        {{ logo ? 'Changer' : 'Ajouter un logo' }}
+        <input
+          type="file"
+          accept="image/png,image/jpeg"
+          class="hidden"
+          data-testid="report-logo-input"
+          @change="onLogo"
+        />
+      </label>
+      <button v-if="logo" class="underline text-muted-foreground" @click="dropLogo">retirer</button>
+      <span class="text-muted-foreground">(PNG ou JPEG, 2 Mo max.)</span>
+    </div>
     <p v-if="err" class="text-xs text-offline mb-2" data-testid="report-error">{{ err }}</p>
     <p v-if="msg" class="text-xs text-signal mb-2" data-testid="report-msg">{{ msg }}</p>
 
@@ -177,6 +237,7 @@ const STATUS: Record<ReportRun['status'], [string, string]> = {
           <div class="text-xs text-muted-foreground">
             {{ FREQ_LABEL[r.frequency] }}, {{ scheduleLabel(r) }} ·
             {{ r.recipient_ids.length }} destinataire(s)
+            <span v-if="r.attach_pdf">· PDF joint</span>
             <span v-if="r.attach_csv">· CSV joint</span>
             <span v-if="r.compare !== 'none'"
               >· comparaison : {{ COMPARE_LABEL[r.compare].toLowerCase() }}</span
@@ -241,6 +302,7 @@ const STATUS: Record<ReportRun['status'], [string, string]> = {
           >
           <span v-if="x.error" class="text-muted-foreground italic">{{ x.error }}</span>
           <button v-if="x.html_path" class="underline" @click="open(x.html_path)">voir</button>
+          <button v-if="x.pdf_path" class="underline" @click="open(x.pdf_path)">PDF</button>
           <button v-if="x.csv_path" class="underline" @click="open(x.csv_path)">CSV</button>
         </div>
       </details>
@@ -305,6 +367,10 @@ const STATUS: Record<ReportRun['status'], [string, string]> = {
           <option v-for="(l, c) in COMPARE_LABEL" :key="c" :value="c as Compare">{{ l }}</option>
         </select>
         <label class="text-xs flex items-center gap-1.5 ml-2"
+          ><input v-model="edited.attach_pdf" type="checkbox" data-testid="report-pdf" /> joindre le
+          PDF (A4)</label
+        >
+        <label class="text-xs flex items-center gap-1.5 ml-2"
           ><input v-model="edited.attach_csv" type="checkbox" data-testid="report-csv" /> joindre le
           CSV des données</label
         >
@@ -353,6 +419,14 @@ const STATUS: Record<ReportRun['status'], [string, string]> = {
           @click="doPreview(edited)"
         >
           Aperçu
+        </button>
+        <button
+          class="text-xs px-3 py-1.5 rounded border border-border"
+          :disabled="busy"
+          data-testid="report-pdf-preview"
+          @click="previewPdf(edited)"
+        >
+          Aperçu PDF
         </button>
         <button class="text-xs px-3 py-1.5 rounded border border-border" @click="edited = null">
           Annuler

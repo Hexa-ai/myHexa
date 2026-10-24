@@ -20,6 +20,7 @@ export interface ReportTemplate {
   tz: string
   compare: Compare
   attach_csv: boolean
+  attach_pdf: boolean
   recipient_ids: string[]
   enabled: boolean
   next_run_at?: string | null
@@ -36,6 +37,7 @@ export interface ReportRun {
   sent_to: string[]
   html_path: string | null
   csv_path: string | null
+  pdf_path?: string | null
   error: string | null
   created_at: string
 }
@@ -70,6 +72,7 @@ export function newTemplate(companyId: string, dashboardId: string, name: string
     tz: 'Europe/Paris',
     compare: 'previous',
     attach_csv: true,
+    attach_pdf: true,
     recipient_ids: [],
     enabled: true,
   }
@@ -148,11 +151,12 @@ async function invoke<T>(body: Record<string, unknown>): Promise<T> {
   return data.data as T
 }
 
-export function previewReport(t: ReportTemplate) {
+export function previewReport(t: ReportTemplate, pdf = false) {
   return invoke<{
     subject: string
     html: string
     csv: string
+    pdf?: string
     images: number
     ms: number
     mail: boolean
@@ -163,6 +167,7 @@ export function previewReport(t: ReportTemplate) {
     compare: t.compare,
     tz: t.tz,
     name: t.name,
+    pdf,
   })
 }
 

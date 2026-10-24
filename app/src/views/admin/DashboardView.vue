@@ -596,6 +596,7 @@ const backTo = computed(() =>
       :widget="editWidget"
       :devices="scopeDevices"
       :catalogs="catalogs"
+      :company-id="companyId"
       @save="onEdited"
       @cancel="editWidget = null"
     />

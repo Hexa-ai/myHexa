@@ -16,6 +16,12 @@ async function init() {
   fonts ??= await Promise.all(FONT_URLS.map(async (u) => new Uint8Array(await (await fetch(u)).arrayBuffer())))
 }
 
+/** polices Inter 400 / 600 (TTF), partagées avec le PDF */
+export async function interFonts(): Promise<Uint8Array[]> {
+  await init()
+  return fonts!
+}
+
 export async function svgToPng(svg: string, zoom = 2): Promise<Uint8Array> {
   await init()
   const r = new Resvg(svg, {

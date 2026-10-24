@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { uploadImage } from '@/composables/useBranding'
 // PROTOTYPE — édition d'un bloc : type, titre, largeur, sources (box + variable), opération, options.
 import { computed, ref } from 'vue'
 import type { DeviceWithStatus } from '@/composables/useDevices'
@@ -22,10 +23,29 @@ const props = defineProps<{
   widget: Widget
   devices: DeviceWithStatus[]
   catalogs: Record<string, HistVar[]>
+  companyId?: string | null
 }>()
 const emit = defineEmits<{ (e: 'save', w: Widget): void; (e: 'cancel'): void }>()
 
 const w = ref<Widget>(JSON.parse(JSON.stringify(props.widget)))
+
+// envoi d'image (voyants, bloc image) vers le bucket public de l'entreprise
+const uploading = ref(false)
+const uploadErr = ref('')
+async function pickImage(ev: Event, set: (url: string) => void) {
+  const f = (ev.target as HTMLInputElement).files?.[0]
+  ;(ev.target as HTMLInputElement).value = ''
+  if (!f || !props.companyId) return
+  uploading.value = true
+  uploadErr.value = ''
+  try {
+    set(await uploadImage(props.companyId, f))
+  } catch (e) {
+    uploadErr.value = (e as Error).message
+  } finally {
+    uploading.value = false
+  }
+}
 const WIDTHS: WidgetWidth[] = ['1/4', '1/3', '1/2', '2/3', 'full']
 const needsVars = computed(() => !['status', 'image', 'text', 'map'].includes(w.value.type))
 const multi = computed(() => props.devices.length > 1)
@@ -417,11 +437,33 @@ function save() {
             placeholder="libellé (ex. Marche)"
             class="flex-1 min-w-[110px] bg-card border border-border rounded-sm px-2 py-1 text-sm"
           />
-          <input
-            v-model="st.image"
-            placeholder="image (adresse, facultatif)"
-            class="flex-1 min-w-[140px] bg-card border border-border rounded-sm px-2 py-1 text-sm"
+          <img
+            v-if="st.image"
+            :src="st.image"
+            alt=""
+            class="w-8 h-8 object-contain rounded-sm border border-border bg-white"
           />
+          <label
+            v-if="companyId"
+            class="text-[11px] px-2 py-1 rounded border border-border cursor-pointer hover:border-signal/60"
+            title="image PNG ou JPEG, 2 Mo max."
+          >
+            {{ st.image ? 'changer l’image' : 'image…' }}
+            <input
+              type="file"
+              accept="image/png,image/jpeg"
+              class="hidden"
+              data-testid="state-image-input"
+              @change="pickImage($event, (u) => (st.image = u))"
+            />
+          </label>
+          <button
+            v-if="st.image"
+            class="font-mono text-[10px] text-muted-foreground"
+            @click="st.image = undefined"
+          >
+            sans image
+          </button>
           <button
             class="font-mono text-[10px] text-muted-foreground hover:text-offline"
             @click="w.options.states!.splice(i, 1)"
@@ -511,11 +553,26 @@ function save() {
         <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
           >Adresse de l'image</span
         >
-        <input
-          v-model="w.options.url"
-          placeholder="https://… (envoi de fichier : étape suivante)"
-          class="mt-1 w-full bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
-        />
+        <div class="mt-1 flex gap-2">
+          <input
+            v-model="w.options.url"
+            placeholder="https://…"
+            class="flex-1 min-w-0 bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+          />
+          <span
+            v-if="companyId"
+            class="text-xs px-2.5 py-1.5 rounded border border-border cursor-pointer hover:border-signal/60 relative"
+          >
+            Envoyer un fichier
+            <input
+              type="file"
+              accept="image/png,image/jpeg"
+              class="absolute inset-0 opacity-0 cursor-pointer"
+              data-testid="image-input"
+              @change="pickImage($event, (u) => (w.options.url = u))"
+            />
+          </span>
+        </div>
       </label>
       <label v-if="w.type === 'text'" class="block text-sm mb-3">
         <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
@@ -528,6 +585,8 @@ function save() {
         />
       </label>
 
+      <p v-if="uploadErr" class="text-xs text-offline mb-2">{{ uploadErr }}</p>
+      <p v-if="uploading" class="text-xs text-muted-foreground mb-2">Envoi de l'image…</p>
       <div class="flex justify-end gap-2 mt-4">
         <button class="text-xs px-3 py-1.5 rounded border border-border" @click="emit('cancel')">
           Annuler

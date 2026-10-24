@@ -12,6 +12,7 @@ import { ok, fail, preflight } from '../_shared/response.ts'
 import { readSeries, type Series, type VarMeta } from '../_shared/tsread.ts'
 import { fmtNum, gaugeSvg, svgToPng, timeChartSvg, type ChartSeries, type Pt } from '../_shared/svgchart.ts'
 import { mailerConfigured, sendMail } from '../_shared/mailer.ts'
+import { buildPdf, type PdfBlock } from '../_shared/pdfreport.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -50,7 +51,7 @@ interface Ctx {
   meta: Map<string, Map<string, VarMeta>>
   data: Map<string, Series>
   cmp: Map<string, Series>
-  images: { cid: string; png: Uint8Array }[]
+  images: { cid: string; png: Uint8Array; type?: string }[]
   multi: boolean
 }
 
@@ -166,31 +167,55 @@ function barMs(span: number) {
   return span <= 3 * 86400e3 ? 3600e3 : span <= 124 * 86400e3 ? 86400e3 : 7 * 86400e3
 }
 
-// ---------- rendu HTML (mail : tables + styles en ligne) ----------
-const card = (title: string, inner: string, sub = '') =>
-  `<tr><td style="padding:0 0 14px 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;background:#ffffff">
-<tr><td style="padding:14px 16px 4px 16px;font:600 14px Arial,sans-serif;color:#111827">${esc(title)}${sub ? `<div style="font:400 11px Arial,sans-serif;color:#6b7280;margin-top:2px">${esc(sub)}</div>` : ''}</td></tr>
-<tr><td style="padding:6px 16px 14px 16px;font:13px Arial,sans-serif;color:#111827">${inner}</td></tr></table></td></tr>`
-
-const delta = (v: number | null, c: number | null) => {
-  if (v === null || c === null || c === 0) return ''
-  const d = ((v - c) / Math.abs(c)) * 100
-  return `<span style="font:12px Arial,sans-serif;color:${d >= 0 ? '#047857' : '#b91c1c'}">${d >= 0 ? '+' : ''}${fmtNum(d, 1)} %</span>`
+// ---------- blocs : modèle commun au mail (HTML) et au PDF ----------
+interface Cell {
+  t: string
+  size?: number
+  bold?: boolean
+  color?: string
+  right?: boolean
+  dot?: string
+  img?: string // URL d'image (HTML seulement ; le PDF garde la pastille de couleur)
+}
+interface Img {
+  png: Uint8Array
+  w: number
+  h: number
+  cid: string
+}
+type Part =
+  | { k: 'img'; img: Img }
+  | { k: 'imgs'; list: Img[]; caption?: string }
+  | { k: 'rows'; head?: string[]; rows: Cell[][]; widths: number[] }
+  | { k: 'text'; t: string; color?: string; size?: number; bold?: boolean }
+  | { k: 'legend'; items: { color: string; label: string }[]; extra?: string }
+  | { k: 'url'; url: string }
+interface Block {
+  title: string
+  sub?: string
+  parts: Part[]
 }
 
-async function addImage(ctx: Ctx, svg: string, width: number): Promise<string> {
+const deltaCell = (v: number | null, c: number | null): Cell => {
+  if (v === null || c === null || c === 0) return { t: '—', right: true, color: '#9ca3af' }
+  const d = ((v - c) / Math.abs(c)) * 100
+  return { t: `${d >= 0 ? '+' : ''}${fmtNum(d, 1)} %`, right: true, color: d >= 0 ? '#047857' : '#b91c1c' }
+}
+
+async function image(ctx: Ctx, svg: string, w: number, h: number): Promise<Img> {
   const png = await svgToPng(svg, 2)
-  const cid = `img${ctx.images.length + 1}`
-  ctx.images.push({ cid, png })
-  return `<img src="cid:${cid}" width="${width}" style="display:block;width:100%;max-width:${width}px;height:auto;border:0" alt="graphique">`
+  const img = { png, w, h, cid: `img${ctx.images.length + 1}` }
+  ctx.images.push({ cid: img.cid, png })
+  return img
 }
 
 const DEFAULT_STATES = [
   { value: 0, label: 'Arrêt', color: '#8a8f98' },
   { value: 1, label: 'Marche', color: '#16a34a' },
 ]
+const empty = (title: string, t = 'pas de données sur la période'): Block => ({ title, parts: [{ k: 'text', t, color: '#9ca3af' }] })
 
-async function renderWidget(w: Widget, ctx: Ctx, cmpLabel: string): Promise<string> {
+async function renderWidget(w: Widget, ctx: Ctx, cmpLabel: string): Promise<Block | null> {
   const ser = seriesOf(w, ctx.data, ctx)
   const cser = seriesOf(w, ctx.cmp, ctx)
   const title = w.title || (ser.length === 1 ? ser[0].label : '') || ''
@@ -198,75 +223,85 @@ async function renderWidget(w: Widget, ctx: Ctx, cmpLabel: string): Promise<stri
   switch (w.type) {
     case 'curve':
     case 'bars': {
-      if (!ser.length) return card(title || 'Graphique', '<span style="color:#9ca3af">pas de données sur la période</span>')
+      if (!ser.length) return empty(title || 'Graphique')
       const missing = w.sources.filter((x) => x.var && !ctx.data.get(x.device + '|' + x.var)?.points.length).map((x) => label(ctx, x.device, x.var))
-      const missingNote = missing.length ? `<div style="font:11px Arial,sans-serif;color:#9ca3af;margin-top:4px">Sans données sur la période : ${esc(missing.join(', '))}</div>` : ''
       const bars = w.type === 'bars' || ser[0].counter
       const groups = !w.op && w.options.separate ? ser.map((s) => [s]) : [ser]
-      let html = ''
+      const parts: Part[] = []
       for (const g of groups) {
         const leftUnit = g[0].unit ?? ''
         const cs: ChartSeries[] = g.map((s, i) => ({
           points: s.points,
           label: s.label,
           unit: s.unit,
-          color: COLORS[(ser.indexOf(s)) % COLORS.length],
+          color: COLORS[ser.indexOf(s) % COLORS.length],
           axis: i > 0 && (s.unit ?? '') !== leftUnit ? 'right' : 'left',
           step: s.state,
         }))
-        const legend =
-          g.length > 1
-            ? `<div style="font:11px Arial,sans-serif;color:#374151;margin:2px 0 4px 0">${cs
-                .map((c) => `<span style="color:${c.color}">&#9632;</span> ${esc(c.label)} <span style="color:#6b7280">${esc(c.unit ?? '')}${c.axis === 'right' ? ' (axe droit)' : ''}</span>`)
-                .join(' &nbsp; ')}</div>`
-            : `<div style="font:11px Arial,sans-serif;color:#6b7280;margin:2px 0 4px 0">${esc(g[0].unit ?? '')}${g[0].desc ? ' · ' + esc(g[0].desc) : ''}</div>`
-        const total = bars && g.length === 1 ? ` &nbsp; <b>Total : ${fmtNum(statOf(g[0].points, 'total'))} ${esc(g[0].unit ?? '')}</b>` : ''
-        html +=
-          (groups.length > 1 ? `<div style="font:600 12px Arial,sans-serif;margin-top:8px">${esc(g[0].label)}</div>` : '') +
-          legend.replace('</div>', total + '</div>') +
-          (await addImage(ctx, timeChartSvg({ series: cs, from: ctx.from, to: ctx.to, tz: ctx.tz, bars: bars ? barMs(span) : 0 }), 600))
+        if (groups.length > 1) parts.push({ k: 'text', t: g[0].label, bold: true, size: 12 })
+        const total = bars && g.length === 1 ? `Total : ${fmtNum(statOf(g[0].points, 'total'))} ${g[0].unit ?? ''}` : ''
+        if (g.length > 1)
+          parts.push({ k: 'legend', items: cs.map((c) => ({ color: c.color, label: `${c.label} ${c.unit ?? ''}${c.axis === 'right' ? ' (axe droit)' : ''}` })), extra: total })
+        else parts.push({ k: 'text', t: [g[0].unit ?? '', g[0].desc, total].filter((x) => x).join(' · '), color: '#6b7280', size: 11 })
+        parts.push({ k: 'img', img: await image(ctx, timeChartSvg({ series: cs, from: ctx.from, to: ctx.to, tz: ctx.tz, bars: bars ? barMs(span) : 0 }), 600, 210) })
       }
-      return card(title || 'Graphique', html + missingNote)
+      if (missing.length) parts.push({ k: 'text', t: `Sans données sur la période : ${missing.join(', ')}`, color: '#9ca3af', size: 11 })
+      return { title: title || 'Graphique', parts }
     }
     case 'value':
     case 'gauge': {
       const counterDefault = ser[0]?.counter ? 'total' : 'mean'
       // dans un rapport, « dernière valeur » a peu de sens : moyenne de la période par défaut (total pour les compteurs)
       const stat = w.options.stat && w.options.stat !== 'last' ? w.options.stat : counterDefault
-      const statLabel = { mean: 'Moyenne', min: 'Minimum', max: 'Maximum', total: 'Total', last: 'Dernière' }[stat as string]
-      if (!ser.length) return card(title || 'Valeur', '<span style="color:#9ca3af">pas de données</span>')
+      const statLabel = { mean: 'Moyenne', min: 'Minimum', max: 'Maximum', total: 'Total', last: 'Dernière' }[stat as string]!
       if (w.type === 'gauge') {
-        let imgs = ''
         // une jauge par variable (ou une seule si opération) ; une variable sans historique prend la valeur du dernier statut
-        const gs = w.op && ser.length ? ser : w.sources.filter((x) => x.var).map((x) => {
-          const d = ctx.data.get(x.device + '|' + x.var)
-          return { label: label(ctx, x.device, x.var), unit: d?.unit ?? null, points: (d?.points ?? []) as Pt[], live: liveOf(ctx, x.device, x.var) }
-        })
-        for (const s of gs as { label: string; unit: string | null; points: Pt[]; live?: number | null }[]) {
+        const gs = (w.op && ser.length
+          ? ser
+          : w.sources.filter((x) => x.var).map((x) => {
+              const d = ctx.data.get(x.device + '|' + x.var)
+              return { label: label(ctx, x.device, x.var), unit: d?.unit ?? null, points: (d?.points ?? []) as Pt[], live: liveOf(ctx, x.device, x.var) }
+            })) as { label: string; unit: string | null; points: Pt[]; live?: number | null }[]
+        if (!gs.length) return empty(title || 'Jauge')
+        const list: Img[] = []
+        for (const s of gs) {
           const v = s.points.length ? statOf(s.points, stat) : (s.live ?? null)
           const lo = w.options.min ?? statOf(s.points, 'min') ?? (v !== null ? Math.min(0, v) : 0)
           const hi = w.options.max ?? statOf(s.points, 'max') ?? (v !== null ? Math.max(1, v) : 1)
-          imgs += `<td align="center" style="padding:4px">${await addImage(ctx, gaugeSvg(v, lo, hi, s.unit, gs.length > 1 ? s.label : undefined), 200)}</td>`
+          const multi = gs.length > 1
+          list.push(await image(ctx, gaugeSvg(v, lo, hi, s.unit, multi ? s.label : undefined), 200, multi ? 140 : 125))
         }
-        return card(title || ser[0].label, `<table role="presentation" width="100%"><tr>${imgs}</tr></table><div style="font:11px Arial,sans-serif;color:#6b7280;text-align:center">${statLabel} de la période</div>`)
+        return { title: title || gs[0].label, parts: [{ k: 'imgs', list, caption: `${statLabel} de la période` }] }
       }
-      const rows = ser
-        .map((s, i) => {
-          const v = statOf(s.points, stat)
-          const c = cser[i] ? statOf(cser[i].points, stat) : null
-          return `<tr><td style="padding:4px 0;font:13px Arial,sans-serif;color:#374151">${esc(s.label)}</td>
-<td align="right" style="padding:4px 0;font:600 20px Arial,sans-serif;color:#111827;white-space:nowrap">${fmtNum(v, w.options.decimals)} <span style="font:400 12px Arial,sans-serif;color:#6b7280">${esc(s.unit ?? '')}</span></td>
-${ctx.cmpFrom !== null ? `<td align="right" style="padding:4px 0 4px 10px;white-space:nowrap">${delta(v, c)}<div style="font:11px Arial,sans-serif;color:#9ca3af">${cmpLabel} : ${fmtNum(c)}</div></td>` : ''}</tr>`
-        })
-        .join('')
-      return card(title || statLabel!, `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>`, statLabel + ' de la période')
+      if (!ser.length) return empty(title || 'Valeur', 'pas de données')
+      const cmp = ctx.cmpFrom !== null
+      return {
+        title: title || statLabel,
+        sub: statLabel + ' de la période',
+        parts: [
+          {
+            k: 'rows',
+            widths: cmp ? [0.45, 0.33, 0.22] : [0.55, 0.45],
+            rows: ser.map((s, i) => {
+              const v = statOf(s.points, stat)
+              const c = cser[i] ? statOf(cser[i].points, stat) : null
+              const row: Cell[] = [
+                { t: s.label, color: '#374151' },
+                { t: `${fmtNum(v, w.options.decimals)} ${s.unit ?? ''}`, size: 18, bold: true, right: true },
+              ]
+              if (cmp) row.push({ ...deltaCell(v, c), t: `${deltaCell(v, c).t} (${cmpLabel} : ${fmtNum(c)})`, size: 10 })
+              return row
+            }),
+          },
+        ],
+      }
     }
     case 'indicator': {
       const states = (w.options.states?.length ? w.options.states : DEFAULT_STATES) as { value: number; label: string; color: string; image?: string }[]
       const valOf = (src: { device: string; var: string }) => {
         const s = ctx.data.get(src.device + '|' + src.var)
         const v = s ? statOf(s.points as Pt[], 'last') : null
-        return v ?? liveOf(ctx, src.device, src.var)
+        return v ?? liveOf(ctx, src.device, src.var) // pas d'historique (alarmes) : état du dernier statut
       }
       const look = (v: number | null) => {
         const st = v === null ? null : states.find((x) => Number(x.value) === v)
@@ -280,31 +315,35 @@ ${ctx.cmpFrom !== null ? `<td align="right" style="padding:4px 0 4px 10px;white-
         const v = !nn.length ? null : mode === 'any' ? (nn.some((x) => x !== 0) ? 1 : 0) : mode === 'all' ? (nn.length === vals.length && nn.every((x) => x !== 0) ? 1 : 0) : Math.max(...nn)
         const l = look(v)
         const active = srcs.filter((_, i) => vals[i] !== null && vals[i] !== 0).map((x) => label(ctx, x.device, x.var))
-        return card(
-          title || 'Synthèse',
-          `<span style="display:inline-block;width:14px;height:14px;border-radius:7px;background:${l.color};vertical-align:middle"></span> <span style="font:600 16px Arial,sans-serif;color:${l.color};vertical-align:middle">${esc(l.txt)}</span>
-<div style="font:12px Arial,sans-serif;color:#6b7280;margin-top:4px">${srcs.length} états · ${active.length ? 'actifs : ' + esc(active.join(', ')) : 'aucun actif'}</div>`,
-          'dernier état connu',
-        )
+        return {
+          title: title || 'Synthèse',
+          sub: 'dernier état connu',
+          parts: [
+            { k: 'rows', widths: [1], rows: [[{ t: l.txt, dot: l.color, color: l.color, bold: true, size: 15, img: l.image }]] },
+            { k: 'text', t: `${srcs.length} états · ${active.length ? 'actifs : ' + active.join(', ') : 'aucun actif'}`, color: '#6b7280', size: 11 },
+          ],
+        }
       }
-      const rows = srcs
-        .map((src) => {
-          const s = ctx.data.get(src.device + '|' + src.var)
-          let v = s ? statOf(s.points as Pt[], 'last') : null
-          if (v === null) v = liveOf(ctx, src.device, src.var) // pas d'historique (alarmes) : état du dernier statut
-          const st = v === null ? null : states.find((x) => Number(x.value) === v)
-          const color = st?.color ?? '#8a8f98'
-          const txt = st?.label ?? (v === null ? 'inconnu' : `état ${fmtNum(v)}`)
-          const look = st?.image
-            ? `<img src="${esc(st.image)}" width="22" height="22" style="vertical-align:middle" alt="">`
-            : `<span style="display:inline-block;width:12px;height:12px;border-radius:6px;background:${color}"></span>`
-          return `<tr><td style="padding:3px 8px 3px 0;width:24px">${look}</td><td style="padding:3px 0;font:13px Arial,sans-serif">${esc(label(ctx, src.device, src.var))}</td><td align="right" style="font:600 13px Arial,sans-serif;color:${color}">${esc(txt)}</td></tr>`
-        })
-        .join('')
-      return card(title || 'États', `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>`, 'dernier état connu')
+      return {
+        title: title || 'États',
+        sub: 'dernier état connu',
+        parts: [
+          {
+            k: 'rows',
+            widths: [0.6, 0.4],
+            rows: srcs.map((src) => {
+              const l = look(valOf(src))
+              return [
+                { t: label(ctx, src.device, src.var), dot: l.color, img: l.image },
+                { t: l.txt, color: l.color, bold: true, right: true },
+              ]
+            }),
+          },
+        ],
+      }
     }
     case 'states': {
-      let html = ''
+      const parts: Part[] = []
       for (const s of ser) {
         const pts = s.points.filter((p) => p[1] !== null && p[0] < ctx.to)
         const acc = new Map<number, number>()
@@ -314,13 +353,21 @@ ${ctx.cmpFrom !== null ? `<td align="right" style="padding:4px 0 4px 10px;white-
           if (b > a) acc.set(pts[i][1]!, (acc.get(pts[i][1]!) ?? 0) + (b - a))
         }
         const tot = [...acc.values()].reduce((a, b) => a + b, 0) || 1
-        html += `<div style="font:600 12px Arial,sans-serif;margin:6px 0 2px 0">${esc(s.label)}</div>` +
-          [...acc].sort((a, b) => b[1] - a[1]).map(([v, ms]) => `<div style="font:12px Arial,sans-serif">état ${fmtNum(v)} : ${fmtNum(ms / 3600e3, 1)} h (${fmtNum((ms / tot) * 100, 0)} %)</div>`).join('')
+        parts.push({ k: 'text', t: s.label, bold: true, size: 12 })
+        parts.push({
+          k: 'rows',
+          widths: [0.5, 0.25, 0.25],
+          rows: [...acc].sort((a, b) => b[1] - a[1]).map(([v, ms]) => [
+            { t: `état ${fmtNum(v)}` },
+            { t: `${fmtNum(ms / 3600e3, 1)} h`, right: true },
+            { t: `${fmtNum((ms / tot) * 100, 0)} %`, right: true },
+          ]),
+        })
       }
-      return card(title || 'Créneaux d’états', html || '<span style="color:#9ca3af">pas de données</span>')
+      return parts.length ? { title: title || 'Créneaux d’états', parts } : empty(title || 'Créneaux d’états', 'pas de données')
     }
     case 'table': {
-      const head = `<tr style="font:600 11px Arial,sans-serif;color:#6b7280;text-transform:uppercase"><td style="padding:4px 0">Variable</td><td align="right">Min</td><td align="right">Moy.</td><td align="right">Max</td><td align="right">Total / dern.</td>${ctx.cmpFrom !== null ? `<td align="right">${cmpLabel}</td>` : ''}</tr>`
+      const cmp = ctx.cmpFrom !== null
       const rows = w.sources
         .filter((s) => s.var)
         .map((s) => {
@@ -330,57 +377,93 @@ ${ctx.cmpFrom !== null ? `<td align="right" style="padding:4px 0 4px 10px;white-
           const counter = isCounter(d)
           const main = statOf(pts, counter ? 'total' : 'mean')
           const cm = c ? statOf(c.points as Pt[], counter ? 'total' : 'mean') : null
-          return `<tr style="border-top:1px solid #f1f5f9;font:12px Arial,sans-serif"><td style="padding:5px 6px 5px 0">${esc(label(ctx, s.device, s.var))} <span style="color:#6b7280">${esc(d?.unit ?? '')}</span></td>
-<td align="right">${counter ? '' : fmtNum(statOf(pts, 'min'))}</td><td align="right">${fmtNum(statOf(pts, 'mean'))}</td><td align="right">${counter ? '' : fmtNum(statOf(pts, 'max'))}</td>
-<td align="right">${fmtNum(statOf(pts, counter ? 'total' : 'last'))}</td>${ctx.cmpFrom !== null ? `<td align="right" style="white-space:nowrap">${delta(main, cm) || '—'}</td>` : ''}</tr>`
+          const row: Cell[] = [
+            { t: `${label(ctx, s.device, s.var)} ${d?.unit ?? ''}` },
+            { t: counter ? '' : fmtNum(statOf(pts, 'min')), right: true },
+            { t: fmtNum(statOf(pts, 'mean')), right: true },
+            { t: counter ? '' : fmtNum(statOf(pts, 'max')), right: true },
+            { t: fmtNum(statOf(pts, counter ? 'total' : 'last')), right: true },
+          ]
+          if (cmp) row.push(deltaCell(main, cm))
+          return row
         })
-        .join('')
-      return card(title || 'Synthèse', `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${head}${rows}</table>`)
+      return {
+        title: title || 'Synthèse',
+        parts: [
+          {
+            k: 'rows',
+            head: ['Variable', 'Min', 'Moy.', 'Max', 'Total / dern.', ...(cmp ? [cmpLabel] : [])],
+            widths: cmp ? [0.36, 0.12, 0.12, 0.12, 0.14, 0.14] : [0.4, 0.15, 0.15, 0.15, 0.15],
+            rows,
+          },
+        ],
+      }
     }
-    case 'status': {
-      const ids = [...new Set(w.sources.map((s) => s.device))]
-      const rows = ids
-        .map((id) => ctx.devices.get(id))
-        .filter((d) => !!d)
-        .map((d) => {
-          const online = d!.last_connection_at && Date.now() - Date.parse(d!.last_connection_at) < 2 * 3600e3
-          const last = d!.last_connection_at
-            ? new Intl.DateTimeFormat('fr-FR', { timeZone: ctx.tz, dateStyle: 'short', timeStyle: 'short' }).format(new Date(d!.last_connection_at))
-            : '—'
-          return `<tr style="font:12px Arial,sans-serif"><td style="padding:3px 0"><span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:${online ? '#16a34a' : '#dc2626'}"></span> ${esc(d!.name)}</td><td align="right" style="color:#6b7280">dernier contact ${esc(last)}</td></tr>`
-        })
-        .join('')
-      return card(title || 'Box', `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>`, 'au moment de l’envoi')
-    }
+    case 'status':
     case 'map': {
       const states = (w.options.states?.length ? w.options.states : DEFAULT_STATES) as { value: number; label: string; color: string }[]
+      const fmtD = new Intl.DateTimeFormat('fr-FR', { timeZone: ctx.tz, dateStyle: 'short', timeStyle: 'short' })
       const rows = [...new Map(w.sources.map((x) => [x.device, x])).values()]
         .map((src) => {
           const d = ctx.devices.get(src.device)
-          if (!d) return ''
-          const online = d.last_connection_at && Date.now() - Date.parse(d.last_connection_at) < 2 * 3600e3
+          if (!d) return null
+          const online = !!d.last_connection_at && Date.now() - Date.parse(d.last_connection_at) < 2 * 3600e3
           let color = online ? '#16a34a' : '#dc2626'
-          let txt = online ? 'connectée' : 'déconnectée'
-          if (src.var) {
+          let txt = w.type === 'status' ? `dernier contact ${d.last_connection_at ? fmtD.format(new Date(d.last_connection_at)) : '—'}` : online ? 'connectée' : 'déconnectée'
+          if (w.type === 'map' && src.var) {
             const v = liveOf(ctx, src.device, src.var)
             const st = v === null ? null : states.find((x) => Number(x.value) === v)
             color = st?.color ?? '#8a8f98'
             txt = `${src.var} : ${st?.label ?? (v === null ? 'inconnu' : 'état ' + fmtNum(v))}`
           }
-          const pos = (d as any).latitude != null ? '' : ' <span style="color:#9ca3af">(sans position)</span>'
-          return `<tr style="font:12px Arial,sans-serif"><td style="padding:3px 0"><span style="display:inline-block;width:10px;height:10px;border-radius:5px;background:${color}"></span> ${esc(d.name)}${pos}</td><td align="right" style="color:${color}">${esc(txt)}</td></tr>`
+          const pos = w.type === 'map' && (d as any).latitude == null ? ' (sans position)' : ''
+          return [
+            { t: d.name + pos, dot: color },
+            { t: txt, right: true, color: w.type === 'map' ? color : '#6b7280' },
+          ] as Cell[]
         })
-        .join('')
-      return card(title || 'Box', `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>`, 'carte disponible dans le portail')
+        .filter((r): r is Cell[] => !!r)
+      return { title: title || 'Box', sub: w.type === 'map' ? 'carte disponible dans le portail' : 'au moment de l’envoi', parts: [{ k: 'rows', widths: [0.55, 0.45], rows }] }
     }
     case 'text':
-      return card(title || '', `<div style="white-space:pre-line">${esc(w.options.text ?? '')}</div>`)
+      return { title: title || '', parts: [{ k: 'text', t: w.options.text ?? '' }] }
     case 'image':
-      return w.options.url && /^https:\/\//.test(w.options.url)
-        ? card(title || '', `<img src="${esc(w.options.url)}" style="max-width:100%;height:auto" alt="">`)
-        : ''
+      return w.options.url && /^https:\/\//.test(w.options.url) ? { title: title || '', parts: [{ k: 'url', url: w.options.url }] } : null
   }
-  return ''
+  return null
+}
+
+// ---------- HTML (mail : tables + styles en ligne) ----------
+function cellHtml(c: Cell, wPct: number) {
+  const look = c.img
+    ? `<img src="${esc(c.img)}" width="20" height="20" style="vertical-align:middle;margin-right:6px" alt="">`
+    : c.dot
+      ? `<span style="display:inline-block;width:10px;height:10px;border-radius:5px;background:${c.dot};margin-right:6px"></span>`
+      : ''
+  return `<td${c.right ? ' align="right"' : ''} width="${Math.round(wPct * 100)}%" style="padding:4px 4px 4px 0;font:${c.bold ? 600 : 400} ${c.size ?? 12}px Arial,sans-serif;color:${c.color ?? '#111827'}">${look}${esc(c.t)}</td>`
+}
+function blockHtml(b: Block): string {
+  const inner = b.parts
+    .map((p) => {
+      switch (p.k) {
+        case 'img':
+          return `<img src="cid:${p.img.cid}" width="${p.img.w}" style="display:block;width:100%;max-width:${p.img.w}px;height:auto;border:0" alt="graphique">`
+        case 'imgs':
+          return `<table role="presentation" width="100%"><tr>${p.list.map((i) => `<td align="center" style="padding:4px"><img src="cid:${i.cid}" width="${i.w}" style="display:block;width:100%;max-width:${i.w}px;height:auto;border:0" alt=""></td>`).join('')}</tr></table>${p.caption ? `<div style="font:11px Arial,sans-serif;color:#6b7280;text-align:center">${esc(p.caption)}</div>` : ''}`
+        case 'rows':
+          return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${p.head ? `<tr>${p.head.map((h, i) => `<td${i ? ' align="right"' : ''} style="padding:4px 4px 4px 0;font:600 10px Arial,sans-serif;color:#6b7280;text-transform:uppercase">${esc(h)}</td>`).join('')}</tr>` : ''}${p.rows.map((r) => `<tr style="border-top:1px solid #f1f5f9">${r.map((c, i) => cellHtml(c, p.widths[i] ?? 0)).join('')}</tr>`).join('')}</table>`
+        case 'text':
+          return `<div style="font:${p.bold ? 600 : 400} ${p.size ?? 13}px Arial,sans-serif;color:${p.color ?? '#111827'};margin:3px 0;white-space:pre-line">${esc(p.t)}</div>`
+        case 'legend':
+          return `<div style="font:11px Arial,sans-serif;color:#374151;margin:2px 0 4px 0">${p.items.map((i) => `<span style="color:${i.color}">&#9632;</span> ${esc(i.label)}`).join(' &nbsp; ')}${p.extra ? ` &nbsp; <b>${esc(p.extra)}</b>` : ''}</div>`
+        case 'url':
+          return `<img src="${esc(p.url)}" style="max-width:100%;height:auto" alt="">`
+      }
+    })
+    .join('')
+  return `<tr><td style="padding:0 0 14px 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;background:#ffffff">
+<tr><td style="padding:14px 16px 4px 16px;font:600 14px Arial,sans-serif;color:#111827">${esc(b.title)}${b.sub ? `<div style="font:400 11px Arial,sans-serif;color:#6b7280;margin-top:2px">${esc(b.sub)}</div>` : ''}</td></tr>
+<tr><td style="padding:6px 16px 14px 16px;font:13px Arial,sans-serif;color:#111827">${inner}</td></tr></table></td></tr>`
 }
 
 // ---------- CSV (Excel France) ----------
@@ -408,10 +491,32 @@ function toCsv(ctx: Ctx, widgets: Widget[], head: string[]): string {
   return '\ufeff' + lines.join('\r\n') + '\r\n'
 }
 
+// ---------- logo / images ----------
+const imgType = (b: Uint8Array) => (b[0] === 0x89 && b[1] === 0x50 ? 'image/png' : b[0] === 0xff && b[1] === 0xd8 ? 'image/jpeg' : null)
+async function loadLogo(path?: string | null) {
+  if (!path) return null
+  const { data } = await admin.storage.from('branding').download(path)
+  if (!data) return null
+  const bytes = new Uint8Array(await data.arrayBuffer())
+  const type = imgType(bytes)
+  return type ? { bytes, type } : null
+}
+async function fetchImage(url: string): Promise<Uint8Array | null> {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(5000) })
+    if (!r.ok) return null
+    const b = new Uint8Array(await r.arrayBuffer())
+    return b.length < 3e6 && imgType(b) ? b : null
+  } catch (_) {
+    return null
+  }
+}
+
 // ---------- génération complète ----------
 async function buildReport(dash: any, freq: string, compare: string, tz: string, from: number, to: number, reportName: string) {
   const { data: widgets } = await admin.from('dashboard_widgets').select('type, width, title, sources, op, options').eq('dashboard_id', dash.id).order('position')
-  const { data: company } = await admin.from('companies').select('name').eq('id', dash.company_id).single()
+  const { data: company } = await admin.from('companies').select('name, logo_path').eq('id', dash.company_id).single()
+  const logo = await loadLogo(company?.logo_path)
   let devIds: string[] = []
   let scopeName = ''
   if (dash.scope === 'device') devIds = [dash.device_id]
@@ -456,20 +561,25 @@ async function buildReport(dash: any, freq: string, compare: string, tz: string,
     freq === 'daily' ? fmtD.format(from)
     : freq === 'monthly' ? new Intl.DateTimeFormat('fr-FR', { timeZone: tz, month: 'long', year: 'numeric' }).format(from)
     : `du ${fmtD.format(from)} au ${fmtD.format(to - 1)}`
-  let body = ''
+  const blocks: Block[] = []
   for (const w of ws) {
     try {
-      body += await renderWidget(w, ctx, cmpLabel)
+      const b = await renderWidget(w, ctx, cmpLabel)
+      if (b) blocks.push(b)
     } catch (e) {
-      body += card(w.title ?? w.type, `<span style="color:#b91c1c">bloc non généré : ${esc((e as Error).message)}</span>`)
+      blocks.push({ title: w.title ?? w.type, parts: [{ k: 'text', t: `bloc non généré : ${(e as Error).message}`, color: '#b91c1c' }] })
     }
   }
+  // images par URL (blocs image) : téléchargées une fois pour le PDF
+  for (const b of blocks) for (const p of b.parts) if (p.k === 'url') (p as any).bytes = await fetchImage(p.url)
+  const body = blocks.map(blockHtml).join('\n')
   const subject = `${FREQ_LABEL[freq] ?? 'Rapport'} · ${scopeName} · ${periodLabel}`
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(subject)}</title></head>
 <body style="margin:0;padding:0;background:#f3f4f6">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6"><tr><td align="center" style="padding:20px 10px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px">
 <tr><td style="padding:0 0 14px 0">
+  ${logo ? `<img src="cid:logo" height="40" style="display:block;height:40px;width:auto;max-width:200px;border:0;margin:0 0 10px 0" alt="${esc(company?.name ?? '')}">` : ''}
   <div style="font:600 11px Arial,sans-serif;letter-spacing:2px;color:#00a88a;text-transform:uppercase">myHexa · ${esc(company?.name ?? '')}</div>
   <div style="font:600 22px Arial,sans-serif;color:#111827;margin-top:4px">${esc(scopeName)}</div>
   <div style="font:14px Arial,sans-serif;color:#374151;margin-top:2px">${esc(reportName)} — ${esc(periodLabel)}</div>
@@ -481,7 +591,19 @@ ${body}
 </table></td></tr></table></body></html>`
   const fmtF = new Intl.DateTimeFormat('fr-FR', { timeZone: tz, dateStyle: 'short', timeStyle: 'short' })
   const csv = toCsv(ctx, ws, [`myHexa · ${scopeName} · ${reportName}`, `Période : ${fmtF.format(from)} → ${fmtF.format(to)} (${tz})`, ''])
-  return { subject, html, csv, images: ctx.images, scopeName }
+  if (logo) ctx.images.push({ cid: 'logo', png: logo.bytes, type: logo.type })
+  const cmpNote = ctx.cmpFrom !== null ? `Comparaison : ${compare === 'year' ? 'même période l’an dernier' : 'période précédente'}` : undefined
+  const pdf = () =>
+    buildPdf({
+      brand: `myHexa · ${company?.name ?? ''}`,
+      title: scopeName,
+      subtitle: `${reportName} — ${periodLabel}`,
+      note: cmpNote,
+      footer: `Rapport généré par myHexa (Hexa-AI) le ${fmtF.format(Date.now())} · heures en ${tz}`,
+      logo: logo?.bytes,
+      blocks: blocks as PdfBlock[],
+    })
+  return { subject, html, csv, pdf, images: ctx.images, scopeName, periodLabel }
 }
 
 const b64 = (u: Uint8Array) => {
@@ -489,8 +611,8 @@ const b64 = (u: Uint8Array) => {
   for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode(...u.subarray(i, i + 0x8000))
   return btoa(bin)
 }
-const inlineImages = (html: string, images: { cid: string; png: Uint8Array }[]) =>
-  images.reduce((h, im) => h.replace(`cid:${im.cid}`, `data:image/png;base64,${b64(im.png)}`), html)
+const inlineImages = (html: string, images: { cid: string; png: Uint8Array; type?: string }[]) =>
+  images.reduce((h, im) => h.replace(`cid:${im.cid}`, `data:${im.type ?? 'image/png'};base64,${b64(im.png)}`), html)
 
 async function periodFor(freq: string, tz: string, at: string) {
   const { data, error } = await admin.rpc('report_period', { p_freq: freq, p_tz: tz, p_at: at }).single()
@@ -510,10 +632,13 @@ async function runTemplate(tpl: any, trigger: 'cron' | 'manual') {
   let html = ''
   let csv = ''
   let bytes = 0
+  let pdfBytes: Uint8Array | null = null
+  let pdfPath = ''
   try {
     const r = await buildReport(dash, tpl.frequency, tpl.compare, tpl.tz, from, to, tpl.name)
     html = r.html
     csv = r.csv
+    pdfBytes = await r.pdf()
     const { data: recs } = await admin.from('recipients').select('contact_email').in('id', tpl.recipient_ids.length ? tpl.recipient_ids : ['00000000-0000-0000-0000-000000000000'])
     const emails = (recs ?? []).map((x: any) => (x.contact_email ?? '').trim()).filter((e: string) => e)
     const allowed = emails.filter((e: string) => !ALLOW_DOMAIN || e.toLowerCase().endsWith('@' + ALLOW_DOMAIN))
@@ -527,8 +652,11 @@ async function runTemplate(tpl: any, trigger: 'cron' | 'manual') {
           to,
           subject: r.subject,
           html: r.html,
-          inline: r.images.map((im) => ({ cid: im.cid, contentType: 'image/png', data: im.png })),
-          attachments: tpl.attach_csv ? [{ filename: `${r.scopeName} ${day}.csv`, contentType: 'text/csv; charset=utf-8', data: enc.encode(r.csv) }] : [],
+          inline: r.images.map((im) => ({ cid: im.cid, contentType: im.type ?? 'image/png', data: im.png })),
+          attachments: [
+            ...(tpl.attach_pdf && pdfBytes ? [{ filename: `${r.scopeName} ${day}.pdf`, contentType: 'application/pdf', data: pdfBytes }] : []),
+            ...(tpl.attach_csv ? [{ filename: `${r.scopeName} ${day}.csv`, contentType: 'text/csv; charset=utf-8', data: enc.encode(r.csv) }] : []),
+          ],
         })
         sentTo.push(to)
       }
@@ -541,6 +669,10 @@ async function runTemplate(tpl: any, trigger: 'cron' | 'manual') {
     const base = `${tpl.company_id}/${tpl.id}/${runId}`
     await admin.storage.from('reports').upload(`${base}.html`, new Blob([archived], { type: 'text/html; charset=utf-8' }), { upsert: true })
     await admin.storage.from('reports').upload(`${base}.csv`, new Blob([r.csv], { type: 'text/csv; charset=utf-8' }), { upsert: true })
+    if (pdfBytes) {
+      await admin.storage.from('reports').upload(`${base}.pdf`, new Blob([pdfBytes], { type: 'application/pdf' }), { upsert: true })
+      pdfPath = `${base}.pdf`
+    }
     html = `${base}.html`
     csv = `${base}.csv`
   } catch (e) {
@@ -559,6 +691,7 @@ async function runTemplate(tpl: any, trigger: 'cron' | 'manual') {
     sent_to: sentTo,
     html_path: html || null,
     csv_path: csv || null,
+    pdf_path: pdfPath || null,
     bytes,
     ms: Date.now() - t0,
     error,
@@ -608,7 +741,8 @@ Deno.serve(async (req) => {
       const [from, to] = await periodFor(freq, tz, body.at || new Date().toISOString())
       const t0 = Date.now()
       const r = await buildReport(dash, freq, body.compare || 'none', tz, from, to, body.name || FREQ_LABEL[freq])
-      return ok({ subject: r.subject, html: inlineImages(r.html, r.images), csv: r.csv, images: r.images.length, from, to, ms: Date.now() - t0, mail: mailerConfigured() })
+      const pdf = body.pdf ? b64(await r.pdf()) : undefined
+      return ok({ subject: r.subject, html: inlineImages(r.html, r.images), csv: r.csv, pdf, images: r.images.length, from, to, ms: Date.now() - t0, mail: mailerConfigured() })
     }
     if (body.action === 'run') {
       const { data: tpl } = await user.from('report_templates').select('*').eq('id', body.template_id).maybeSingle()
