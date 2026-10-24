@@ -144,7 +144,7 @@ async function buildDay(device: string, company: string, day: string) {
   // fuseau : celui du dernier rapport journalier, sinon du statut, sinon Paris
   const { data: reps } = await admin
     .from('reports')
-    .select('type, period_start, period_end, received_at, payload')
+    .select('type, period_start, period_end, received_at, payload, derived_payload')
     .eq('device_id', device)
     .in('type', ['daily', 'weekly'])
     .lte('period_start', day)
@@ -163,8 +163,13 @@ async function buildDay(device: string, company: string, day: string) {
 
   const fresh: TsRow[] = []
   if (daily) fresh.push(...fromDaily(daily.payload as Json, dayStart, meta))
+  // volumes / énergies intégrés par la base (reports.derived_payload, Debit_* -> Volume_*) : compteurs horaires
+  if (daily?.derived_payload) fresh.push(...fromDaily(daily.derived_payload as Json, dayStart, meta))
   for (const w of weekly) {
-    const rows = fromWeekly(w.payload as Json, dayStart, meta)
+    const rows = [
+      ...fromWeekly(w.payload as Json, dayStart, meta),
+      ...(w.derived_payload ? fromWeekly(w.derived_payload as Json, dayStart, meta) : []),
+    ]
     // une variable déjà couverte par le journalier ne prend pas l'hebdo
     fresh.push(...rows.filter((r) => !fresh.some((f) => f.var === r.var && f.src === (r.src === SRC.STATS ? SRC.STATS : SRC.REPORT))))
   }
@@ -237,7 +242,8 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('method not allowed', { status: 405 })
   if (!CRON_SECRET || req.headers.get('x-cron-secret') !== CRON_SECRET) return new Response('forbidden', { status: 403 })
   const body = (await req.json().catch(() => ({}))) as { device?: string; limit?: number }
-  const limit = Math.min(Math.max(Number(body.limit) || 50, 1), 500)
+  // quota CPU des Edge Functions : petits lots (≈ 8 jours-box par appel), le cron repasse toutes les 10 min
+  const limit = Math.min(Math.max(Number(body.limit) || 8, 1), 20)
   const started = Date.now()
   let q = admin.from('ts_dirty').select('device_id, day, since').order('day').limit(limit)
   if (body.device) q = q.eq('device_id', body.device)
@@ -247,7 +253,7 @@ Deno.serve(async (req) => {
   const done: unknown[] = []
   const failed: unknown[] = []
   for (const t of todo ?? []) {
-    if (Date.now() - started > 120_000) break // le reste au prochain passage
+    if (Date.now() - started > 25_000) break // le reste au prochain passage
     try {
       let c = companies.get(t.device_id)
       if (!c) {
