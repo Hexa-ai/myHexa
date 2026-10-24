@@ -96,6 +96,17 @@ function armAuto() {
 }
 watch(autoRefresh, armAuto)
 onBeforeUnmount(() => autoTimer && clearInterval(autoTimer))
+
+// plein écran (affichage mural) : le tableau seul, sans menu ni en-tête
+const rootEl = ref<HTMLElement | null>(null)
+const isFull = ref(false)
+const onFsChange = () => (isFull.value = !!document.fullscreenElement)
+onMounted(() => document.addEventListener('fullscreenchange', onFsChange))
+onBeforeUnmount(() => document.removeEventListener('fullscreenchange', onFsChange))
+async function toggleFull() {
+  if (document.fullscreenElement) await document.exitFullscreen()
+  else await rootEl.value?.requestFullscreen?.()
+}
 const range = ref<[number, number]>(PERIODS['24h'].range(Date.now()))
 
 async function init() {
@@ -323,7 +334,13 @@ const backTo = computed(() =>
 </script>
 
 <template>
-  <section class="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 w-full">
+  <section
+    ref="rootEl"
+    :class="[
+      'px-4 sm:px-6 lg:px-8 py-6 sm:py-8 w-full',
+      isFull && 'bg-background overflow-auto h-full',
+    ]"
+  >
     <RouterLink
       :to="backTo"
       class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-signal"
@@ -390,6 +407,15 @@ const backTo = computed(() =>
           @click="reportsOpen = !reportsOpen"
         >
           Rapports
+        </button>
+        <button
+          v-if="!editing"
+          class="hidden md:inline-flex text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60"
+          :title="isFull ? 'Quitter le plein écran (Échap)' : 'Afficher le tableau en plein écran'"
+          data-testid="dash-fullscreen"
+          @click="toggleFull"
+        >
+          {{ isFull ? 'Quitter' : 'Plein écran' }}
         </button>
         <button
           v-if="canManage && !editing"

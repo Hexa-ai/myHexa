@@ -87,6 +87,11 @@ const isRecipients = computed(() => route.name === 'admin-recipients')
 const isAlarmRecipients = computed(() => route.name === 'admin-alarm-recipients')
 
 const sidebarOpen = ref(false)
+// PC : menu réductible en barre d'icônes (choix mémorisé), pour laisser la place aux tableaux de bord
+const RAIL_KEY = 'hexa.sidebarCollapsed'
+const collapsed = ref(typeof localStorage !== 'undefined' && localStorage.getItem(RAIL_KEY) === '1')
+watch(collapsed, (v) => localStorage.setItem(RAIL_KEY, v ? '1' : '0'))
+function toggleCollapsed() { collapsed.value = !collapsed.value }
 function closeSidebar() { sidebarOpen.value = false }
 function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
 
@@ -118,12 +123,18 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
 
     <aside
       :class="[
-        'fixed md:static inset-y-0 left-0 w-64 shrink-0 border-r border-border bg-card md:bg-card/60 backdrop-blur-sm flex flex-col z-40 transition-transform md:translate-x-0',
+        'fixed md:static inset-y-0 left-0 w-64 shrink-0 border-r border-border bg-card md:bg-card/60 backdrop-blur-sm flex flex-col z-40 transition-[transform,width] md:translate-x-0',
         sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+        collapsed && 'rail md:w-16',
       ]"
+      data-testid="sidebar"
     >
       <!-- Logo -->
-      <div class="px-5 pt-6 pb-5 border-b border-border">
+      <div v-if="collapsed" class="hidden md:flex flex-col items-center gap-2 pt-5 pb-4 border-b border-border">
+        <span class="text-signal text-xl leading-none select-none" :title="company">⬢</span>
+        <span class="size-1.5 rounded-full bg-signal pulse-dot" />
+      </div>
+      <div :class="['px-5 pt-6 pb-5 border-b border-border', collapsed && 'md:hidden']">
         <img
           :src="theme === 'dark' ? '/hexa-logo-dark.png' : '/hexa-logo-light.png'"
           alt="Hexa.ai"
@@ -142,6 +153,7 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
       <!-- Nav -->
       <nav class="flex-1 px-3 py-4 space-y-0.5">
         <button
+          :title="collapsed ? 'Devices' : undefined"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isDevices
@@ -165,6 +177,7 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
         </button>
 
         <button
+          :title="collapsed ? 'Carte' : undefined"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isMap
@@ -188,6 +201,7 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
         </button>
 
         <button
+          :title="collapsed ? 'Projets' : undefined"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isProjects
@@ -214,6 +228,7 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
         </button>
 
         <button
+          :title="collapsed ? 'Alarmes' : undefined"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isAlarms
@@ -249,6 +264,7 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
         </button>
 
         <button
+          :title="collapsed ? 'Interventions' : undefined"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isInterventions
@@ -283,6 +299,7 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
         </button>
 
         <button
+          :title="collapsed ? 'Destinataires' : undefined"
           v-if="isAdmin"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
@@ -307,6 +324,7 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
           <span v-if="isRecipients" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
         </button>
         <button
+          :title="collapsed ? 'Alertes · destinataires' : undefined"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isAlarmRecipients
@@ -329,6 +347,7 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
           <span v-if="isAlarmRecipients" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
         </button>
         <button
+          :title="collapsed ? 'Mises à jour' : undefined"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isUpdates
@@ -354,6 +373,7 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
         <div v-if="auth.isHexaStaff" class="my-3 border-t border-border" />
 
         <button
+          :title="collapsed ? 'Staff' : undefined"
           v-if="auth.isHexaStaff"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
@@ -378,7 +398,16 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
       </nav>
 
       <!-- Session -->
-      <div class="border-t border-border px-4 py-4 space-y-2.5">
+      <div v-if="collapsed" class="hidden md:flex flex-col items-center gap-3 border-t border-border py-3">
+        <button
+          class="text-muted-foreground hover:text-signal transition"
+          :title="`Se déconnecter (${email})`"
+          @click="handleLogout"
+        >
+          <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
+        </button>
+      </div>
+      <div :class="['border-t border-border px-4 py-4 space-y-2.5', collapsed && 'md:hidden']">
         <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Session</div>
         <div class="text-xs truncate">{{ email }}</div>
         <div class="flex items-center justify-between">
@@ -393,6 +422,15 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
           </button>
         </div>
       </div>
+      <button
+        class="hidden md:flex items-center justify-center gap-2 border-t border-border py-2 text-[10px] font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground transition"
+        :title="collapsed ? 'Déplier le menu' : 'Réduire le menu'"
+        data-testid="sidebar-toggle"
+        @click="toggleCollapsed"
+      >
+        <svg viewBox="0 0 24 24" :class="['size-4 transition-transform', collapsed && 'rotate-180']" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M15 6l-6 6 6 6" /></svg>
+        <span v-if="!collapsed">Réduire</span>
+      </button>
     </aside>
 
     <div class="flex-1 flex flex-col min-w-0">
@@ -481,6 +519,14 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
 </template>
 
 <style scoped>
+/* menu réduit (PC) : icônes seules, compteurs en pastille */
+@media (min-width: 768px) {
+  .rail nav { padding-left: 0.5rem; padding-right: 0.5rem; }
+  .rail nav button { justify-content: center; padding-left: 0; padding-right: 0; }
+  .rail nav button > span.tracking-tight,
+  .rail nav button > span.ml-auto:not(.tabular) { display: none; }
+  .rail nav button > span.tabular { position: absolute; top: 1px; right: 2px; margin: 0; padding: 0 3px; font-size: 9px; line-height: 14px; }
+}
 .page-enter-active, .page-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
 .page-enter-from { opacity: 0; transform: translateY(4px); }
 .page-leave-to { opacity: 0; transform: translateY(-4px); }
