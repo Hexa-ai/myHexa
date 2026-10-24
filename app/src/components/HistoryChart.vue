@@ -46,6 +46,10 @@ const props = withDefaults(
     bars?: number
     /** autres courbes dans le même graphique (axe droit si unité différente) */
     extra?: ExtraSeries[]
+    /** comparaison : points de la période de comparaison, recalés sur l'axe courant, un par série
+     *  ([principale, ...extra]) ; tracés en pointillés de la même couleur (barres : colonne pointillée à gauche) */
+    compare?: (HistPoint[] | null)[]
+    compareLabel?: string
   }>(),
   {
     unit: '',
@@ -57,6 +61,8 @@ const props = withDefaults(
     gapMs: 0,
     bars: 0,
     extra: () => [],
+    compare: () => [],
+    compareLabel: 'période préc.',
   },
 )
 const emit = defineEmits<{
@@ -129,7 +135,12 @@ const withGaps = computed<HistPoint[]>(() => {
   return out
 })
 
-const multi = computed(() => props.extra.length > 0)
+const hasCmp = computed(() => props.compare.some((c) => !!c?.length))
+const multi = computed(() => props.extra.length > 0 || hasCmp.value)
+/** barres : avec comparaison, chaque case = [préc., courant] par série */
+const nSlots = computed(() => (props.extra.length + 1) * (hasCmp.value ? 2 : 1))
+const slotOf = (j: number) => (hasCmp.value ? 2 * j + 1 : j)
+const cmpName = (label: string) => `${label} (${props.compareLabel})`
 const hasRight = computed(() => props.extra.some((e) => e.axis === 'right'))
 
 function cutGaps(points: HistPoint[]): HistPoint[] {
@@ -176,10 +187,9 @@ function barDataset(
 }
 
 function extraDatasets(): ChartDataset<'line'>[] {
-  const n = props.extra.length + 1
   return props.extra.flatMap((e, i) => {
     const ds = props.bars
-      ? barDataset(e.points, e.color, e.label, i + 1, n)
+      ? barDataset(e.points, e.color, e.label, slotOf(i + 1), nSlots.value)
       : [
           {
             label: e.label,
@@ -200,10 +210,51 @@ function extraDatasets(): ChartDataset<'line'>[] {
   })
 }
 
+function compareDatasets(): ChartDataset<'line'>[] {
+  const base = [
+    { color: props.color, label: props.label, axis: 'left', step: props.step },
+    ...props.extra.map((e) => ({
+      color: e.color,
+      label: e.label,
+      axis: e.axis ?? 'left',
+      step: !!e.step,
+    })),
+  ]
+  return props.compare.flatMap((pts, j) => {
+    const b = base[j]
+    if (!pts?.length || !b) return []
+    const ds: ChartDataset<'line'>[] = props.bars
+      ? barDataset(pts, b.color, cmpName(b.label), 2 * j, nSlots.value).map((d) => ({
+          ...d,
+          backgroundColor: b.color + '1f',
+          borderDash: [3, 2],
+        }))
+      : [
+          {
+            label: cmpName(b.label),
+            data: cutGaps(pts).map((p) => ({ x: p[0], y: p[1] })),
+            borderColor: b.color,
+            backgroundColor: b.color,
+            borderWidth: 1.4,
+            borderDash: [5, 4],
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            stepped: b.step,
+            spanGaps: false,
+            tension: 0,
+          } as ChartDataset<'line'>,
+        ]
+    for (const d of ds)
+      (d as ChartDataset<'line'> & { yAxisID?: string }).yAxisID = b.axis === 'right' ? 'y2' : 'y'
+    return ds
+  })
+}
+
 function datasets(): ChartDataset<'line'>[] {
   if (props.bars)
     return [
-      ...barDataset(props.points, props.color, props.label, 0, props.extra.length + 1),
+      ...compareDatasets(),
+      ...barDataset(props.points, props.color, props.label, slotOf(0), nSlots.value),
       ...extraDatasets(),
     ]
   const pts = withGaps.value
@@ -246,7 +297,7 @@ function datasets(): ChartDataset<'line'>[] {
     spanGaps: false,
     tension: 0,
   })
-  return [...ds, ...extraDatasets()]
+  return [...compareDatasets(), ...ds, ...extraDatasets()]
 }
 
 /** valeur d'une série à l'instant t (point le plus proche avant t) */
@@ -290,6 +341,13 @@ function build() {
                 const all = [
                   { points: props.points, label: props.label, unit: props.unit },
                   ...props.extra,
+                  ...props.compare.flatMap((c, j) => {
+                    const b =
+                      j === 0 ? { label: props.label, unit: props.unit } : props.extra[j - 1]
+                    return c?.length && b
+                      ? [{ points: c, label: cmpName(b.label), unit: b.unit }]
+                      : []
+                  }),
                 ]
                 const s = all.find((x) => x.label === item.dataset.label)
                 if (!s) return ''
@@ -398,7 +456,16 @@ function done({ chart: c }: { chart: Chart }) {
 onMounted(build)
 onBeforeUnmount(() => chart?.destroy())
 watch(
-  () => [props.points, props.color, props.step, props.band, props.gapMs, props.bars, props.extra],
+  () => [
+    props.points,
+    props.color,
+    props.step,
+    props.band,
+    props.gapMs,
+    props.bars,
+    props.extra,
+    props.compare,
+  ],
   () => {
     if (!chart || multi.value) return build()
     chart.data.datasets = datasets()

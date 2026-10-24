@@ -384,7 +384,10 @@ function save() {
       </template>
 
       <!-- options -->
-      <div v-if="w.type === 'table'" class="grid sm:grid-cols-2 gap-3 mb-3">
+      <div
+        v-if="['table', 'curve', 'bars'].includes(w.type)"
+        class="grid sm:grid-cols-2 gap-3 mb-3"
+      >
         <label class="text-sm">
           <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
             >Comparer avec</span

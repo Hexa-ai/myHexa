@@ -19,6 +19,7 @@ import {
   DEFAULT_STATES,
   combineStates,
   COMBINE_LABEL,
+  shiftRange,
   type SeriesMap,
   type Widget,
 } from '@/composables/useDashboards'
@@ -92,6 +93,31 @@ const overlayExtra = computed(() => {
   }))
 })
 const compare = computed(() => seriesOf(props.compareData))
+// courbes / barres : la période de comparaison est recalée sur l'axe courant (pointillés de la même couleur)
+const chartCompare = computed(
+  () => w.value.options.compare && ['curve', 'bars'].includes(w.value.type),
+)
+const cmpShift = computed(() =>
+  w.value.options.compare
+    ? props.range[0] - shiftRange(props.range, w.value.options.compare)[0]
+    : 0,
+)
+function cmpPoints(label: string): HistPoint[] | null {
+  if (!chartCompare.value) return null
+  const c = compare.value.find((x) => x.label === label)
+  if (!c) return null
+  // recalage à heure locale égale (changement d'heure : pas de décalage d'1 h des cases)
+  const tzo = (t: number) => new Date(t).getTimezoneOffset() * 60e3
+  return c.points
+    .map((p) => {
+      const t = p[0] + cmpShift.value
+      return [t + tzo(t) - tzo(p[0]), p[1], p[2], p[3]] as HistPoint
+    })
+    .filter((p) => p[0] >= props.range[0] && p[0] < props.range[1])
+}
+const cmpShort = computed(() =>
+  w.value.options.compare === 'year' ? 'an dernier' : 'période préc.',
+)
 
 const title = computed(() => {
   if (w.value.title) return w.value.title
@@ -388,6 +414,8 @@ const tableRows = computed(() =>
           :bars="w.type === 'bars' || series[0].counter ? barMs(series[0].points) : 0"
           :gap-ms="2 * 3600e3"
           :extra="overlayExtra"
+          :compare="series.map((s) => cmpPoints(s.label))"
+          :compare-label="cmpShort"
           height="200px"
         />
       </template>
@@ -406,8 +434,19 @@ const tableRows = computed(() =>
           :band="w.type === 'curve'"
           :bars="w.type === 'bars' || s.counter ? barMs(s.points) : 0"
           :gap-ms="2 * 3600e3"
+          :compare="[cmpPoints(s.label)]"
+          :compare-label="cmpShort"
           :height="series.length > 1 ? '120px' : '170px'"
         />
+      </div>
+      <div
+        v-if="chartCompare && series.length"
+        class="mt-1 font-mono text-[10px] text-muted-foreground inline-flex items-center gap-1.5"
+        data-testid="chart-compare-legend"
+      >
+        <span class="inline-block w-4 border-t border-dashed border-current" />
+        {{ w.options.compare === 'year' ? 'même période l\u2019an dernier' : 'période précédente' }}
+        <span v-if="!compare.length">(pas de données)</span>
       </div>
     </template>
 

@@ -249,12 +249,40 @@ async function renderWidget(w: Widget, ctx: Ctx): Promise<Block | null> {
           axis: i > 0 && (s.unit ?? '') !== leftUnit ? 'right' : 'left',
           step: s.state,
         }))
+        // comparaison (réglée sur le bloc) : même couleur en pointillés, recalée sur la période du rapport ;
+        // barres : colonne de comparaison à gauche de chaque barre
+        const shiftMs = cmpKind ? ctx.from - ctx.cmpRanges.get(cmpKind)![0] : 0
+        // recalage à heure locale égale (changement d'heure), points hors période retirés
+        const tzOff = (t: number) => {
+          const d = new Date(t)
+          const loc = new Date(d.toLocaleString('en-US', { timeZone: ctx.tz }))
+          const utc = new Date(d.toLocaleString('en-US', { timeZone: 'UTC' }))
+          return loc.getTime() - utc.getTime()
+        }
+        const moved = (q: Pt): Pt => {
+          const t = q[0] + shiftMs
+          return [t - tzOff(t) + tzOff(q[0]), q[1], q[2], q[3]]
+        }
+        const drawn: ChartSeries[] = cmpKind
+          ? cs.flatMap((c) => {
+              const p = cser.find((x) => x.label === c.label)
+              const cc: ChartSeries = { ...c, dashed: true, label: `${c.label} (${cmpLabel})`, points: (p?.points ?? []).map(moved).filter((q) => q[0] >= ctx.from && q[0] < ctx.to) }
+              return bars ? [cc, c] : [c, cc]
+            })
+          : cs
         if (groups.length > 1) parts.push({ k: 'text', t: g[0].label, bold: true, size: 12 })
-        const total = bars && g.length === 1 ? `Total : ${fmtNum(statOf(g[0].points, 'total'))} ${g[0].unit ?? ''}` : ''
+        const cTot = cmpKind && bars && g.length === 1 ? cser.find((x) => x.label === g[0].label) : null
+        const tot = statOf(g[0].points, 'total')
+        const ct = cTot ? statOf(cTot.points, 'total') : null
+        const total =
+          bars && g.length === 1
+            ? `Total : ${fmtNum(tot)} ${g[0].unit ?? ''}` + (cmpKind ? ` (${cmpLabel} : ${fmtNum(ct)}${ct && tot !== null ? `, ${deltaCell(tot, ct).t}` : ''})` : '')
+            : ''
         if (g.length > 1)
           parts.push({ k: 'legend', items: cs.map((c) => ({ color: c.color, label: `${c.label} ${c.unit ?? ''}${c.axis === 'right' ? ' (axe droit)' : ''}` })), extra: total })
         else parts.push({ k: 'text', t: [g[0].unit ?? '', g[0].desc, total].filter((x) => x).join(' · '), color: '#6b7280', size: 11 })
-        parts.push({ k: 'img', img: await image(ctx, timeChartSvg({ series: cs, from: ctx.from, to: ctx.to, tz: ctx.tz, bars: bars ? barMs(span) : 0 }), 600, 210) })
+        if (cmpKind) parts.push({ k: 'text', t: `Pointillés : ${cmpKind === 'year' ? 'même période l’an dernier' : 'période précédente'}`, color: '#6b7280', size: 10 })
+        parts.push({ k: 'img', img: await image(ctx, timeChartSvg({ series: drawn, from: ctx.from, to: ctx.to, tz: ctx.tz, bars: bars ? barMs(span) : 0 }), 600, 210) })
       }
       if (missing.length) parts.push({ k: 'text', t: `Sans données sur la période : ${missing.join(', ')}`, color: '#9ca3af', size: 11 })
       return { title: title || 'Graphique', parts }

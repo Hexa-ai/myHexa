@@ -73,7 +73,14 @@ function timeTicks(from: number, to: number, tz: string): { t: number; label: st
   const fmtD = new Intl.DateTimeFormat('fr-FR', { timeZone: tz, day: '2-digit', month: '2-digit' })
   const out: { t: number; label: string }[] = []
   // aligné sur l'heure locale : on part de from (déjà un minuit local pour les rapports)
+  const hourOf = (t: number) => Number(new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', hourCycle: 'h23' }).format(t))
   for (let t = from; t <= to + 1; t += step) {
+    // graduations par jour : recalées sur minuit local (semaine du changement d'heure)
+    if (step >= 24 * H) {
+      const h = hourOf(t)
+      if (h === 23) t += H
+      else if (h === 1) t -= H
+    }
     out.push({ t, label: step < 24 * H ? fmtH.format(t) : fmtD.format(t) })
   }
   if (step < 24 * H && out.length) out[0].label = fmtD.format(from) + ' ' + out[0].label
@@ -152,7 +159,9 @@ export function timeChartSvg(opts: {
         const x0 = x(p[0]) + si * w
         const y0 = y(Math.max(p[1], 0))
         const y1 = y(Math.min(p[1], 0))
-        parts.push(`<rect x="${x0.toFixed(1)}" y="${y0.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0.5, y1 - y0).toFixed(1)}" fill="${s.color}" fill-opacity="0.75"/>`)
+        // barre de comparaison : claire, contour pointillé
+        const look = s.dashed ? `fill-opacity="0.15" stroke="${s.color}" stroke-width="0.8" stroke-dasharray="2 1.5"` : 'fill-opacity="0.75"'
+        parts.push(`<rect x="${x0.toFixed(1)}" y="${y0.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0.5, y1 - y0).toFixed(1)}" fill="${s.color}" ${look}/>`)
       }
       return
     }
