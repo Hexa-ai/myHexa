@@ -105,7 +105,10 @@ Deno.serve(async (req) => {
   const bucket = NICE.find((b) => b >= Math.max(LEVEL_MS[level], span / MAX_POINTS)) ?? NICE[NICE.length - 1]
   let origin = 0
   try {
-    origin = zonedMidnight('2026-01-05', body.tz || 'Europe/Paris') // un lundi : semaines calées sur le lundi
+    // minuit local du lundi précédant `from` (décalage horaire de ce jour-là) : jours et semaines calés localement
+    const d = new Date(from)
+    const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((d.getUTCDay() + 6) % 7)))
+    origin = zonedMidnight(monday.toISOString().slice(0, 10), body.tz || 'Europe/Paris')
   } catch {
     origin = 0
   }
