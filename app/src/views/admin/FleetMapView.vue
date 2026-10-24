@@ -5,16 +5,63 @@ import { useDevices } from '@/composables/useDevices'
 import { isOnline, maxActiveAlarmSeverity } from '@/lib/utils'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import DeviceMap, { type MarkerInput } from '@/components/DeviceMap.vue'
+import { useProjects } from '@/composables/useProjects'
 
 const router = useRouter()
 const route = useRoute()
 const { devices, loading, error, load } = useDevices()
 
-useAutoRefresh(load, { intervalMs: 120_000 })
+const { projects, load: loadProjects } = useProjects()
+useAutoRefresh(
+  async () => {
+    await Promise.all([load(), loadProjects()])
+  },
+  { intervalMs: 120_000 },
+)
 
-const markers = computed<MarkerInput[]>(() =>
-  devices.value
-    .filter((d) => d.latitude != null && d.longitude != null)
+// regroupement par projet : un repère par projet, les box sans projet restent seules
+const grouped = ref(route.query.group !== '0')
+watch(grouped, (g) => router.replace({ query: { ...route.query, group: g ? undefined : '0' } }))
+const hasProjects = computed(() => projects.value.some((p) => p.devices > 0))
+
+const markers = computed<MarkerInput[]>(() => {
+  const inProject = new Set<string>()
+  const out: MarkerInput[] = []
+  if (grouped.value) {
+    const byId = new Map(devices.value.map((d) => [d.id, d]))
+    for (const p of projects.value) {
+      const ds = p.device_ids.map((id) => byId.get(id)).filter((d) => !!d)
+      if (!ds.length) continue
+      ds.forEach((d) => inProject.add(d.id))
+      const located = ds.filter((d) => d.latitude != null && d.longitude != null)
+      const lat =
+        p.latitude ??
+        (located.length
+          ? located.reduce((a, d) => a + Number(d.latitude), 0) / located.length
+          : null)
+      const lng =
+        p.longitude ??
+        (located.length
+          ? located.reduce((a, d) => a + Number(d.longitude), 0) / located.length
+          : null)
+      if (lat == null || lng == null) continue
+      const sev = ds.map((d) => maxActiveAlarmSeverity(d.status_payload))
+      out.push({
+        id: 'project:' + p.id,
+        lat,
+        lng,
+        label: p.name,
+        severity: sev.includes('error') ? 'error' : sev.includes('warning') ? 'warning' : null,
+        project: {
+          total: ds.length,
+          online: ds.filter((d) => isOnline(d.last_connection_at)).length,
+          names: ds.map((d) => d.name ?? '—'),
+        },
+      })
+    }
+  }
+  const singles = devices.value
+    .filter((d) => !inProject.has(d.id) && d.latitude != null && d.longitude != null)
     .map((d) => ({
       id: d.id,
       lat: Number(d.latitude),
@@ -22,7 +69,11 @@ const markers = computed<MarkerInput[]>(() =>
       label: d.name ?? undefined,
       online: isOnline(d.last_connection_at),
       severity: maxActiveAlarmSeverity(d.status_payload),
-    })),
+    }))
+  return [...out, ...singles]
+})
+const locatedDevices = computed(() =>
+  devices.value.filter((d) => d.latitude != null && d.longitude != null),
 )
 
 // --- Play mode (kiosque) -----------------------------------------------------
@@ -91,12 +142,15 @@ onBeforeUnmount(() => {
   if (playTimer) clearInterval(playTimer)
 })
 
-const missingCount = computed(() => devices.value.length - markers.value.length)
-const onlineCount = computed(() => markers.value.filter((m) => m.online).length)
-const offlineCount = computed(() => markers.value.length - onlineCount.value)
+const missingCount = computed(() => devices.value.length - locatedDevices.value.length)
+const onlineCount = computed(
+  () => locatedDevices.value.filter((d) => isOnline(d.last_connection_at)).length,
+)
+const offlineCount = computed(() => locatedDevices.value.length - onlineCount.value)
 
 function onSelect(id: string) {
-  router.push({ name: 'admin-device-detail', params: { id } })
+  if (id.startsWith('project:')) router.push({ name: 'admin-projects', query: { p: id.slice(8) } })
+  else router.push({ name: 'admin-device-detail', params: { id } })
 }
 </script>
 
@@ -105,27 +159,36 @@ function onSelect(id: string) {
     <!-- Header -->
     <header class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6 fade-up">
       <div>
-        <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-2 flex items-center gap-2">
+        <div
+          class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-2 flex items-center gap-2"
+        >
           <span class="text-signal">⬢</span> Fleet · map view
         </div>
         <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight">
           Carte de la <span class="text-signal">flotte</span>
         </h1>
-        <p
-          v-if="missingCount > 0"
-          class="mt-2 font-mono text-xs text-muted-foreground"
-        >
+        <p v-if="missingCount > 0" class="mt-2 font-mono text-xs text-muted-foreground">
           {{ missingCount }} équipement(s) sans coordonnées — invisibles sur la carte.
         </p>
       </div>
 
-      <div class="grid grid-cols-3 gap-px bg-border border border-border rounded-sm overflow-hidden self-start md:self-auto w-full md:w-auto">
+      <div
+        class="grid grid-cols-3 gap-px bg-border border border-border rounded-sm overflow-hidden self-start md:self-auto w-full md:w-auto"
+      >
         <div class="bg-card px-3 sm:px-5 py-2.5 sm:py-3 min-w-0">
-          <div class="font-mono text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground">Géoloc.</div>
-          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5">{{ markers.length.toString().padStart(2, '0') }}</div>
+          <div
+            class="font-mono text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground"
+          >
+            Géoloc.
+          </div>
+          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5">
+            {{ locatedDevices.length.toString().padStart(2, '0') }}
+          </div>
         </div>
         <div class="bg-card px-3 sm:px-5 py-2.5 sm:py-3 min-w-0">
-          <div class="font-mono text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+          <div
+            class="font-mono text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5"
+          >
             <span class="size-1 rounded-full bg-signal pulse-dot" /> Online
           </div>
           <div class="font-mono text-xl sm:text-2xl tabular mt-0.5 text-signal">
@@ -133,7 +196,11 @@ function onSelect(id: string) {
           </div>
         </div>
         <div class="bg-card px-3 sm:px-5 py-2.5 sm:py-3 min-w-0">
-          <div class="font-mono text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground">Offline</div>
+          <div
+            class="font-mono text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground"
+          >
+            Offline
+          </div>
           <div
             class="font-mono text-xl sm:text-2xl tabular mt-0.5"
             :class="offlineCount > 0 ? 'text-offline' : ''"
@@ -167,12 +234,16 @@ function onSelect(id: string) {
       </p>
     </div>
     <div v-else class="relative flex-1 fade-up" style="animation-delay: 80ms">
-      <DeviceMap
-        ref="mapRef"
-        :markers="markers"
-        height="100%"
-        @select="onSelect"
-      />
+      <DeviceMap ref="mapRef" :markers="markers" height="100%" @select="onSelect" />
+
+      <label
+        v-if="hasProjects"
+        class="absolute top-4 right-44 z-[400] inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-md border bg-card/85 border-border text-muted-foreground backdrop-blur-md cursor-pointer select-none"
+        data-testid="map-group"
+      >
+        <input v-model="grouped" type="checkbox" class="accent-[var(--color-signal,#00d4aa)]" />
+        Par projet
+      </label>
 
       <!-- Play / kiosk control floating on the map -->
       <button
@@ -187,11 +258,16 @@ function onSelect(id: string) {
         @click="togglePlay"
       >
         <template v-if="isPlaying">
-          <svg viewBox="0 0 24 24" class="size-3" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="0.5"/><rect x="14" y="5" width="4" height="14" rx="0.5"/></svg>
+          <svg viewBox="0 0 24 24" class="size-3" fill="currentColor">
+            <rect x="6" y="5" width="4" height="14" rx="0.5" />
+            <rect x="14" y="5" width="4" height="14" rx="0.5" />
+          </svg>
           Pause · {{ playIndex + 1 }}/{{ markers.length }}
         </template>
         <template v-else>
-          <svg viewBox="0 0 24 24" class="size-3" fill="currentColor"><path d="M7 5v14l12-7z"/></svg>
+          <svg viewBox="0 0 24 24" class="size-3" fill="currentColor">
+            <path d="M7 5v14l12-7z" />
+          </svg>
           Mode kiosque
         </template>
       </button>

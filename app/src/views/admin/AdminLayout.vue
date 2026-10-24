@@ -50,6 +50,7 @@ const breadcrumb = computed(() => {
     'admin-device-detail': 'devices / detail',
     'admin-device-periodic': 'devices / rapports',
     'admin-map': 'map',
+    'admin-projects': 'projets',
     'admin-alarms': 'alarms',
     'admin-interventions': 'interventions',
     'admin-recipients': 'destinataires',
@@ -90,6 +91,7 @@ function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
 
 function goDevices() { router.push({ name: 'admin-devices' }); closeSidebar() }
 function goMap() { router.push({ name: 'admin-map' }); closeSidebar() }
+function goProjects() { router.push({ name: 'admin-projects' }); closeSidebar() }
 function goAlarms() { router.push({ name: 'admin-alarms' }); closeSidebar() }
 function goInterventions() { router.push({ name: 'admin-interventions' }); closeSidebar() }
 function goRecipients() { router.push({ name: 'admin-recipients' }); closeSidebar() }
@@ -98,6 +100,7 @@ function goStaff() { router.push({ name: 'staff-companies' }); closeSidebar() }
 function goUpdates() { router.push({ name: 'admin-updates' }); closeSidebar() }
 const isDevices = computed(() => route.name === 'admin-devices' || route.name === 'admin-device-detail' || route.name === 'admin-device-periodic')
 const isMap = computed(() => route.name === 'admin-map')
+const isProjects = computed(() => route.name === 'admin-projects')
 const isAlarms = computed(() => route.name === 'admin-alarms')
 const isUpdates = computed(() => route.name === 'admin-updates')
 const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
@@ -181,6 +184,32 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
           </svg>
           <span class="tracking-tight">Carte</span>
           <span v-if="isMap" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
+        </button>
+
+        <button
+          :class="[
+            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
+            isProjects
+              ? 'text-foreground bg-secondary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+          ]"
+          data-testid="nav-projects"
+          @click="goProjects"
+        >
+          <span
+            :class="[
+              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
+              isProjects ? 'bg-signal' : 'bg-transparent',
+            ]"
+          />
+          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" stroke-opacity="0.5" />
+            <rect x="14" y="14" width="7" height="7" rx="1" stroke-opacity="0.5" />
+          </svg>
+          <span class="tracking-tight">Projets</span>
+          <span v-if="isProjects" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
         </button>
 
         <button

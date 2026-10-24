@@ -14,6 +14,7 @@ import {
 } from '@/lib/utils'
 import { useTailscaleReachable } from '@/composables/useTailscaleReachable'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { useProjects } from '@/composables/useProjects'
 import QRCodeBlock from '@/components/QRCodeBlock.vue'
 import { supabase } from '@/lib/supabase'
 
@@ -21,6 +22,15 @@ const router = useRouter()
 const auth = useAuthStore()
 const { devices, loading, error, load } = useDevices()
 const query = ref('')
+// projets (proto) : filtre et étiquette par box
+const { projects, load: loadProjects } = useProjects()
+const projectFilter = ref<string>('') // '' = tous, 'none' = sans projet, sinon id
+const projectOf = computed(() => {
+  const m = new Map<string, { id: string; name: string }>()
+  for (const p of projects.value)
+    for (const id of p.device_ids) m.set(id, { id: p.id, name: p.name })
+  return m
+})
 
 // Map<device_id, openInterventionCount>
 const openInterventionsByDevice = ref<Map<string, number>>(new Map())
@@ -49,7 +59,7 @@ async function loadDevicesWithReports() {
 }
 
 async function loadAll() {
-  await Promise.all([load(), loadInterventionCounts(), loadDevicesWithReports()])
+  await Promise.all([load(), loadInterventionCounts(), loadDevicesWithReports(), loadProjects()])
 }
 
 const { reachable: tsReachable, probe: probeTs } = useTailscaleReachable()
@@ -76,15 +86,23 @@ function closeQrModal() {
 
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase()
-  if (!q) return devices.value
-  return devices.value.filter((d) =>
-    [d.name, d.serial_number, d.mac_eth0, d.address]
+  const pf = projectFilter.value
+  const base = !pf
+    ? devices.value
+    : devices.value.filter((d) =>
+        pf === 'none' ? !projectOf.value.has(d.id) : projectOf.value.get(d.id)?.id === pf,
+      )
+  if (!q) return base
+  return base.filter((d) =>
+    [d.name, d.serial_number, d.mac_eth0, d.address, projectOf.value.get(d.id)?.name]
       .filter(Boolean)
       .some((v) => String(v).toLowerCase().includes(q)),
   )
 })
 
-const onlineCount = computed(() => devices.value.filter((d) => isOnline(d.last_connection_at)).length)
+const onlineCount = computed(
+  () => devices.value.filter((d) => isOnline(d.last_connection_at)).length,
+)
 const offlineCount = computed(() => devices.value.length - onlineCount.value)
 const totalAlarms = computed(() =>
   devices.value.reduce((sum, d) => {
@@ -107,6 +125,7 @@ interface Row {
   shared: boolean
   sharedFrom: string | null
   hasReports: boolean
+  project: string | null
 }
 
 const rows = computed<Row[]>(() => {
@@ -122,12 +141,14 @@ const rows = computed<Row[]>(() => {
       // Hide interfaces / Tailscale IP / VNC when the device is offline:
       // the cached payload is stale, the device can't be reached anyway.
       interfaces: online ? activeInterfaces(d.status_payload) : [],
-      alarmCount: activeAlarmCount(d.status_payload) + (openInterventionsByDevice.value.get(d.id) ?? 0),
+      alarmCount:
+        activeAlarmCount(d.status_payload) + (openInterventionsByDevice.value.get(d.id) ?? 0),
       tsIp: online ? tailscaleIp(d.status_payload) : null,
       vnc: online ? vncUrl(d.vnc_host, d.vnc_port) : null,
       shared: eff !== null && d.company_id !== null && d.company_id !== eff,
       sharedFrom: d.company_name,
       hasReports: devicesWithReports.value.has(d.id),
+      project: projectOf.value.get(d.id)?.name ?? null,
     }
   })
 })
@@ -169,40 +190,65 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
 <template>
   <section class="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 max-w-[1400px] mx-auto">
     <!-- Heading -->
-    <header class="flex flex-col md:flex-row md:items-end md:justify-between gap-5 mb-8 sm:mb-10 fade-up">
+    <header
+      class="flex flex-col md:flex-row md:items-end md:justify-between gap-5 mb-8 sm:mb-10 fade-up"
+    >
       <div>
-        <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-3 flex items-center gap-2">
+        <div
+          class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-3 flex items-center gap-2"
+        >
           <span class="text-signal">⬢</span> Fleet · read-only
         </div>
         <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">
           Devices<span class="text-signal">.</span>
         </h1>
         <p class="mt-3 text-sm text-muted-foreground max-w-md">
-          Inventaire en direct des capteurs déployés. Statut basé sur la dernière télémétrie (seuil 1 h).
+          Inventaire en direct des capteurs déployés. Statut basé sur la dernière télémétrie (seuil
+          1 h).
         </p>
       </div>
 
       <!-- KPI strip -->
-      <div class="grid grid-cols-4 gap-px bg-border border border-border rounded-sm overflow-hidden self-start md:self-auto w-full md:w-auto">
+      <div
+        class="grid grid-cols-4 gap-px bg-border border border-border rounded-sm overflow-hidden self-start md:self-auto w-full md:w-auto"
+      >
         <div class="bg-card px-3 sm:px-4 py-2.5 sm:py-3 min-w-0">
-          <div class="text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground">Total</div>
-          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5">{{ devices.length.toString().padStart(2, '0') }}</div>
+          <div class="text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground">
+            Total
+          </div>
+          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5">
+            {{ devices.length.toString().padStart(2, '0') }}
+          </div>
         </div>
         <div class="bg-card px-3 sm:px-4 py-2.5 sm:py-3 min-w-0">
-          <div class="text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+          <div
+            class="text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5"
+          >
             <span class="size-1 rounded-full bg-signal pulse-dot" /> Online
           </div>
-          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5 text-signal">{{ onlineCount.toString().padStart(2, '0') }}</div>
+          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5 text-signal">
+            {{ onlineCount.toString().padStart(2, '0') }}
+          </div>
         </div>
         <div class="bg-card px-3 sm:px-4 py-2.5 sm:py-3 min-w-0">
-          <div class="text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground">Offline</div>
-          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5" :class="offlineCount > 0 ? 'text-offline' : ''">
+          <div class="text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground">
+            Offline
+          </div>
+          <div
+            class="font-mono text-xl sm:text-2xl tabular mt-0.5"
+            :class="offlineCount > 0 ? 'text-offline' : ''"
+          >
             {{ offlineCount.toString().padStart(2, '0') }}
           </div>
         </div>
         <div class="bg-card px-3 sm:px-4 py-2.5 sm:py-3 min-w-0">
-          <div class="text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground">Alarmes</div>
-          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5" :class="totalAlarms > 0 ? 'text-offline' : ''">
+          <div class="text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground">
+            Alarmes
+          </div>
+          <div
+            class="font-mono text-xl sm:text-2xl tabular mt-0.5"
+            :class="totalAlarms > 0 ? 'text-offline' : ''"
+          >
             {{ totalAlarms.toString().padStart(2, '0') }}
           </div>
         </div>
@@ -212,7 +258,10 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
     <!-- Toolbar -->
     <div class="flex items-center justify-between gap-3 mb-3 fade-up" style="animation-delay: 60ms">
       <div class="relative flex-1 sm:flex-none sm:w-72">
-        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs">⌕</span>
+        <span
+          class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs"
+          >⌕</span
+        >
         <input
           v-model="query"
           type="search"
@@ -220,7 +269,19 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
           class="w-full pl-8 pr-3 py-2 bg-card border border-border rounded-sm text-sm font-mono placeholder:text-muted-foreground/60 focus:outline-none focus:border-signal/60 focus:ring-1 focus:ring-signal/40 transition"
         />
       </div>
-      <div class="flex items-center gap-3 shrink-0">
+      <select
+        v-if="projects.length"
+        v-model="projectFilter"
+        data-testid="project-filter"
+        class="hidden sm:block bg-card border border-border rounded-sm text-xs font-mono px-2 py-2 focus:outline-none focus:border-signal/60"
+      >
+        <option value="">Tous les projets</option>
+        <option v-for="p in projects" :key="p.id" :value="p.id">
+          {{ p.name }} ({{ p.devices }})
+        </option>
+        <option value="none">Sans projet</option>
+      </select>
+      <div class="flex items-center gap-3 shrink-0 ml-auto">
         <span
           v-if="tsReachable === true"
           class="hidden sm:inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-signal"
@@ -235,14 +296,19 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
         >
           <span class="size-1.5 rounded-full bg-muted-foreground/40" /> Tailscale off
         </span>
-        <span class="text-[10px] sm:text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+        <span
+          class="text-[10px] sm:text-[11px] font-mono uppercase tracking-wider text-muted-foreground"
+        >
           {{ filtered.length }} / {{ devices.length }}
         </span>
       </div>
     </div>
 
     <!-- Status / loading -->
-    <div v-if="loading" class="border border-border rounded-sm bg-card/40 p-10 text-center font-mono text-sm text-muted-foreground">
+    <div
+      v-if="loading"
+      class="border border-border rounded-sm bg-card/40 p-10 text-center font-mono text-sm text-muted-foreground"
+    >
       <span class="blink">▍</span> loading telemetry…
       <button
         class="block mx-auto mt-4 text-[10px] uppercase tracking-wider text-muted-foreground/70 hover:text-signal transition"
@@ -251,7 +317,10 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
         Forcer le rechargement
       </button>
     </div>
-    <div v-else-if="error" class="border border-offline/40 rounded-sm bg-offline-soft p-5 font-mono text-sm text-offline flex items-center justify-between gap-3 flex-wrap">
+    <div
+      v-else-if="error"
+      class="border border-offline/40 rounded-sm bg-offline-soft p-5 font-mono text-sm text-offline flex items-center justify-between gap-3 flex-wrap"
+    >
       <span>ERR · {{ error }}</span>
       <button
         class="font-mono text-[10px] uppercase tracking-wider border border-offline/40 px-2.5 py-1 rounded hover:bg-offline-soft transition"
@@ -262,16 +331,44 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
     </div>
 
     <!-- Desktop table -->
-    <div v-else class="hidden md:block border border-border rounded-sm bg-card/40 overflow-hidden fade-up" style="animation-delay: 120ms">
+    <div
+      v-else
+      class="hidden md:block border border-border rounded-sm bg-card/40 overflow-hidden fade-up"
+      style="animation-delay: 120ms"
+    >
       <table class="w-full text-sm">
         <thead>
           <tr class="border-b border-border bg-card/60">
-            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[140px]">Status</th>
-            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Name</th>
-            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]">Alarmes</th>
-            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[160px]">Réseau</th>
-            <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[170px]">Accès</th>
-            <th class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[180px]">Last seen</th>
+            <th
+              class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[140px]"
+            >
+              Status
+            </th>
+            <th
+              class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3"
+            >
+              Name
+            </th>
+            <th
+              class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]"
+            >
+              Alarmes
+            </th>
+            <th
+              class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[160px]"
+            >
+              Réseau
+            </th>
+            <th
+              class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[170px]"
+            >
+              Accès
+            </th>
+            <th
+              class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[180px]"
+            >
+              Last seen
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -283,8 +380,15 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
             @click="openDevice(r.id)"
           >
             <td class="px-4 py-3.5">
-              <span class="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider">
-                <span :class="['size-1.5 rounded-full', r.online ? 'bg-signal pulse-dot' : 'bg-offline/70']" />
+              <span
+                class="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider"
+              >
+                <span
+                  :class="[
+                    'size-1.5 rounded-full',
+                    r.online ? 'bg-signal pulse-dot' : 'bg-offline/70',
+                  ]"
+                />
                 <span :class="r.online ? 'text-signal' : 'text-offline/80'">
                   {{ r.online ? 'online' : 'offline' }}
                 </span>
@@ -295,8 +399,18 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
                 <span class="opacity-0 group-hover:opacity-100 text-signal transition">›</span>
                 <span class="font-medium tracking-tight">{{ r.name || '—' }}</span>
                 <span
+                  v-if="r.project"
+                  class="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-signal/30 text-signal/90 truncate max-w-[180px]"
+                  :title="`Projet ${r.project}`"
+                  >{{ r.project }}</span
+                >
+                <span
                   v-if="r.shared"
-                  :title="r.sharedFrom ? `Partagé depuis ${r.sharedFrom}` : 'Équipement partagé depuis une autre compagnie'"
+                  :title="
+                    r.sharedFrom
+                      ? `Partagé depuis ${r.sharedFrom}`
+                      : 'Équipement partagé depuis une autre compagnie'
+                  "
                   class="inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border"
                 >
                   ↗ partagé{{ r.sharedFrom ? ` · ${r.sharedFrom}` : '' }}
@@ -344,7 +458,15 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
                     class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] bg-signal text-primary-foreground px-2.5 py-1 rounded-md hover:brightness-110 transition"
                     @click.stop
                   >
-                    <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg
+                      viewBox="0 0 24 24"
+                      class="size-3"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
                       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                       <path d="M15 3h6v6M10 14 21 3" />
                     </svg>
@@ -357,7 +479,15 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
                     class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] border border-signal/50 text-signal px-2.5 py-1 rounded-md hover:bg-signal-soft transition"
                     @click.stop
                   >
-                    <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg
+                      viewBox="0 0 24 24"
+                      class="size-3"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
                       <rect x="2" y="4" width="20" height="14" rx="2" />
                       <path d="M8 21h8M12 18v3" />
                     </svg>
@@ -387,7 +517,15 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
                   class="inline-flex items-center justify-center size-7 border border-border text-muted-foreground rounded-md hover:border-signal/60 hover:text-signal transition"
                   @click.stop="openReports(r.id)"
                 >
-                  <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <svg
+                    viewBox="0 0 24 24"
+                    class="size-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
                     <path d="M3 3v18h18" />
                     <path d="M7 14l4-4 4 4 5-6" />
                   </svg>
@@ -399,7 +537,15 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
                   class="inline-flex items-center justify-center size-7 border border-border text-muted-foreground rounded-md hover:border-signal/60 hover:text-signal transition"
                   @click.stop="openQrModal(r.id, r.name)"
                 >
-                  <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <svg
+                    viewBox="0 0 24 24"
+                    class="size-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
                     <rect x="3" y="3" width="7" height="7" rx="1" />
                     <rect x="14" y="3" width="7" height="7" rx="1" />
                     <rect x="3" y="14" width="7" height="7" rx="1" />
@@ -427,7 +573,11 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
     </div>
 
     <!-- Mobile cards -->
-    <div v-if="!loading && !error" class="md:hidden space-y-2 fade-up" style="animation-delay: 120ms">
+    <div
+      v-if="!loading && !error"
+      class="md:hidden space-y-2 fade-up"
+      style="animation-delay: 120ms"
+    >
       <button
         v-for="(r, i) in rows"
         :key="r.id"
@@ -438,6 +588,11 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
         <div class="flex items-center justify-between gap-3 mb-1.5">
           <span class="flex items-center gap-2 min-w-0">
             <span class="font-medium tracking-tight truncate">{{ r.name || '—' }}</span>
+            <span
+              v-if="r.project"
+              class="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-signal/30 text-signal/90 truncate max-w-[120px] shrink-0"
+              >{{ r.project }}</span
+            >
             <span
               v-if="r.shared"
               :title="r.sharedFrom ? `Partagé depuis ${r.sharedFrom}` : ''"
@@ -450,7 +605,9 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
             class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider shrink-0"
             :class="r.online ? 'text-signal' : 'text-offline/80'"
           >
-            <span :class="['size-1.5 rounded-full', r.online ? 'bg-signal pulse-dot' : 'bg-offline/70']" />
+            <span
+              :class="['size-1.5 rounded-full', r.online ? 'bg-signal pulse-dot' : 'bg-offline/70']"
+            />
             {{ r.online ? 'online' : 'offline' }}
           </span>
         </div>
@@ -532,12 +689,21 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
             aria-label="Fermer"
             @click="closeQrModal"
           >
-            <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <svg
+              viewBox="0 0 24 24"
+              class="size-4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
               <path d="M18 6 6 18M6 6l12 12" />
             </svg>
           </button>
 
-          <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-2 flex items-center gap-2">
+          <div
+            class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-2 flex items-center gap-2"
+          >
             <span class="text-signal">⬢</span> QR intervention
           </div>
           <h3 class="text-xl font-semibold tracking-tight mb-4">

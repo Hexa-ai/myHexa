@@ -12,6 +12,8 @@ export interface MarkerInput {
   online?: boolean
   severity?: 'error' | 'warning' | null
   href?: string
+  /** repère de projet : un carré avec le nombre de box et la synthèse d'état */
+  project?: { total: number; online: number; names?: string[] }
 }
 
 const props = withDefaults(
@@ -47,6 +49,11 @@ const ATTR =
   '&copy; <a href="https://carto.com/attributions">CARTO</a>'
 
 function markerStateClass(m: MarkerInput): string {
+  if (m.project) {
+    const { total, online } = m.project
+    if (total > 0 && online === 0) return 'hai-marker-offline'
+    if (online < total) return 'hai-marker-partial'
+  }
   if (m.online === false) return 'hai-marker-offline'
   if (m.severity === 'error') return 'hai-marker-error'
   if (m.severity === 'warning') return 'hai-marker-warning'
@@ -62,7 +69,40 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;')
 }
 
+function projectTooltipHtml(m: MarkerInput): string {
+  const { total, online, names = [] } = m.project!
+  const off = total - online
+  const stateClass =
+    online === 0
+      ? 'is-offline'
+      : off > 0
+        ? 'is-warning'
+        : m.severity
+          ? 'is-' + m.severity
+          : 'is-online'
+  const stateLabel =
+    online === 0
+      ? 'Tout déconnecté'
+      : off > 0
+        ? `${off} box déconnectée${off > 1 ? 's' : ''} sur ${total}`
+        : m.severity
+          ? 'Alarme en cours'
+          : `${total} box connectée${total > 1 ? 's' : ''}`
+  const list = names.slice(0, 6).map(escapeHtml).join(' · ') + (names.length > 6 ? ' …' : '')
+  return `
+    <div class="hai-tip ${stateClass}">
+      <div class="hai-tip-text">
+        <div class="hai-tip-kind">Projet</div>
+        <div class="hai-tip-name">${escapeHtml(m.label ?? '—')}</div>
+        <div class="hai-tip-state">${stateLabel}</div>
+        <div class="hai-tip-list">${list}</div>
+      </div>
+    </div>
+  `
+}
+
 function tooltipHtml(m: MarkerInput): string {
+  if (m.project) return projectTooltipHtml(m)
   let stateClass: string
   let stateLabel: string
   if (m.online === false) {
@@ -101,12 +141,19 @@ function buildMarkers() {
   circlesById.clear()
   const circles: Marker[] = []
   for (const m of valid) {
-    const icon = L.divIcon({
-      className: `hai-marker ${markerStateClass(m)}`,
-      html: '<span class="hai-marker-dot"></span>',
-      iconSize: [16, 16],
-      iconAnchor: [8, 8],
-    })
+    const icon = m.project
+      ? L.divIcon({
+          className: `hai-marker hai-marker-project ${markerStateClass(m)}`,
+          html: `<span class="hai-marker-dot">${m.project.online}/${m.project.total}</span>`,
+          iconSize: [34, 22],
+          iconAnchor: [17, 11],
+        })
+      : L.divIcon({
+          className: `hai-marker ${markerStateClass(m)}`,
+          html: '<span class="hai-marker-dot"></span>',
+          iconSize: [16, 16],
+          iconAnchor: [8, 8],
+        })
     const c = L.marker([m.lat, m.lng], { icon })
     c.bindTooltip(tooltipHtml(m), {
       direction: 'top',
@@ -165,10 +212,7 @@ onBeforeUnmount(() => {
 
 defineExpose({
   invalidateSize: () => map?.invalidateSize(),
-  focusMarker(
-    id: string,
-    opts?: { zoom?: number; duration?: number; withOverview?: boolean },
-  ) {
+  focusMarker(id: string, opts?: { zoom?: number; duration?: number; withOverview?: boolean }) {
     if (!map) return
     const c = circlesById.get(id)
     if (!c) return
@@ -326,29 +370,82 @@ defineExpose({
   height: 14px;
   border-radius: 50%;
   border: 2px solid #ffffff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25), 0 2px 6px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.25),
+    0 2px 6px rgba(0, 0, 0, 0.35);
   background: #00d4aa;
   transition: transform 0.15s ease;
 }
 .hai-marker-offline .hai-marker-dot,
-.hai-marker-error .hai-marker-dot   { background: #ff7a7a; }
-.hai-marker-warning .hai-marker-dot { background: #f5a524; }
-.hai-marker-ok .hai-marker-dot      { background: #00d4aa; }
-.hai-marker:hover .hai-marker-dot   { transform: scale(1.25); }
+.hai-marker-error .hai-marker-dot {
+  background: #ff7a7a;
+}
+.hai-marker-warning .hai-marker-dot {
+  background: #f5a524;
+}
+.hai-marker-ok .hai-marker-dot {
+  background: #00d4aa;
+}
+.hai-marker:hover .hai-marker-dot {
+  transform: scale(1.25);
+}
+/* projet : carré arrondi avec connectées / total */
+.hai-marker-project .hai-marker-dot {
+  width: 34px;
+  height: 22px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font:
+    600 10px/1 ui-monospace,
+    monospace;
+  color: #04130f;
+}
+.hai-marker-partial .hai-marker-dot {
+  background: #f5a524;
+}
+.hai-tip-kind {
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  opacity: 0.6;
+}
+.hai-tip-list {
+  font-size: 10px;
+  opacity: 0.7;
+  margin-top: 2px;
+  max-width: 220px;
+  white-space: normal;
+}
 
-.hai-marker-warning .hai-marker-dot { animation: hai-marker-pulse 1.2s ease-in-out infinite; }
-.hai-marker-error   .hai-marker-dot { animation: hai-marker-pulse 1.0s ease-in-out infinite; }
+.hai-marker-warning .hai-marker-dot {
+  animation: hai-marker-pulse 1.2s ease-in-out infinite;
+}
+.hai-marker-error .hai-marker-dot {
+  animation: hai-marker-pulse 1s ease-in-out infinite;
+}
 
 @keyframes hai-marker-pulse {
-  0%, 100% { box-shadow: 0 0 0 0   rgba(255, 122, 122, 0.6); }
-  50%       { box-shadow: 0 0 0 10px rgba(255, 122, 122, 0); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 122, 122, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(255, 122, 122, 0);
+  }
 }
 .hai-marker-warning .hai-marker-dot {
   animation-name: hai-marker-pulse-warn;
 }
 @keyframes hai-marker-pulse-warn {
-  0%, 100% { box-shadow: 0 0 0 0   rgba(245, 165, 36, 0.6); }
-  50%       { box-shadow: 0 0 0 10px rgba(245, 165, 36, 0); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 165, 36, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(245, 165, 36, 0);
+  }
 }
-
 </style>
