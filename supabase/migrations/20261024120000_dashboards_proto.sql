@@ -29,7 +29,7 @@ create table if not exists public.dashboard_widgets (
   id uuid primary key default gen_random_uuid(),
   dashboard_id uuid not null references public.dashboards(id) on delete cascade,
   position int not null default 0,
-  type text not null check (type in ('curve', 'bars', 'value', 'gauge', 'status', 'image', 'states', 'table', 'text')),
+  type text not null check (type in ('curve', 'bars', 'value', 'gauge', 'indicator', 'status', 'image', 'states', 'table', 'text')),
   width text not null default 'full' check (width in ('1/4', '1/3', '1/2', '2/3', 'full')),
   title text,
   sources jsonb not null default '[]',  -- [{device: uuid, var: text}]

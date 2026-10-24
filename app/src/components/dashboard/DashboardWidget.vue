@@ -14,6 +14,7 @@ import {
   STATUS_FIELDS,
   stateDurations,
   statOf,
+  DEFAULT_STATES,
   type SeriesMap,
   type Widget,
 } from '@/composables/useDashboards'
@@ -92,57 +93,101 @@ const title = computed(() => {
   if (w.value.title) return w.value.title
   if (series.value.length === 1) return series.value[0].label
   const first = w.value.sources.find((s) => s.var)
-  if (!first || (['curve', 'bars', 'states'].includes(w.value.type) && w.value.sources.length > 1))
+  const multiNoOp = w.value.sources.filter((x) => x.var).length > 1 && !w.value.op
+  if (
+    !first ||
+    multiNoOp ||
+    (['curve', 'bars', 'states'].includes(w.value.type) && w.value.sources.length > 1)
+  )
     return ''
   return (
     srcLabel(first.device, first.var) +
     (w.value.sources.length > 1 && w.value.op ? ` (+${w.value.sources.length - 1})` : '')
   )
 })
-const stat = computed(() => w.value.options.stat ?? (series.value[0]?.counter ? 'total' : 'last'))
+const stat = computed(() =>
+  w.value.type === 'indicator'
+    ? 'last'
+    : (w.value.options.stat ?? (series.value[0]?.counter ? 'total' : 'last')),
+)
 
-/** valeur d'une tuile : « dernière » d'une seule source = valeur en direct du statut si plus récente */
-function liveValue(): number | null {
-  const s = w.value.sources[0]
-  if (!s || w.value.sources.length !== 1) return null
-  const d = props.devices.get(s.device)
+/** valeur en direct (statut) d'une variable, si disponible */
+function liveOf(dev: string, name: string): number | null {
+  const d = props.devices.get(dev)
   const vars = (d?.status_payload as { variables?: { name?: string; value?: unknown }[] } | null)
     ?.variables
-  const v = vars?.find((x) => x.name === s.var)?.value
+  const v = vars?.find((x) => x.name === name)?.value
+  if (typeof v === 'boolean') return v ? 1 : 0
   return typeof v === 'number'
     ? v
     : typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v))
       ? Number(v)
       : null
 }
-const tileValue = computed(() => {
-  const s = series.value[0]
-  if (stat.value === 'last' && props.range[1] >= Date.now() - 60e3) {
-    const live = liveValue()
-    if (live !== null) return live
-  }
-  return s ? statOf(s.points, stat.value, s.counter) : null
-})
-const compareValue = computed(() => {
-  const s = compare.value[0]
-  return s ? statOf(s.points, stat.value, s.counter) : null
-})
-const delta = computed(() =>
-  tileValue.value !== null && compareValue.value !== null && compareValue.value !== 0
-    ? ((tileValue.value - compareValue.value) / Math.abs(compareValue.value)) * 100
-    : null,
-)
+const isLive = computed(() => props.range[1] >= Date.now() - 60e3)
 
-// jauge : min / max de la période, sauf bornes fixées
-const gauge = computed(() => {
-  const s = series.value[0]
-  const lo = w.value.options.min ?? (s ? statOf(s.points, 'min', false) : null) ?? 0
-  const hi = w.value.options.max ?? (s ? statOf(s.points, 'max', false) : null) ?? 1
-  const v = tileValue.value ?? lo
-  const f = hi > lo ? Math.min(Math.max((v - lo) / (hi - lo), 0), 1) : 0.5
-  const a = Math.PI * (1 - f)
-  return { lo, hi, f, x: 60 + 48 * Math.cos(a), y: 60 - 48 * Math.sin(a) }
+/** tuiles valeur / jauges / voyants : un élément par variable, ou un seul si une opération les combine */
+interface Item {
+  label: string
+  unit: string | null
+  desc: string
+  value: number | null
+  delta: number | null
+  lo: number
+  hi: number
+  x: number
+  y: number
+}
+const items = computed<Item[]>(() => {
+  const srcs = w.value.sources.filter((s) => s.var)
+  const st = stat.value
+  const build = (i: number): Item | null => {
+    const ser = series.value[i]
+    if (!ser && !srcs[i]) return null
+    let value: number | null = null
+    // valeur en direct du statut pour une variable seule (pas pour un agrégat)
+    if (st === 'last' && isLive.value && !(w.value.op && srcs.length > 1) && srcs[i])
+      value = liveOf(srcs[i].device, srcs[i].var)
+    if (value === null && ser) value = statOf(ser.points, st, ser.counter)
+    const cmpSer = compare.value[i]
+    const cmp = cmpSer ? statOf(cmpSer.points, st, cmpSer.counter) : null
+    const delta =
+      value !== null && cmp !== null && cmp !== 0 ? ((value - cmp) / Math.abs(cmp)) * 100 : null
+    const lo = w.value.options.min ?? (ser ? statOf(ser.points, 'min', false) : null) ?? 0
+    const hi = w.value.options.max ?? (ser ? statOf(ser.points, 'max', false) : null) ?? 1
+    const f = hi > lo ? Math.min(Math.max(((value ?? lo) - lo) / (hi - lo), 0), 1) : 0.5
+    const ang = Math.PI * (1 - f)
+    const m = srcs[i] ? meta(srcs[i].device, srcs[i].var) : null
+    return {
+      label: ser?.label ?? (srcs[i] ? srcLabel(srcs[i].device, srcs[i].var) : ''),
+      unit: ser?.unit ?? m?.unit ?? null,
+      desc: ser?.desc ?? m?.description ?? '',
+      value,
+      delta,
+      lo,
+      hi,
+      x: 60 + 48 * Math.cos(ang),
+      y: 60 - 48 * Math.sin(ang),
+    }
+  }
+  const n = w.value.op && srcs.length > 1 ? 1 : Math.max(srcs.length, series.value.length)
+  return Array.from({ length: n }, (_, i) => build(i)).filter((x): x is Item => !!x)
 })
+const many = computed(() => items.value.length > 1)
+
+/** voyant : apparence de l'état courant (valeur exacte, sinon « autre ») */
+function lamp(v: number | null) {
+  const states = w.value.options.states?.length ? w.value.options.states : DEFAULT_STATES
+  const hit = v === null ? null : states.find((s) => Number(s.value) === v)
+  return (
+    hit ?? {
+      value: v ?? NaN,
+      label: v === null ? 'inconnu' : `état ${fmtValue(v)}`,
+      color: '#8a8f98',
+      image: '',
+    }
+  )
+}
 
 function barMs(points: HistPoint[]) {
   let m = Infinity
@@ -308,68 +353,158 @@ const tableRows = computed(() =>
       <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
         {{ STAT_LABEL[stat] }}
       </div>
-      <div class="mt-1 flex items-baseline gap-1.5">
-        <span class="text-3xl font-semibold tabular tracking-tight" data-testid="tile-value">{{
-          fmtValue(tileValue, w.options.decimals)
-        }}</span>
-        <span class="font-mono text-sm text-muted-foreground">{{ series[0]?.unit }}</span>
+      <div :class="many ? 'mt-1 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 items-baseline' : ''">
+        <template v-for="it in items" :key="it.label">
+          <div v-if="many" class="text-xs truncate" :title="it.desc">{{ it.label }}</div>
+          <div :class="many ? 'text-right' : 'mt-1'">
+            <span
+              :class="[many ? 'text-lg' : 'text-3xl', 'font-semibold tabular tracking-tight']"
+              data-testid="tile-value"
+              >{{ fmtValue(it.value, w.options.decimals) }}</span
+            >
+            <span class="font-mono text-sm text-muted-foreground ml-1">{{ it.unit }}</span>
+            <div
+              v-if="it.delta !== null"
+              class="font-mono text-[11px]"
+              :class="it.delta >= 0 ? 'text-signal' : 'text-offline'"
+            >
+              {{ it.delta >= 0 ? '+' : '' }}{{ fmtValue(it.delta, 1) }} % vs
+              {{ w.options.compare === 'year' ? 'l\u2019an dernier' : 'période précédente' }}
+            </div>
+          </div>
+        </template>
       </div>
       <div
-        v-if="delta !== null"
-        class="mt-1 font-mono text-[11px]"
-        :class="delta >= 0 ? 'text-signal' : 'text-offline'"
-      >
-        {{ delta >= 0 ? '+' : '' }}{{ fmtValue(delta, 1) }} % vs
-        {{ w.options.compare === 'year' ? 'l\u2019an dernier' : 'période précédente' }}
-      </div>
-      <div
-        v-if="series[0]?.desc && !w.title"
+        v-if="!many && items[0]?.desc && !w.title"
         class="mt-auto pt-1 text-[11px] text-muted-foreground truncate"
       >
-        {{ series[0].desc }}
+        {{ items[0].desc }}
       </div>
     </template>
 
-    <!-- jauge -->
+    <!-- jauge(s) -->
     <template v-else-if="w.type === 'gauge'">
-      <svg viewBox="0 0 120 70" class="w-full max-w-[220px] mx-auto">
-        <path
-          d="M12 60 A48 48 0 0 1 108 60"
-          fill="none"
-          stroke="currentColor"
-          stroke-opacity=".12"
-          stroke-width="10"
-          stroke-linecap="round"
-        />
-        <path
-          :d="`M12 60 A48 48 0 0 1 ${gauge.x.toFixed(2)} ${gauge.y.toFixed(2)}`"
-          fill="none"
-          stroke="#00d4aa"
-          stroke-width="10"
-          stroke-linecap="round"
-        />
-        <text
-          x="60"
-          y="52"
-          text-anchor="middle"
-          class="fill-current"
-          font-size="15"
-          font-weight="600"
+      <div
+        :class="
+          many ? 'grid grid-cols-2 sm:grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-2' : ''
+        "
+      >
+        <div v-for="it in items" :key="it.label" class="min-w-0" data-testid="gauge-item">
+          <svg
+            viewBox="0 0 120 70"
+            :class="['w-full mx-auto', many ? 'max-w-[150px]' : 'max-w-[220px]']"
+          >
+            <path
+              d="M12 60 A48 48 0 0 1 108 60"
+              fill="none"
+              stroke="currentColor"
+              stroke-opacity=".12"
+              stroke-width="10"
+              stroke-linecap="round"
+            />
+            <path
+              :d="`M12 60 A48 48 0 0 1 ${it.x.toFixed(2)} ${it.y.toFixed(2)}`"
+              fill="none"
+              stroke="#00d4aa"
+              stroke-width="10"
+              stroke-linecap="round"
+            />
+            <text
+              x="60"
+              y="52"
+              text-anchor="middle"
+              class="fill-current"
+              font-size="15"
+              font-weight="600"
+            >
+              {{ fmtValue(it.value, w.options.decimals) }}
+            </text>
+            <text
+              x="60"
+              y="66"
+              text-anchor="middle"
+              class="fill-current"
+              opacity=".6"
+              font-size="7"
+            >
+              {{ it.unit }}
+            </text>
+            <text
+              x="12"
+              y="69"
+              text-anchor="middle"
+              class="fill-current"
+              opacity=".55"
+              font-size="6"
+            >
+              {{ fmtValue(it.lo) }}
+            </text>
+            <text
+              x="108"
+              y="69"
+              text-anchor="middle"
+              class="fill-current"
+              opacity=".55"
+              font-size="6"
+            >
+              {{ fmtValue(it.hi) }}
+            </text>
+          </svg>
+          <div v-if="many" class="text-center text-[11px] truncate" :title="it.desc">
+            {{ it.label }}
+          </div>
+        </div>
+      </div>
+      <div class="text-center font-mono text-[10px] text-muted-foreground mt-1">
+        {{
+          w.options.min != null || w.options.max != null
+            ? 'bornes fixées'
+            : 'min / max de la période'
+        }}
+      </div>
+    </template>
+
+    <!-- voyant(s) d'état -->
+    <template v-else-if="w.type === 'indicator'">
+      <div
+        :class="
+          many
+            ? 'grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-3'
+            : 'flex-1 flex items-center justify-center'
+        "
+      >
+        <div
+          v-for="it in items"
+          :key="it.label"
+          class="flex items-center gap-2.5 min-w-0"
+          data-testid="indicator-item"
         >
-          {{ fmtValue(tileValue, w.options.decimals) }}
-        </text>
-        <text x="60" y="66" text-anchor="middle" class="fill-current" opacity=".6" font-size="7">
-          {{ series[0]?.unit }}
-        </text>
-        <text x="12" y="69" text-anchor="middle" class="fill-current" opacity=".55" font-size="6">
-          {{ fmtValue(gauge.lo) }}
-        </text>
-        <text x="108" y="69" text-anchor="middle" class="fill-current" opacity=".55" font-size="6">
-          {{ fmtValue(gauge.hi) }}
-        </text>
-      </svg>
-      <div class="text-center font-mono text-[10px] text-muted-foreground">
-        min / max de la période
+          <img
+            v-if="lamp(it.value).image"
+            :src="lamp(it.value).image"
+            :alt="lamp(it.value).label"
+            :class="many ? 'size-10' : 'size-20'"
+            class="object-contain shrink-0"
+          />
+          <span
+            v-else
+            :class="[many ? 'size-4' : 'size-8', 'rounded-full shrink-0 border border-black/10']"
+            :style="{
+              background: lamp(it.value).color,
+              boxShadow: `0 0 10px ${lamp(it.value).color}66`,
+            }"
+          />
+          <div class="min-w-0">
+            <div v-if="many" class="text-xs truncate" :title="it.desc">{{ it.label }}</div>
+            <div
+              :class="[many ? 'text-sm' : 'text-xl', 'font-medium']"
+              :style="{ color: lamp(it.value).color }"
+              data-testid="indicator-label"
+            >
+              {{ lamp(it.value).label }}
+            </div>
+          </div>
+        </div>
       </div>
     </template>
 

@@ -4,6 +4,8 @@ import { computed, ref } from 'vue'
 import type { DeviceWithStatus } from '@/composables/useDevices'
 import type { HistVar } from '@/composables/useHistory'
 import {
+  DEFAULT_ALARM_STATES,
+  DEFAULT_STATES,
   OP_LABEL,
   STAT_LABEL,
   STATUS_FIELDS,
@@ -44,6 +46,10 @@ const units = computed(() => [
 
 function setType(t: WidgetType) {
   w.value.type = t
+  if (t === 'indicator') {
+    initStates()
+    w.value.op = null
+  }
   if (t === 'status') {
     w.value.sources = props.devices.map((d) => ({ device: d.id, var: '' }))
     w.value.options.fields ??= ['online', 'last_seen', 'uptime', 'version']
@@ -65,7 +71,28 @@ function setMode(m: 'overlay' | 'separate') {
   w.value.op = null
   w.value.options.separate = m === 'separate'
 }
+// voyant : un état par valeur (libellé, couleur, image facultative)
+function initStates() {
+  if (w.value.options.states?.length) return
+  const first = w.value.sources[0]
+  const cat = first
+    ? props.catalogs[first.device]?.find((v) => v.var === first.var)?.category
+    : null
+  w.value.options.states = JSON.parse(
+    JSON.stringify(cat === 'alarm' ? DEFAULT_ALARM_STATES : DEFAULT_STATES),
+  )
+}
+function addState() {
+  const st = w.value.options.states ?? []
+  st.push({
+    value: st.length ? Math.max(...st.map((x) => Number(x.value))) + 1 : 0,
+    label: '',
+    color: '#2563eb',
+  })
+  w.value.options.states = st
+}
 function save() {
+  if (w.value.type === 'indicator') initStates()
   if (w.value.sources.filter((s) => s.var).length < 2) w.value.op = null
   emit('save', w.value)
 }
@@ -290,6 +317,52 @@ function save() {
             />
           </label>
         </template>
+      </div>
+      <div v-if="w.type === 'indicator'" class="mb-3" data-testid="states-editor">
+        <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
+          Apparence par état (valeur exacte ; une valeur non listée s'affiche en gris)
+        </div>
+        <div
+          v-for="(st, i) in w.options.states ?? []"
+          :key="i"
+          class="flex flex-wrap sm:flex-nowrap items-center gap-2 mb-1.5"
+        >
+          <input
+            v-model.number="st.value"
+            type="number"
+            class="w-16 bg-card border border-border rounded-sm px-2 py-1 text-sm"
+            title="valeur"
+          />
+          <input
+            v-model="st.color"
+            type="color"
+            class="w-9 h-8 bg-card border border-border rounded-sm"
+            title="couleur"
+          />
+          <input
+            v-model="st.label"
+            placeholder="libellé (ex. Marche)"
+            class="flex-1 min-w-[110px] bg-card border border-border rounded-sm px-2 py-1 text-sm"
+          />
+          <input
+            v-model="st.image"
+            placeholder="image (adresse, facultatif)"
+            class="flex-1 min-w-[140px] bg-card border border-border rounded-sm px-2 py-1 text-sm"
+          />
+          <button
+            class="font-mono text-[10px] text-muted-foreground hover:text-offline"
+            @click="w.options.states!.splice(i, 1)"
+          >
+            retirer
+          </button>
+        </div>
+        <button
+          class="text-xs px-2.5 py-1 rounded border border-border"
+          data-testid="state-add"
+          @click="addState"
+        >
+          + État
+        </button>
       </div>
       <div v-if="w.type === 'status'" class="mb-3">
         <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">

@@ -13,6 +13,7 @@ export type WidgetType =
   | 'bars'
   | 'value'
   | 'gauge'
+  | 'indicator'
   | 'status'
   | 'image'
   | 'states'
@@ -26,7 +27,25 @@ export interface Source {
   device: string
   var: string
 }
+/** apparence d'un état pour le voyant */
+export interface StateLook {
+  value: number
+  label: string
+  color: string
+  image?: string
+}
+export const DEFAULT_STATES: StateLook[] = [
+  { value: 0, label: 'Arrêt', color: '#8a8f98' },
+  { value: 1, label: 'Marche', color: '#16a34a' },
+]
+export const DEFAULT_ALARM_STATES: StateLook[] = [
+  { value: 0, label: 'Normal', color: '#16a34a' },
+  { value: 1, label: 'Défaut', color: '#dc2626' },
+]
+
 export interface WidgetOptions {
+  /** voyant : une couleur, un libellé et éventuellement une image par valeur */
+  states?: StateLook[]
   stat?: Stat
   /** plusieurs variables sans opération : graphiques séparés au lieu d'une seule tuile superposée */
   separate?: boolean
@@ -66,6 +85,7 @@ export const WIDGET_LABEL: Record<WidgetType, string> = {
   bars: 'Barres de consommation',
   value: 'Tuile valeur',
   gauge: 'Jauge',
+  indicator: 'Voyant d\u2019état',
   status: 'Statut',
   image: 'Image',
   states: 'Créneaux d\u2019états',
@@ -258,6 +278,26 @@ export function defaultWidgets(
         sources: [{ device: id, var: pick[0].var }],
         op: null,
         options: { stat: 'last' },
+      })
+    const alarms = (catalogs[id] ?? []).filter((v) => v.category === 'alarm').slice(0, 8)
+    const states = (catalogs[id] ?? []).filter((v) => v.category === 'state').slice(0, 8)
+    if (states.length)
+      w.push({
+        type: 'indicator',
+        width: alarms.length ? '1/2' : 'full',
+        title: 'États',
+        sources: states.map((v) => ({ device: id, var: v.var })),
+        op: null,
+        options: { states: DEFAULT_STATES },
+      })
+    if (alarms.length)
+      w.push({
+        type: 'indicator',
+        width: states.length ? '1/2' : 'full',
+        title: 'Défauts',
+        sources: alarms.map((v) => ({ device: id, var: v.var })),
+        op: null,
+        options: { states: DEFAULT_ALARM_STATES },
       })
     for (const v of pick)
       w.push({
