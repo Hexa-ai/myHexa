@@ -6,6 +6,7 @@ import type { HistVar } from '@/composables/useHistory'
 import {
   DEFAULT_ALARM_STATES,
   DEFAULT_STATES,
+  COMBINE_LABEL,
   OP_LABEL,
   STAT_LABEL,
   STATUS_FIELDS,
@@ -26,7 +27,7 @@ const emit = defineEmits<{ (e: 'save', w: Widget): void; (e: 'cancel'): void }>(
 
 const w = ref<Widget>(JSON.parse(JSON.stringify(props.widget)))
 const WIDTHS: WidgetWidth[] = ['1/4', '1/3', '1/2', '2/3', 'full']
-const needsVars = computed(() => !['status', 'image', 'text'].includes(w.value.type))
+const needsVars = computed(() => !['status', 'image', 'text', 'map'].includes(w.value.type))
 const multi = computed(() => props.devices.length > 1)
 
 const newDev = ref(props.devices[0]?.id ?? '')
@@ -50,7 +51,12 @@ function setType(t: WidgetType) {
     initStates()
     w.value.op = null
   }
-  if (t === 'status') {
+  if (t === 'map') {
+    w.value.op = null
+    if (w.value.width === '1/4' || w.value.width === '1/3') w.value.width = '1/2'
+    w.value.sources = props.devices.map((d) => ({ device: d.id, var: '' }))
+    initStates()
+  } else if (t === 'status') {
     w.value.sources = props.devices.map((d) => ({ device: d.id, var: '' }))
     w.value.options.fields ??= ['online', 'last_seen', 'uptime', 'version']
   } else if (['image', 'text'].includes(t)) w.value.sources = []
@@ -59,6 +65,23 @@ function setType(t: WidgetType) {
 function toggleField(f: string) {
   const a = w.value.options.fields ?? []
   w.value.options.fields = a.includes(f) ? a.filter((x) => x !== f) : [...a, f]
+}
+// carte : variable d'état facultative par box (colore le repère)
+const stateVars = (dev: string) => {
+  // historique (ts_vars) + variables du dernier statut (les alarmes n'ont souvent pas d'historique)
+  const out = new Map<string, { var: string }>()
+  for (const v of props.catalogs[dev] ?? [])
+    if (['state', 'alarm'].includes(v.category ?? '')) out.set(v.var, { var: v.var })
+  const st = props.devices.find((d) => d.id === dev)?.status_payload as {
+    variables?: { name?: string; category?: string }[]
+  } | null
+  for (const v of st?.variables ?? [])
+    if (v.name && ['state', 'alarm'].includes(v.category ?? '')) out.set(v.name, { var: v.name })
+  return [...out.values()]
+}
+function setMapVar(dev: string, v: string) {
+  const s = w.value.sources.find((x) => x.device === dev)
+  if (s) s.var = v
 }
 function toggleStatusDevice(id: string) {
   const has = w.value.sources.some((s) => s.device === id)
@@ -92,7 +115,11 @@ function addState() {
   w.value.options.states = st
 }
 function save() {
-  if (w.value.type === 'indicator') initStates()
+  if (
+    w.value.type === 'indicator' ||
+    (w.value.type === 'map' && w.value.sources.some((s) => s.var))
+  )
+    initStates()
   if (w.value.sources.filter((s) => s.var).length < 2) w.value.op = null
   emit('save', w.value)
 }
@@ -213,7 +240,49 @@ function save() {
             Ajouter
           </button>
         </div>
-        <div v-if="w.sources.length > 1" class="mb-3">
+        <div
+          v-if="w.type === 'indicator' && w.sources.length > 1"
+          class="mb-3"
+          data-testid="combine"
+        >
+          <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+            >Plusieurs états</span
+          >
+          <div class="mt-1 flex flex-wrap gap-1">
+            <button
+              :class="[
+                'text-xs px-2.5 py-1 rounded border',
+                !w.options.combine
+                  ? 'border-signal text-signal'
+                  : 'border-border text-muted-foreground',
+              ]"
+              data-testid="combine-none"
+              @click="w.options.combine = null"
+            >
+              Un voyant par variable
+            </button>
+            <button
+              v-for="(l, c) in COMBINE_LABEL"
+              :key="c"
+              :class="[
+                'text-xs px-2.5 py-1 rounded border',
+                w.options.combine === c
+                  ? 'border-signal text-signal'
+                  : 'border-border text-muted-foreground',
+              ]"
+              :data-testid="`combine-${c}`"
+              @click="w.options.combine = c"
+            >
+              Synthèse : {{ l.toLowerCase() }}
+            </button>
+          </div>
+          <p class="mt-1 text-[11px] text-muted-foreground">
+            Synthèse : un seul voyant. « Au moins un actif » / « tous actifs » donnent 0 ou 1 (actif
+            = valeur non nulle) ; « le plus élevé » garde la valeur la plus haute (ex. 0 normal, 1
+            alerte, 2 défaut).
+          </p>
+        </div>
+        <div v-else-if="w.sources.length > 1" class="mb-3">
           <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
             >Plusieurs variables</span
           >
@@ -318,7 +387,11 @@ function save() {
           </label>
         </template>
       </div>
-      <div v-if="w.type === 'indicator'" class="mb-3" data-testid="states-editor">
+      <div
+        v-if="w.type === 'indicator' || (w.type === 'map' && w.sources.some((s) => s.var))"
+        class="mb-3"
+        data-testid="states-editor"
+      >
         <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
           Apparence par état (valeur exacte ; une valeur non listée s'affiche en gris)
         </div>
@@ -363,6 +436,40 @@ function save() {
         >
           + État
         </button>
+      </div>
+      <div v-if="w.type === 'map'" class="mb-3" data-testid="map-editor">
+        <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
+          Box sur la carte (et état qui colore le repère, facultatif)
+        </div>
+        <div
+          v-for="d in devices"
+          :key="d.id"
+          class="flex flex-col sm:flex-row sm:items-center gap-1.5 mb-1"
+        >
+          <label class="text-sm flex items-center gap-1.5 sm:w-1/2 min-w-0">
+            <input
+              type="checkbox"
+              :checked="w.sources.some((s) => s.device === d.id)"
+              @change="toggleStatusDevice(d.id)"
+            />
+            <span class="truncate">{{ d.name }}</span>
+            <span v-if="d.latitude == null" class="font-mono text-[10px] text-muted-foreground"
+              >sans position</span
+            >
+          </label>
+          <select
+            v-if="w.sources.some((s) => s.device === d.id) && stateVars(d.id).length"
+            :value="w.sources.find((s) => s.device === d.id)?.var ?? ''"
+            class="flex-1 bg-card border border-border rounded-sm px-2 py-1 text-sm"
+            data-testid="map-var"
+            @change="setMapVar(d.id, ($event.target as HTMLSelectElement).value)"
+          >
+            <option value="">couleur : connexion / alarmes</option>
+            <option v-for="v in stateVars(d.id)" :key="v.var" :value="v.var">
+              couleur selon {{ v.var }}
+            </option>
+          </select>
+        </div>
       </div>
       <div v-if="w.type === 'status'" class="mb-3">
         <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">

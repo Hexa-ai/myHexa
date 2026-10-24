@@ -12,6 +12,9 @@ export interface MarkerInput {
   online?: boolean
   severity?: 'error' | 'warning' | null
   href?: string
+  /** couleur imposée (voyant d'état du tableau de bord) et libellé d'état associé */
+  color?: string
+  stateText?: string
   /** repère de projet : un carré avec le nombre de box et la synthèse d'état */
   project?: { total: number; online: number; names?: string[] }
 }
@@ -118,9 +121,10 @@ function tooltipHtml(m: MarkerInput): string {
     stateClass = 'is-online'
     stateLabel = 'Online'
   }
+  if (m.stateText) stateLabel = m.stateText + (m.online === false ? ' (offline)' : '')
   const name = escapeHtml(m.label ?? '—')
   return `
-    <div class="hai-tip ${stateClass}">
+    <div class="hai-tip ${stateClass}"${m.color ? ` style="--tip-accent:${escapeHtml(m.color)}"` : ''}>
       <img src="/hai-p-gateway.png" class="hai-tip-img" alt="" />
       <div class="hai-tip-text">
         <div class="hai-tip-name">${name}</div>
@@ -150,7 +154,9 @@ function buildMarkers() {
         })
       : L.divIcon({
           className: `hai-marker ${markerStateClass(m)}`,
-          html: '<span class="hai-marker-dot"></span>',
+          html: m.color
+            ? `<span class="hai-marker-dot" style="background:${escapeHtml(m.color)};box-shadow:0 0 10px ${escapeHtml(m.color)}"></span>`
+            : '<span class="hai-marker-dot"></span>',
           iconSize: [16, 16],
           iconAnchor: [8, 8],
         })

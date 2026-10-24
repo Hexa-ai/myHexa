@@ -31,7 +31,23 @@ export interface MailInput {
   fromName?: string
   /** Optional reply-to header. */
   replyTo?: string
+  /** Images inline référencées dans le HTML par src="cid:<cid>" (rapports). */
+  inline?: { cid: string; contentType: string; data: Uint8Array }[]
+  /** Pièces jointes (CSV des rapports). */
+  attachments?: { filename: string; contentType: string; data: Uint8Array }[]
 }
+
+/** Configuration Gmail présente ? (absente sur le projet de test : aucun envoi possible) */
+export function mailerConfigured(): boolean {
+  return !!(GOOGLE_SA_EMAIL && GOOGLE_SA_PRIVATE_KEY && GMAIL_IMPERSONATE_USER)
+}
+
+function b64bytes(data: Uint8Array): string {
+  let bin = ''
+  for (let i = 0; i < data.length; i += 0x8000) bin += String.fromCharCode(...data.subarray(i, i + 0x8000))
+  return btoa(bin).replace(/(.{76})/g, '$1\r\n')
+}
+const encWord = (s: string) => `=?UTF-8?B?${btoa(unescape(encodeURIComponent(s)))}?=`
 
 interface CachedToken {
   token: string
@@ -121,21 +137,37 @@ async function getAccessToken(): Promise<string> {
   return cached.token
 }
 
-/** Build an RFC822 message and base64url-encode it for Gmail API. */
+/** Build an RFC822 message and base64url-encode it for Gmail API.
+ *  Sans image ni pièce jointe : text/html simple (inchangé). Sinon multipart/mixed > multipart/related > html + images. */
 function buildRawMessage(input: MailInput, fromHeader: string): string {
   const lines = [
     `From: ${fromHeader}`,
     `To: ${input.to}`,
-    `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(input.subject)))}?=`,
+    `Subject: ${encWord(input.subject)}`,
     'MIME-Version: 1.0',
-    'Content-Type: text/html; charset="UTF-8"',
-    'Content-Transfer-Encoding: base64',
   ]
   if (input.replyTo) lines.push(`Reply-To: ${input.replyTo}`)
-  const bodyEncoded = btoa(unescape(encodeURIComponent(input.html)))
-    .replace(/(.{76})/g, '$1\n') // wrap at 76 chars per RFC
-  const message = lines.join('\r\n') + '\r\n\r\n' + bodyEncoded
-  return base64urlEncode(message)
+  const htmlPart = btoa(unescape(encodeURIComponent(input.html))).replace(/(.{76})/g, '$1\n')
+  if (!input.inline?.length && !input.attachments?.length) {
+    lines.push('Content-Type: text/html; charset="UTF-8"', 'Content-Transfer-Encoding: base64')
+    return base64urlEncode(lines.join('\r\n') + '\r\n\r\n' + htmlPart)
+  }
+  const bMix = 'mix_' + crypto.randomUUID()
+  const bRel = 'rel_' + crypto.randomUUID()
+  const out: string[] = [...lines, `Content-Type: multipart/mixed; boundary="${bMix}"`, '', `--${bMix}`]
+  out.push(`Content-Type: multipart/related; boundary="${bRel}"`, '', `--${bRel}`)
+  out.push('Content-Type: text/html; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', htmlPart)
+  for (const im of input.inline ?? []) {
+    out.push(`--${bRel}`, `Content-Type: ${im.contentType}`, 'Content-Transfer-Encoding: base64')
+    out.push(`Content-ID: <${im.cid}>`, `Content-Disposition: inline; filename="${im.cid}.png"`, '', b64bytes(im.data))
+  }
+  out.push(`--${bRel}--`)
+  for (const at of input.attachments ?? []) {
+    out.push(`--${bMix}`, `Content-Type: ${at.contentType}; name="${encWord(at.filename)}"`, 'Content-Transfer-Encoding: base64')
+    out.push(`Content-Disposition: attachment; filename="${encWord(at.filename)}"`, '', b64bytes(at.data))
+  }
+  out.push(`--${bMix}--`, '')
+  return base64urlEncode(out.join('\r\n'))
 }
 
 export async function sendMail(input: MailInput): Promise<void> {

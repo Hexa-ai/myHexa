@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DeviceMap, { type MarkerInput } from '@/components/DeviceMap.vue'
 // PROTOTYPE — rendu d'un bloc de tableau de bord (commun aux futurs rapports).
 import { computed } from 'vue'
 import HistoryChart from '@/components/HistoryChart.vue'
@@ -15,6 +16,8 @@ import {
   stateDurations,
   statOf,
   DEFAULT_STATES,
+  combineStates,
+  COMBINE_LABEL,
   type SeriesMap,
   type Widget,
 } from '@/composables/useDashboards'
@@ -91,6 +94,7 @@ const compare = computed(() => seriesOf(props.compareData))
 
 const title = computed(() => {
   if (w.value.title) return w.value.title
+  if (w.value.type === 'map') return 'Localisation'
   if (series.value.length === 1) return series.value[0].label
   const first = w.value.sources.find((s) => s.var)
   const multiNoOp = w.value.sources.filter((x) => x.var).length > 1 && !w.value.op
@@ -173,7 +177,57 @@ const items = computed<Item[]>(() => {
   const n = w.value.op && srcs.length > 1 ? 1 : Math.max(srcs.length, series.value.length)
   return Array.from({ length: n }, (_, i) => build(i)).filter((x): x is Item => !!x)
 })
-const many = computed(() => items.value.length > 1)
+const many = computed(() => items.value.length > 1 && !w.value.options.combine)
+
+/** voyant en synthèse : un seul état calculé + la liste des variables actives */
+const combined = computed(() => {
+  const mode = w.value.options.combine
+  if (w.value.type !== 'indicator' || !mode || items.value.length < 2) return null
+  const value = combineStates(
+    items.value.map((i) => i.value),
+    mode,
+  )
+  return {
+    value,
+    active: items.value.filter((i) => i.value !== null && i.value !== 0).map((i) => i.label),
+    mode,
+  }
+})
+
+/** carte : une box par source ; si une variable est choisie, le repère prend la couleur de son état */
+const mapMarkers = computed<MarkerInput[]>(() => {
+  if (w.value.type !== 'map') return []
+  const seen = new Set<string>()
+  const out: MarkerInput[] = []
+  for (const src of w.value.sources) {
+    if (seen.has(src.device)) continue
+    seen.add(src.device)
+    const d = props.devices.get(src.device)
+    if (!d || d.latitude == null || d.longitude == null) continue
+    const m: MarkerInput = {
+      id: d.id,
+      lat: Number(d.latitude),
+      lng: Number(d.longitude),
+      label: d.name ?? undefined,
+      online: isOnline(d.last_connection_at),
+    }
+    if (src.var) {
+      const look = lamp(liveOf(src.device, src.var))
+      m.color = look.color
+      m.stateText = `${src.var} : ${look.label}`
+    }
+    out.push(m)
+  }
+  return out
+})
+const mapMissing = computed(() =>
+  w.value.type === 'map'
+    ? [...new Set(w.value.sources.map((s) => s.device))].filter((id) => {
+        const d = props.devices.get(id)
+        return !d || d.latitude == null || d.longitude == null
+      }).length
+    : 0,
+)
 
 /** voyant : apparence de l'état courant (valeur exacte, sinon « autre ») */
 function lamp(v: number | null) {
@@ -461,6 +515,59 @@ const tableRows = computed(() =>
             ? 'bornes fixées'
             : 'min / max de la période'
         }}
+      </div>
+    </template>
+
+    <!-- voyant de synthèse -->
+    <template v-else-if="w.type === 'indicator' && combined">
+      <div class="flex-1 flex items-center gap-3" data-testid="indicator-combined">
+        <img
+          v-if="lamp(combined.value).image"
+          :src="lamp(combined.value).image"
+          :alt="lamp(combined.value).label"
+          class="size-16 object-contain shrink-0"
+        />
+        <span
+          v-else
+          class="size-8 rounded-full shrink-0 border border-black/10"
+          :style="{
+            background: lamp(combined.value).color,
+            boxShadow: `0 0 10px ${lamp(combined.value).color}66`,
+          }"
+        />
+        <div class="min-w-0">
+          <div
+            class="text-xl font-medium"
+            :style="{ color: lamp(combined.value).color }"
+            data-testid="indicator-label"
+          >
+            {{ lamp(combined.value).label }}
+          </div>
+          <div
+            class="text-[11px] text-muted-foreground truncate"
+            :title="combined.active.join(', ')"
+          >
+            {{ COMBINE_LABEL[combined.mode] }} sur {{ items.length }} ·
+            {{ combined.active.length ? 'actifs : ' + combined.active.join(', ') : 'aucun actif' }}
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- carte -->
+    <template v-else-if="w.type === 'map'">
+      <div
+        v-if="mapMarkers.length"
+        class="-mx-1 rounded overflow-hidden relative z-0 isolate"
+        data-testid="widget-map-box"
+      >
+        <DeviceMap :markers="mapMarkers" height="260px" :zoom="12" />
+      </div>
+      <div v-else class="text-xs text-muted-foreground">
+        Aucune des box choisies n'est localisée.
+      </div>
+      <div v-if="mapMissing" class="mt-1 font-mono text-[10px] text-muted-foreground">
+        {{ mapMissing }} box sans position
       </div>
     </template>
 

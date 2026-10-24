@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // PROTOTYPE — tableau de bord d'une box ou d'un projet (plusieurs tableaux possibles, éditables par l'admin).
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useDevices, type DeviceWithStatus } from '@/composables/useDevices'
@@ -25,6 +25,7 @@ import {
 } from '@/composables/useDashboards'
 import DashboardWidget from '@/components/dashboard/DashboardWidget.vue'
 import WidgetEditor from '@/components/dashboard/WidgetEditor.vue'
+import ReportsPanel from '@/components/dashboard/ReportsPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -70,6 +71,31 @@ const canManage = computed(
 )
 
 const period = ref<string>((route.query.period as string) || '24h')
+
+// ---- rafraîchissement automatique (valeurs « dernière », périodes glissantes) ----
+const AUTO = [
+  { s: 0, label: 'Arrêt' },
+  { s: 30, label: '30 s' },
+  { s: 60, label: '1 min' },
+  { s: 300, label: '5 min' },
+]
+const autoRefresh = ref<number>(Number(localStorage.getItem('hai.dash.auto') ?? 60))
+const lastRefresh = ref<number>(Date.now())
+let autoTimer: ReturnType<typeof setInterval> | null = null
+function armAuto() {
+  if (autoTimer) clearInterval(autoTimer)
+  autoTimer = null
+  localStorage.setItem('hai.dash.auto', String(autoRefresh.value))
+  if (!autoRefresh.value) return
+  autoTimer = setInterval(async () => {
+    // pas pendant l'édition, ni onglet masqué, ni chargement en cours
+    if (editing.value || editWidget.value || document.hidden || loadingData.value) return
+    await loadDevices()
+    await refresh()
+  }, autoRefresh.value * 1000)
+}
+watch(autoRefresh, armAuto)
+onBeforeUnmount(() => autoTimer && clearInterval(autoTimer))
 const range = ref<[number, number]>(PERIODS['24h'].range(Date.now()))
 
 async function init() {
@@ -118,6 +144,7 @@ async function select(id: string | null) {
 }
 
 async function refresh() {
+  lastRefresh.value = Date.now()
   range.value = (PERIODS[period.value] ?? PERIODS['24h']).range(Date.now())
   const srcs = widgets.value.flatMap((w) => w.sources).filter((s) => s.var)
   const cmp = widgets.value.filter((w) => w.options.compare)
@@ -150,7 +177,10 @@ watch(period, () => {
 })
 // clé texte : un tableau neuf déclencherait le watcher à chaque changement de query (période)
 watch(() => `${route.params.scope}/${route.params.id}`, init)
-onMounted(init)
+onMounted(() => {
+  init()
+  armAuto()
+})
 
 // ---- édition ----
 const editing = ref(false)
@@ -178,6 +208,18 @@ function onEdited(w: Widget) {
   else widgets.value[editIdx.value] = w
   editWidget.value = null
   refresh()
+}
+// glisser-déposer (PC) : le bloc déplacé prend la place du bloc cible
+const dragIdx = ref<number | null>(null)
+const dragOver = ref<number | null>(null)
+function onDrop(j: number) {
+  const i = dragIdx.value
+  dragIdx.value = dragOver.value = null
+  if (i === null || i === j) return
+  const a = widgets.value.slice()
+  const [x] = a.splice(i, 1)
+  a.splice(j, 0, x)
+  widgets.value = a
 }
 function move(i: number, d: number) {
   const j = i + d
@@ -219,6 +261,7 @@ async function removeDashboard() {
 
 // ---- export CSV ----
 const exportOpen = ref(false)
+const reportsOpen = ref(false)
 const exportRes = ref<'shown' | 'detailed'>('detailed')
 const exportMsg = ref<string | null>(null)
 const exporting = ref(false)
@@ -321,12 +364,32 @@ const backTo = computed(() =>
             {{ p.label }}
           </button>
         </div>
+        <label
+          class="flex items-center gap-1 text-[11px] font-mono text-muted-foreground"
+          :title="`Actualisé à ${new Date(lastRefresh).toLocaleTimeString('fr-FR')}`"
+        >
+          <span class="hidden sm:inline">Actualiser</span>
+          <select
+            v-model.number="autoRefresh"
+            class="bg-card border border-border rounded-sm px-1.5 py-1 text-xs"
+            data-testid="dash-auto"
+          >
+            <option v-for="a in AUTO" :key="a.s" :value="a.s">{{ a.label }}</option>
+          </select>
+        </label>
         <button
           class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60"
           data-testid="dash-export"
           @click="exportOpen = !exportOpen"
         >
           CSV
+        </button>
+        <button
+          class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60"
+          data-testid="dash-reports"
+          @click="reportsOpen = !reportsOpen"
+        >
+          Rapports
         </button>
         <button
           v-if="canManage && !editing"
@@ -399,6 +462,24 @@ const backTo = computed(() =>
         Annuler
       </button>
     </div>
+    <template v-if="reportsOpen">
+      <ReportsPanel
+        v-if="current?.id && companyId"
+        :dashboard-id="current.id"
+        :company-id="companyId"
+        :dashboard-name="heading"
+        :can-manage="canManage"
+      />
+      <div
+        v-else
+        class="mb-4 border border-dashed border-border rounded px-3 py-2 text-xs text-muted-foreground"
+        data-testid="reports-need-save"
+      >
+        Les rapports s'appuient sur un tableau de bord enregistré.<span v-if="canManage">
+          Enregistrez d'abord celui-ci (« Modifier » puis « Enregistrer »).</span
+        >
+      </div>
+    </template>
     <div
       v-if="exportOpen"
       class="mb-4 border border-border rounded-md bg-card/60 p-3 text-sm"
@@ -465,7 +546,20 @@ const backTo = computed(() =>
       <div
         v-for="(w, i) in widgets"
         :key="i + w.type"
-        :class="[SPAN[w.width] ?? 'col-span-12', 'relative']"
+        :class="[
+          SPAN[w.width] ?? 'col-span-12',
+          'relative',
+          editing && 'cursor-move',
+          dragIdx === i && 'opacity-40',
+          dragOver === i && dragIdx !== i && 'ring-2 ring-signal rounded-md',
+        ]"
+        :draggable="editing"
+        data-testid="widget-slot"
+        @dragstart="dragIdx = i"
+        @dragover.prevent="dragOver = i"
+        @dragleave="dragOver === i && (dragOver = null)"
+        @drop.prevent="onDrop(i)"
+        @dragend="dragIdx = dragOver = null"
       >
         <DashboardWidget
           :widget="w"
@@ -476,9 +570,15 @@ const backTo = computed(() =>
           :catalogs="catalogs"
           :multi-device="scopeDevices.length > 1"
         />
+        <!-- en édition : calque qui capte la souris (carte, liens) pour permettre le glisser-déposer -->
         <div
           v-if="editing"
-          class="absolute top-1 right-1 flex gap-0.5 bg-background/90 border border-border rounded p-0.5 font-mono text-[10px]"
+          class="absolute inset-0 z-10 rounded-md"
+          title="Glisser pour déplacer"
+        />
+        <div
+          v-if="editing"
+          class="z-20 absolute top-1 right-1 flex gap-0.5 bg-background/90 border border-border rounded p-0.5 font-mono text-[10px]"
         >
           <span class="px-1 text-muted-foreground">{{ WIDGET_LABEL[w.type] }}</span>
           <button class="px-1 hover:text-signal" title="Avancer" @click="move(i, -1)">▲</button>

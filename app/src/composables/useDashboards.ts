@@ -14,6 +14,7 @@ export type WidgetType =
   | 'value'
   | 'gauge'
   | 'indicator'
+  | 'map'
   | 'status'
   | 'image'
   | 'states'
@@ -38,6 +39,21 @@ export const DEFAULT_STATES: StateLook[] = [
   { value: 0, label: 'Arrêt', color: '#8a8f98' },
   { value: 1, label: 'Marche', color: '#16a34a' },
 ]
+export const COMBINE_LABEL = {
+  any: 'Au moins un actif',
+  all: 'Tous actifs',
+  max: 'Le plus élevé (priorité)',
+} as const
+
+/** synthèse d'états : any/all -> 0/1 (actif = valeur non nulle) ; max -> valeur la plus élevée */
+export function combineStates(vals: (number | null)[], mode: 'any' | 'all' | 'max'): number | null {
+  const v = vals.filter((x): x is number => x !== null)
+  if (!v.length) return null
+  if (mode === 'any') return v.some((x) => x !== 0) ? 1 : 0
+  if (mode === 'all') return v.length === vals.length && v.every((x) => x !== 0) ? 1 : 0
+  return Math.max(...v)
+}
+
 export const DEFAULT_ALARM_STATES: StateLook[] = [
   { value: 0, label: 'Normal', color: '#16a34a' },
   { value: 1, label: 'Défaut', color: '#dc2626' },
@@ -46,6 +62,8 @@ export const DEFAULT_ALARM_STATES: StateLook[] = [
 export interface WidgetOptions {
   /** voyant : une couleur, un libellé et éventuellement une image par valeur */
   states?: StateLook[]
+  /** voyant : synthèse de plusieurs états en un seul (au moins un actif / tous actifs / le plus élevé) */
+  combine?: 'any' | 'all' | 'max' | null
   stat?: Stat
   /** plusieurs variables sans opération : graphiques séparés au lieu d'une seule tuile superposée */
   separate?: boolean
@@ -86,6 +104,7 @@ export const WIDGET_LABEL: Record<WidgetType, string> = {
   value: 'Tuile valeur',
   gauge: 'Jauge',
   indicator: 'Voyant d\u2019état',
+  map: 'Carte',
   status: 'Statut',
   image: 'Image',
   states: 'Créneaux d\u2019états',
