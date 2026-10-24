@@ -66,6 +66,26 @@ function seriesOf(map: SeriesMap | null | undefined) {
   }))
 }
 const series = computed(() => seriesOf(props.data))
+
+/** plusieurs courbes dans une seule tuile : 1re unité à gauche, les autres à droite */
+const overlay = computed(
+  () =>
+    series.value.length > 1 &&
+    !w.value.op &&
+    !w.value.options.separate &&
+    w.value.type !== 'states',
+)
+const overlayExtra = computed(() => {
+  const leftUnit = series.value[0]?.unit ?? ''
+  return series.value.slice(1).map((s, i) => ({
+    points: s.points,
+    label: s.label,
+    unit: s.unit,
+    color: COLORS[(i + 1) % COLORS.length],
+    axis: (s.unit ?? '') === leftUnit ? ('left' as const) : ('right' as const),
+    step: s.state,
+  }))
+})
 const compare = computed(() => seriesOf(props.compareData))
 
 const title = computed(() => {
@@ -213,7 +233,7 @@ const tableRows = computed(() =>
     <div v-if="title && w.type !== 'image'" class="flex items-baseline gap-2 mb-2 min-w-0">
       <h3 class="text-sm font-medium tracking-tight truncate shrink-0 max-w-full">{{ title }}</h3>
       <span
-        v-if="series[0]?.unit && ['curve', 'bars'].includes(w.type)"
+        v-if="series[0]?.unit && !overlay && ['curve', 'bars'].includes(w.type)"
         class="font-mono text-[10px] text-muted-foreground"
         >{{ series[0].unit }}</span
       >
@@ -232,7 +252,38 @@ const tableRows = computed(() =>
       >
         pas de données
       </div>
-      <div v-for="(s, i) in series" :key="s.label" class="min-w-0">
+      <template v-else-if="overlay">
+        <div
+          class="flex flex-wrap gap-x-3 gap-y-0.5 mb-1 font-mono text-[10px]"
+          data-testid="overlay-legend"
+        >
+          <span v-for="(s, i) in series" :key="s.label" class="inline-flex items-center gap-1">
+            <span
+              class="inline-block w-2.5 h-0.5"
+              :style="{ background: COLORS[i % COLORS.length] }"
+            />
+            {{ s.label }} <span class="text-muted-foreground">{{ s.unit }}</span>
+            <span v-if="i > 0 && overlayExtra[i - 1].axis === 'right'" class="text-muted-foreground"
+              >(axe droit)</span
+            >
+          </span>
+        </div>
+        <HistoryChart
+          :points="series[0].points"
+          :label="series[0].label"
+          :unit="series[0].unit"
+          :color="COLORS[0]"
+          :from="range[0]"
+          :to="range[1]"
+          :step="series[0].state"
+          :band="false"
+          :bars="w.type === 'bars' || series[0].counter ? barMs(series[0].points) : 0"
+          :gap-ms="2 * 3600e3"
+          :extra="overlayExtra"
+          height="200px"
+        />
+      </template>
+      <div v-for="(s, i) in overlay ? [] : series" :key="s.label" class="min-w-0">
         <div v-if="series.length > 1" class="font-mono text-[10px] text-muted-foreground mt-1">
           {{ s.label }}
         </div>

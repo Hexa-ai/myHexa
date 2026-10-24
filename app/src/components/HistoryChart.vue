@@ -16,6 +16,16 @@ import {
 import zoomPlugin from 'chartjs-plugin-zoom'
 import type { HistPoint } from '@/composables/useHistory'
 
+/** courbe superposée (même tuile), sur l'axe de gauche ou de droite */
+export interface ExtraSeries {
+  points: HistPoint[]
+  label: string
+  unit?: string | null
+  color: string
+  axis?: 'left' | 'right'
+  step?: boolean
+}
+
 Chart.register(LineController, LineElement, PointElement, LinearScale, Tooltip, Filler, zoomPlugin)
 
 const props = withDefaults(
@@ -34,6 +44,8 @@ const props = withDefaults(
     gapMs?: number
     /** compteur / volume : histogramme en cases de cette durée (ms), valeur = total de la case */
     bars?: number
+    /** autres courbes dans le même graphique (axe droit si unité différente) */
+    extra?: ExtraSeries[]
   }>(),
   {
     unit: '',
@@ -44,6 +56,7 @@ const props = withDefaults(
     height: '180px',
     gapMs: 0,
     bars: 0,
+    extra: () => [],
   },
 )
 const emit = defineEmits<{
@@ -116,20 +129,43 @@ const withGaps = computed<HistPoint[]>(() => {
   return out
 })
 
-function barDataset(): ChartDataset<'line'>[] {
+const multi = computed(() => props.extra.length > 0)
+const hasRight = computed(() => props.extra.some((e) => e.axis === 'right'))
+
+function cutGaps(points: HistPoint[]): HistPoint[] {
+  const out: HistPoint[] = []
+  let prev: number | null = null
+  for (const p of points) {
+    if (props.gapMs && prev !== null && p[0] - prev > props.gapMs)
+      out.push([prev + 1, null, null, null])
+    out.push(p)
+    prev = p[0]
+  }
+  return out
+}
+
+function barDataset(
+  points: HistPoint[] = props.points,
+  color = props.color,
+  label = props.label,
+  slot = 0,
+  slots = 1,
+): ChartDataset<'line'>[] {
   // histogramme : marche « après » remplie jusqu'à 0, chaque case fermée par un retour à 0
+  // plusieurs séries : la case est partagée en « slots » barres côte à côte
   const data: { x: number; y: number | null }[] = []
-  for (const p of props.points) {
-    // petite marge entre deux barres
-    const end = p[0] + props.bars * 0.85
-    data.push({ x: p[0], y: 0 }, { x: p[0], y: p[1] }, { x: end, y: p[1] }, { x: end, y: 0 })
+  const w = (props.bars * 0.85) / slots
+  for (const p of points) {
+    const start = p[0] + slot * w
+    const end = start + w
+    data.push({ x: start, y: 0 }, { x: start, y: p[1] }, { x: end, y: p[1] }, { x: end, y: 0 })
   }
   return [
     {
-      label: props.label,
+      label,
       data,
-      borderColor: props.color,
-      backgroundColor: props.color + '66',
+      borderColor: color,
+      backgroundColor: color + '66',
       borderWidth: 1,
       pointRadius: 0,
       pointHoverRadius: 0,
@@ -139,12 +175,41 @@ function barDataset(): ChartDataset<'line'>[] {
   ]
 }
 
+function extraDatasets(): ChartDataset<'line'>[] {
+  const n = props.extra.length + 1
+  return props.extra.flatMap((e, i) => {
+    const ds = props.bars
+      ? barDataset(e.points, e.color, e.label, i + 1, n)
+      : [
+          {
+            label: e.label,
+            data: cutGaps(e.points).map((p) => ({ x: p[0], y: p[1] })),
+            borderColor: e.color,
+            backgroundColor: e.color,
+            borderWidth: 1.5,
+            pointRadius: e.points.length < 60 ? 2 : 0,
+            pointHoverRadius: 3,
+            stepped: !!e.step,
+            spanGaps: false,
+            tension: 0,
+          } as ChartDataset<'line'>,
+        ]
+    for (const d of ds)
+      (d as ChartDataset<'line'> & { yAxisID?: string }).yAxisID = e.axis === 'right' ? 'y2' : 'y'
+    return ds
+  })
+}
+
 function datasets(): ChartDataset<'line'>[] {
-  if (props.bars) return barDataset()
+  if (props.bars)
+    return [
+      ...barDataset(props.points, props.color, props.label, 0, props.extra.length + 1),
+      ...extraDatasets(),
+    ]
   const pts = withGaps.value
   const avg = pts.map((p) => ({ x: p[0], y: p[1] }))
   const ds: ChartDataset<'line'>[] = []
-  const hasBand = props.band && pts.some((p) => p[2] !== p[3])
+  const hasBand = props.band && !multi.value && pts.some((p) => p[2] !== p[3])
   if (hasBand) {
     ds.push({
       label: 'min',
@@ -181,7 +246,18 @@ function datasets(): ChartDataset<'line'>[] {
     spanGaps: false,
     tension: 0,
   })
-  return ds
+  return [...ds, ...extraDatasets()]
+}
+
+/** valeur d'une série à l'instant t (point le plus proche avant t) */
+function valueAt(points: HistPoint[], t: number, bars: number): HistPoint | undefined {
+  if (bars) return points.find((q) => t >= q[0] && t <= q[0] + bars)
+  let best: HistPoint | undefined
+  for (const p of points) {
+    if (p[0] > t) break
+    best = p
+  }
+  return best
 }
 
 function build() {
@@ -200,10 +276,26 @@ function build() {
       plugins: {
         legend: { display: false },
         tooltip: {
-          filter: (i) => i.datasetIndex === i.chart.data.datasets.length - 1,
+          filter: (i) =>
+            multi.value
+              ? !['min', 'max'].includes(i.dataset.label ?? '') &&
+                i.chart.data.datasets.findIndex((d) => d.label === i.dataset.label) ===
+                  i.datasetIndex
+              : i.datasetIndex === i.chart.data.datasets.length - 1,
           callbacks: {
             title: (items) => (items[0] ? fmtFull.format(new Date(items[0].parsed.x ?? 0)) : ''),
             label: (item) => {
+              if (multi.value) {
+                const t = item.parsed.x ?? 0
+                const all = [
+                  { points: props.points, label: props.label, unit: props.unit },
+                  ...props.extra,
+                ]
+                const s = all.find((x) => x.label === item.dataset.label)
+                if (!s) return ''
+                const p = valueAt(s.points, t, props.bars)
+                return `${s.label} : ${fmtNum(p?.[1])}${s.unit ? ' ' + s.unit : ''}`
+              }
               if (props.bars) {
                 const t = item.parsed.x ?? 0
                 const b = props.points.find((q) => t >= q[0] && t <= q[0] + props.bars)
@@ -250,6 +342,24 @@ function build() {
         y: {
           ticks: { font: { size: 10 }, maxTicksLimit: 5 },
           grid: { color: 'rgba(127,127,127,0.12)' },
+          title: {
+            display: multi.value && !!props.unit,
+            text: props.unit ?? '',
+            font: { size: 10 },
+          },
+        },
+        y2: {
+          display: hasRight.value,
+          position: 'right',
+          ticks: { font: { size: 10 }, maxTicksLimit: 5 },
+          grid: { drawOnChartArea: false },
+          title: {
+            display: hasRight.value,
+            text: [
+              ...new Set(props.extra.filter((e) => e.axis === 'right').map((e) => e.unit ?? '')),
+            ].join(' / '),
+            font: { size: 10 },
+          },
         },
       },
       onHover: (_e, els) => {
@@ -288,9 +398,9 @@ function done({ chart: c }: { chart: Chart }) {
 onMounted(build)
 onBeforeUnmount(() => chart?.destroy())
 watch(
-  () => [props.points, props.color, props.step, props.band, props.gapMs, props.bars],
+  () => [props.points, props.color, props.step, props.band, props.gapMs, props.bars, props.extra],
   () => {
-    if (!chart) return build()
+    if (!chart || multi.value) return build()
     chart.data.datasets = datasets()
     chart.update('none')
   },

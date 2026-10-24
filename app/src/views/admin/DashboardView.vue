@@ -9,7 +9,10 @@ import { fetchCatalog, type HistVar } from '@/composables/useHistory'
 import {
   defaultWidgets,
   deleteDashboard,
+  downloadText,
+  fetchDetailed,
   fetchSources,
+  toCsv,
   loadDashboards,
   loadWidgets,
   PERIODS,
@@ -145,7 +148,8 @@ watch(period, () => {
   router.replace({ query: { ...route.query, period: period.value } })
   refresh()
 })
-watch(() => [route.params.scope, route.params.id], init)
+// clé texte : un tableau neuf déclencherait le watcher à chaque changement de query (période)
+watch(() => `${route.params.scope}/${route.params.id}`, init)
 onMounted(init)
 
 // ---- édition ----
@@ -213,6 +217,54 @@ async function removeDashboard() {
   await select(dashboards.value[0]?.id ?? null)
 }
 
+// ---- export CSV ----
+const exportOpen = ref(false)
+const exportRes = ref<'shown' | 'detailed'>('detailed')
+const exportMsg = ref<string | null>(null)
+const exporting = ref(false)
+const exportSources = computed(() => widgets.value.flatMap((w) => w.sources).filter((s) => s.var))
+const exportDays = computed(() => Math.ceil((range.value[1] - range.value[0]) / 864e5))
+async function doExport() {
+  exporting.value = true
+  exportMsg.value = null
+  try {
+    const [a, b] = range.value
+    const data =
+      exportRes.value === 'detailed'
+        ? await fetchDetailed(
+            exportSources.value,
+            a,
+            Math.min(b, Date.now()),
+            (d, t) => (exportMsg.value = `lecture ${d}/${t}`),
+          )
+        : await fetchSources(exportSources.value, a, b)
+    const fmt = (t: number) =>
+      new Date(t).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+    const name = `${heading.value} - ${current.value?.name ?? 'tableau de bord'}`
+    const csv = toCsv(
+      data,
+      exportSources.value,
+      (id) => devMap.value.get(id)?.name ?? id,
+      catalogs.value,
+      [
+        `myHexa · ${name}`,
+        `Période : ${fmt(a)} → ${fmt(Math.min(b, Date.now()))} (heure locale)`,
+        exportRes.value === 'detailed'
+          ? 'Résolution : détaillée (mesures 5 min ou statut 30 min ; compteurs et volumes totalisés par heure)'
+          : 'Résolution : celle du tableau de bord (moyenne par case)',
+        '',
+      ],
+    )
+    const day = new Date(a).toISOString().slice(0, 10)
+    downloadText(`${name.replace(/[^\p{L}\p{N} _.-]+/gu, '_')} ${day} ${period.value}.csv`, csv)
+    exportMsg.value = `${csv.split('\r\n').length - 6} lignes exportées`
+  } catch (e) {
+    exportMsg.value = (e as Error).message
+  } finally {
+    exporting.value = false
+  }
+}
+
 const SPAN: Record<string, string> = {
   '1/4': 'col-span-12 sm:col-span-6 lg:col-span-3',
   '1/3': 'col-span-12 sm:col-span-6 lg:col-span-4',
@@ -269,6 +321,13 @@ const backTo = computed(() =>
             {{ p.label }}
           </button>
         </div>
+        <button
+          class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60"
+          data-testid="dash-export"
+          @click="exportOpen = !exportOpen"
+        >
+          CSV
+        </button>
         <button
           v-if="canManage && !editing"
           class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60"
@@ -339,6 +398,46 @@ const backTo = computed(() =>
       >
         Annuler
       </button>
+    </div>
+    <div
+      v-if="exportOpen"
+      class="mb-4 border border-border rounded-md bg-card/60 p-3 text-sm"
+      data-testid="export-panel"
+    >
+      <div class="font-medium mb-2">Exporter les données du tableau de bord (Excel)</div>
+      <p class="text-xs text-muted-foreground mb-2">
+        {{ exportSources.length }} variable(s), période affichée ({{ PERIODS[period]?.label }}). Une
+        ligne par date, une colonne par variable.
+      </p>
+      <div class="flex flex-col sm:flex-row gap-3 mb-3">
+        <label class="flex items-center gap-1.5"
+          ><input v-model="exportRes" type="radio" value="detailed" /> Détaillée (5 min, volumes par
+          heure)</label
+        >
+        <label class="flex items-center gap-1.5"
+          ><input v-model="exportRes" type="radio" value="shown" /> Comme affiché (plus
+          léger)</label
+        >
+      </div>
+      <p v-if="exportRes === 'detailed' && exportDays > 93" class="text-xs text-offline mb-2">
+        Période longue ({{ exportDays }} jours) : l'export détaillé peut prendre plusieurs minutes.
+      </p>
+      <div class="flex items-center gap-3">
+        <button
+          class="text-xs px-3 py-1.5 rounded border border-signal bg-signal text-primary-foreground disabled:opacity-50"
+          :disabled="exporting || !exportSources.length"
+          data-testid="export-go"
+          @click="doExport"
+        >
+          Télécharger le CSV
+        </button>
+        <span
+          v-if="exportMsg"
+          class="font-mono text-xs text-muted-foreground"
+          data-testid="export-msg"
+          >{{ exportMsg }}</span
+        >
+      </div>
     </div>
     <p
       v-if="msg"

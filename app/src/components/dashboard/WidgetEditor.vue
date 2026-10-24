@@ -60,6 +60,11 @@ function toggleStatusDevice(id: string) {
     ? w.value.sources.filter((s) => s.device !== id)
     : [...w.value.sources, { device: id, var: '' }]
 }
+const isChart = computed(() => ['curve', 'bars'].includes(w.value.type))
+function setMode(m: 'overlay' | 'separate') {
+  w.value.op = null
+  w.value.options.separate = m === 'separate'
+}
 function save() {
   if (w.value.sources.filter((s) => s.var).length < 2) w.value.op = null
   emit('save', w.value)
@@ -187,13 +192,29 @@ function save() {
           >
           <div class="mt-1 flex flex-wrap gap-1">
             <button
+              v-if="isChart"
               :class="[
                 'text-xs px-2.5 py-1 rounded border',
-                !w.op ? 'border-signal text-signal' : 'border-border text-muted-foreground',
+                !w.op && !w.options.separate
+                  ? 'border-signal text-signal'
+                  : 'border-border text-muted-foreground',
               ]"
-              @click="w.op = null"
+              data-testid="op-overlay"
+              @click="setMode('overlay')"
             >
-              Afficher chacune
+              Même graphique (2 axes si unités différentes)
+            </button>
+            <button
+              :class="[
+                'text-xs px-2.5 py-1 rounded border',
+                !w.op && (w.options.separate || !isChart)
+                  ? 'border-signal text-signal'
+                  : 'border-border text-muted-foreground',
+              ]"
+              data-testid="op-separate"
+              @click="setMode('separate')"
+            >
+              {{ isChart ? 'Graphiques séparés' : 'Afficher chacune' }}
             </button>
             <button
               v-for="(lbl, o) in OP_LABEL"
@@ -210,6 +231,13 @@ function save() {
           </div>
           <p v-if="w.op && units.length > 1" class="mt-1 text-[11px] text-offline">
             Unités différentes ({{ units.join(', ') }}) : le résultat n'aura pas de sens.
+          </p>
+          <p
+            v-if="isChart && !w.op && !w.options.separate && units.length > 2"
+            class="mt-1 text-[11px] text-offline"
+          >
+            Plus de 2 unités ({{ units.join(', ') }}) : l'axe de droite les mélange, préférer des
+            graphiques séparés.
           </p>
         </div>
       </template>

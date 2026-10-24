@@ -28,6 +28,8 @@ export interface Source {
 }
 export interface WidgetOptions {
   stat?: Stat
+  /** plusieurs variables sans opération : graphiques séparés au lieu d'une seule tuile superposée */
+  separate?: boolean
   /** décalage de période pour comparer : 'previous' (période précédente), 'year' (même période l'an dernier) */
   compare?: 'previous' | 'year' | null
   /** champs du bloc statut */
@@ -209,33 +211,37 @@ export async function deleteDashboard(id: string) {
 const isCounter = (v?: HistVar | null) => v?.category === 'counter'
 const isState = (v?: HistVar | null) => v?.category === 'state' || v?.category === 'alarm'
 
-/** Tableau de bord proposé par défaut (non enregistré tant que l'utilisateur ne l'a pas modifié). */
+/** Tableau de bord proposé par défaut (non enregistré tant que l'utilisateur ne l'a pas modifié).
+ *  Aucun agrégat inter-box automatique : additionner des mesures de même unité n'a pas forcément de sens
+ *  (ex. deux débits en série). Les sommes / moyennes ne se font que si l'utilisateur les choisit. */
 export function defaultWidgets(
   devices: { id: string }[],
   catalogs: Record<string, HistVar[]>,
   scope: Dashboard['scope'],
 ): Widget[] {
   const w: Widget[] = []
-  const all = devices.flatMap((d) => (catalogs[d.id] ?? []).map((v) => ({ d: d.id, v })))
-  const measures = all.filter(
-    (x) => !isCounter(x.v) && !isState(x.v) && x.v.category !== 'position',
-  )
-  const fine = measures.filter((x) => x.v.fine)
-  const pick = (fine.length ? fine : measures).slice(0, 4)
-  w.push({
-    type: 'status',
-    width: scope === 'device' ? '1/3' : 'full',
-    title: scope === 'device' ? 'Diagnostic' : 'Box du projet',
-    sources: devices.map((d) => ({ device: d.id, var: '' })),
-    op: null,
-    options: {
-      fields:
-        scope === 'device'
-          ? ['online', 'last_seen', 'uptime', 'version', 'ip', 'signal']
-          : ['online', 'last_seen'],
-    },
-  })
-  if (scope === 'device')
+  const measuresOf = (id: string) => {
+    const m = (catalogs[id] ?? []).filter(
+      (v) => !isCounter(v) && !isState(v) && v.category !== 'position',
+    )
+    const fine = m.filter((v) => v.fine)
+    return fine.length ? fine : m
+  }
+  const volumesOf = (id: string) =>
+    (catalogs[id] ?? []).filter((v) => isCounter(v) && /^(Volume|Energie)_/.test(v.var))
+
+  if (scope === 'device') {
+    const id = devices[0]?.id
+    if (!id) return w
+    const pick = measuresOf(id).slice(0, 4)
+    w.push({
+      type: 'status',
+      width: '1/3',
+      title: 'Diagnostic',
+      sources: [{ device: id, var: '' }],
+      op: null,
+      options: { fields: ['online', 'last_seen', 'uptime', 'version', 'ip', 'signal'] },
+    })
     w.push({
       type: 'image',
       width: '1/3',
@@ -244,25 +250,76 @@ export function defaultWidgets(
       op: null,
       options: { url: '/hai-p-gateway.png' },
     })
-  if (scope === 'device' && pick[0])
-    w.push({
-      type: 'gauge',
-      width: '1/3',
-      title: null,
-      sources: [{ device: pick[0].d, var: pick[0].v.var }],
-      op: null,
-      options: { stat: 'last' },
-    })
-  for (const x of pick)
+    if (pick[0])
+      w.push({
+        type: 'gauge',
+        width: '1/3',
+        title: null,
+        sources: [{ device: id, var: pick[0].var }],
+        op: null,
+        options: { stat: 'last' },
+      })
+    for (const v of pick)
+      w.push({
+        type: 'value',
+        width: '1/4',
+        title: null,
+        sources: [{ device: id, var: v.var }],
+        op: null,
+        options: { stat: 'last' },
+      })
+    for (const v of pick.slice(0, 2))
+      w.push({
+        type: 'curve',
+        width: '1/2',
+        title: null,
+        sources: [{ device: id, var: v.var }],
+        op: null,
+        options: {},
+      })
+    for (const v of volumesOf(id).slice(0, 2))
+      w.push({
+        type: 'bars',
+        width: '1/2',
+        title: null,
+        sources: [{ device: id, var: v.var }],
+        op: null,
+        options: {},
+      })
+    if (pick.length)
+      w.push({
+        type: 'table',
+        width: 'full',
+        title: 'Synthèse de la période',
+        sources: pick.map((v) => ({ device: id, var: v.var })),
+        op: null,
+        options: {},
+      })
+    return w
+  }
+
+  // projet / liste : une ligne par box (sa mesure principale), chacune affichée séparément
+  const list = devices.slice(0, 12)
+  w.push({
+    type: 'status',
+    width: 'full',
+    title: 'Box du projet',
+    sources: list.map((d) => ({ device: d.id, var: '' })),
+    op: null,
+    options: { fields: ['online', 'last_seen'] },
+  })
+  const main = list.map((d) => ({ d: d.id, v: measuresOf(d.id)[0] })).filter((x) => !!x.v)
+  const width: WidgetWidth = main.length <= 2 ? '1/2' : main.length === 3 ? '1/3' : '1/4'
+  for (const x of main)
     w.push({
       type: 'value',
-      width: '1/4',
+      width,
       title: null,
       sources: [{ device: x.d, var: x.v.var }],
       op: null,
       options: { stat: 'last' },
     })
-  for (const x of pick.slice(0, 2))
+  for (const x of main.slice(0, 4))
     w.push({
       type: 'curve',
       width: '1/2',
@@ -271,38 +328,25 @@ export function defaultWidgets(
       op: null,
       options: {},
     })
-  const vols = all.filter((x) => isCounter(x.v) && /^(Volume|Energie)_/.test(x.v.var))
-  if (scope !== 'device' && vols.length > 1) {
-    // agrégat inter-box : somme des volumes de même unité
-    const unit = vols[0].v.unit
-    const same = vols.filter((x) => x.v.unit === unit)
+  const vols = list.map((d) => ({ d: d.id, v: volumesOf(d.id)[0] })).filter((x) => !!x.v)
+  for (const x of vols.slice(0, 4))
     w.push({
       type: 'bars',
-      width: 'full',
-      title: `Total ${unit ?? ''}`,
-      sources: same.map((x) => ({ device: x.d, var: x.v.var })),
-      op: 'sum',
+      width: '1/2',
+      title: null,
+      sources: [{ device: x.d, var: x.v.var }],
+      op: null,
       options: {},
     })
-  } else {
-    for (const x of vols.slice(0, 2))
-      w.push({
-        type: 'bars',
-        width: '1/2',
-        title: null,
-        sources: [{ device: x.d, var: x.v.var }],
-        op: null,
-        options: {},
-      })
-  }
-  w.push({
-    type: 'table',
-    width: 'full',
-    title: 'Synthèse de la période',
-    sources: pick.map((x) => ({ device: x.d, var: x.v.var })),
-    op: null,
-    options: {},
-  })
+  if (main.length)
+    w.push({
+      type: 'table',
+      width: 'full',
+      title: 'Synthèse de la période',
+      sources: main.map((x) => ({ device: x.d, var: x.v.var })),
+      op: null,
+      options: {},
+    })
   return w
 }
 
@@ -406,4 +450,94 @@ export function fmtDuration(ms: number): string {
   const h = Math.floor(m / 60)
   if (h < 48) return `${h} h ${String(m % 60).padStart(2, '0')}`
   return `${Math.floor(h / 24)} j ${h % 24} h`
+}
+
+// ---- export CSV (Excel) ----
+
+/** Lit les sources en fenêtres de 3 jours : ts-read renvoie alors le brut (5 min) et les compteurs par heure. */
+export async function fetchDetailed(
+  sources: Source[],
+  from: number,
+  to: number,
+  onProgress?: (done: number, total: number) => void,
+): Promise<SeriesMap> {
+  const CHUNK = 3 * 864e5
+  const byDev = new Map<string, string[]>()
+  for (const s of sources)
+    if (s.var) byDev.set(s.device, [...new Set([...(byDev.get(s.device) ?? []), s.var])])
+  const jobs: { dev: string; vars: string[]; a: number; b: number }[] = []
+  for (const [dev, vars] of byDev)
+    for (let a = from; a < to; a += CHUNK) jobs.push({ dev, vars, a, b: Math.min(a + CHUNK, to) })
+  const out: SeriesMap = new Map()
+  let done = 0
+  const queue = jobs.slice()
+  async function worker() {
+    for (let j = queue.shift(); j; j = queue.shift()) {
+      const r = await fetchHistory(j.dev, j.vars, j.a, j.b)
+      for (const s of r.series) {
+        const k = j.dev + '|' + s.var
+        const cur = out.get(k)
+        const pts = s.points.filter((p) => p[0] >= j.a && p[0] < j.b)
+        if (cur) cur.points.push(...pts)
+        else out.set(k, { ...s, points: pts })
+      }
+      onProgress?.(++done, jobs.length)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, jobs.length) }, worker))
+  for (const s of out.values()) s.points.sort((x, y) => x[0] - y[0])
+  return out
+}
+
+const csvCell = (v: string) => (/[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v)
+const fmtCsvNum = (v: number | null) =>
+  v === null || !Number.isFinite(v) ? '' : String(+v.toPrecision(8)).replace('.', ',')
+const pad = (n: number) => String(n).padStart(2, '0')
+const fmtCsvDate = (t: number) => {
+  const d = new Date(t)
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** CSV « Excel France » : séparateur ;, virgule décimale, BOM UTF-8, une ligne par horodatage, une colonne par variable.
+ *  En-tête : nom de la box · variable (unité). Compteurs : total de la case (heure, jour…). */
+export function toCsv(
+  data: SeriesMap,
+  sources: Source[],
+  devName: (id: string) => string,
+  catalogs: Record<string, HistVar[]>,
+  meta: string[],
+): string {
+  const cols = sources
+    .filter((s, i, a) => s.var && a.findIndex((x) => key(x) === key(s)) === i)
+    .map((s) => {
+      const m = catalogs[s.device]?.find((v) => v.var === s.var)
+      const unit = m?.unit ?? data.get(key(s))?.unit ?? ''
+      return { k: key(s), head: `${devName(s.device)} · ${s.var}${unit ? ` (${unit})` : ''}` }
+    })
+  const rows = new Map<number, (number | null)[]>()
+  cols.forEach((c, i) => {
+    for (const p of data.get(c.k)?.points ?? []) {
+      if (p[1] === null) continue
+      const r = rows.get(p[0]) ?? rows.set(p[0], Array(cols.length).fill(null)).get(p[0])!
+      r[i] = p[1]
+    }
+  })
+  const lines = [
+    ...meta.map((m) => csvCell(m)),
+    ['Date', ...cols.map((c) => c.head)].map(csvCell).join(';'),
+  ]
+  for (const [t, r] of [...rows].sort((a, b) => a[0] - b[0]))
+    lines.push([fmtCsvDate(t), ...r.map(fmtCsvNum)].join(';'))
+  return '\ufeff' + lines.join('\r\n') + '\r\n'
+}
+
+export function downloadText(name: string, text: string, mime = 'text/csv;charset=utf-8') {
+  const url = URL.createObjectURL(new Blob([text], { type: mime }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 2000)
 }
