@@ -56,7 +56,6 @@ const props = withDefaults(
     vncHost?: string | null
     vncPort?: number | null
     canEditVnc?: boolean
-    periodicHref?: ((type: 'daily' | 'weekly') => string) | null
     historyHref?: string | null
     interventionUrl?: string | null
   }>(),
@@ -67,7 +66,6 @@ const props = withDefaults(
     vncHost: null,
     vncPort: 5900,
     canEditVnc: false,
-    periodicHref: null,
     historyHref: null,
     interventionUrl: null,
   },
@@ -381,31 +379,7 @@ async function copyTailscaleIp(ip: string) {
         </button>
       </nav>
 
-      <div v-if="periodicHref" class="flex items-center gap-2 flex-wrap">
-        <a
-          :href="periodicHref('daily')"
-          class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] border border-border text-foreground px-3 py-1.5 rounded-md hover:border-signal/60 hover:text-signal transition"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            class="size-3.5"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M3 3v18h18" />
-            <path d="M7 14l4-4 4 4 5-6" />
-          </svg>
-          Quotidien
-        </a>
-        <a
-          :href="periodicHref('weekly')"
-          class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] border border-border text-foreground px-3 py-1.5 rounded-md hover:border-signal/60 hover:text-signal transition"
-        >
-          Hebdomadaire
-        </a>
+      <div v-if="historyHref" class="flex items-center gap-2 flex-wrap">
         <a
           v-if="historyHref"
           :href="historyHref"

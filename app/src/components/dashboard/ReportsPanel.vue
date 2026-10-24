@@ -3,7 +3,6 @@
 import { onMounted, ref, watch } from 'vue'
 import {
   archiveUrl,
-  COMPARE_LABEL,
   deleteReport,
   FREQ_LABEL,
   loadRecipients,
@@ -15,7 +14,6 @@ import {
   saveReport,
   scheduleLabel,
   WEEKDAYS,
-  type Compare,
   type Frequency,
   type RecipientLite,
   type ReportRun,
@@ -239,9 +237,6 @@ const STATUS: Record<ReportRun['status'], [string, string]> = {
             {{ r.recipient_ids.length }} destinataire(s)
             <span v-if="r.attach_pdf">· PDF joint</span>
             <span v-if="r.attach_csv">· CSV joint</span>
-            <span v-if="r.compare !== 'none'"
-              >· comparaison : {{ COMPARE_LABEL[r.compare].toLowerCase() }}</span
-            >
           </div>
           <div class="text-[11px] text-muted-foreground">
             Prochain envoi : {{ r.enabled ? fmt(r.next_run_at) : '—' }}
@@ -359,13 +354,11 @@ const STATUS: Record<ReportRun['status'], [string, string]> = {
         <span class="text-xs text-muted-foreground">→ {{ scheduleLabel(edited) }}</span>
       </div>
       <div class="flex flex-wrap items-center gap-2">
-        <span class="text-xs text-muted-foreground w-24">Comparaison</span>
-        <select
-          v-model="edited.compare"
-          class="bg-card border border-border rounded-sm px-2 py-1 text-sm"
+        <span
+          class="text-xs text-muted-foreground w-full sm:w-auto"
+          data-testid="report-compare-hint"
+          >Comparaisons : celles réglées sur les blocs du tableau</span
         >
-          <option v-for="(l, c) in COMPARE_LABEL" :key="c" :value="c as Compare">{{ l }}</option>
-        </select>
         <label class="text-xs flex items-center gap-1.5 ml-2"
           ><input v-model="edited.attach_pdf" type="checkbox" data-testid="report-pdf" /> joindre le
           PDF (A4)</label

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DocumentsBlock from '@/components/dashboard/DocumentsBlock.vue'
 import DeviceMap, { type MarkerInput } from '@/components/DeviceMap.vue'
 // PROTOTYPE — rendu d'un bloc de tableau de bord (commun aux futurs rapports).
 import { computed } from 'vue'
@@ -302,6 +303,9 @@ function statusRows(d: DeviceWithStatus): [string, string, string?][] {
   return rows
 }
 
+const cmpText = computed(() =>
+  w.value.options.compare === 'year' ? 'l\u2019an dernier' : 'période précédente',
+)
 const tableRows = computed(() =>
   w.value.sources
     .filter((s) => s.var)
@@ -310,7 +314,12 @@ const tableRows = computed(() =>
       const m = meta(s.device, s.var)
       const pts = ser?.points ?? []
       const counter = m?.category === 'counter'
+      // comparaison : moyenne (ou total d'un compteur) contre la même statistique de la période de comparaison
+      const c = props.compareData?.get(key(s))
+      const main = statOf(pts, counter ? 'total' : 'mean', counter)
+      const cm = c ? statOf(c.points, counter ? 'total' : 'mean', counter) : null
       return {
+        delta: main !== null && cm !== null && cm !== 0 ? ((main - cm) / Math.abs(cm)) * 100 : null,
         label: srcLabel(s.device, s.var),
         desc: m?.description ?? '',
         unit: m?.unit ?? '',
@@ -422,8 +431,7 @@ const tableRows = computed(() =>
               class="font-mono text-[11px]"
               :class="it.delta >= 0 ? 'text-signal' : 'text-offline'"
             >
-              {{ it.delta >= 0 ? '+' : '' }}{{ fmtValue(it.delta, 1) }} % vs
-              {{ w.options.compare === 'year' ? 'l\u2019an dernier' : 'période précédente' }}
+              {{ it.delta >= 0 ? '+' : '' }}{{ fmtValue(it.delta, 1) }} % vs {{ cmpText }}
             </div>
           </div>
         </template>
@@ -504,6 +512,14 @@ const tableRows = computed(() =>
               {{ fmtValue(it.hi) }}
             </text>
           </svg>
+          <div
+            v-if="it.delta !== null"
+            class="text-center font-mono text-[11px]"
+            :class="it.delta >= 0 ? 'text-signal' : 'text-offline'"
+            data-testid="gauge-delta"
+          >
+            {{ it.delta >= 0 ? '+' : '' }}{{ fmtValue(it.delta, 1) }} % vs {{ cmpText }}
+          </div>
           <div v-if="many" class="text-center text-[11px] truncate" :title="it.desc">
             {{ it.label }}
           </div>
@@ -654,6 +670,9 @@ const tableRows = computed(() =>
       </div>
     </template>
 
+    <!-- documents des box -->
+    <DocumentsBlock v-else-if="w.type === 'document'" :ids="w.options.docs ?? []" />
+
     <!-- image -->
     <template v-else-if="w.type === 'image'">
       <img
@@ -702,6 +721,13 @@ const tableRows = computed(() =>
               <th class="font-medium py-1 px-2">Moy.</th>
               <th class="font-medium py-1 px-2">Max</th>
               <th class="font-medium py-1 pl-2">Dernière / total</th>
+              <th
+                v-if="w.options.compare"
+                class="font-medium py-1 pl-2"
+                :title="'Moyenne (total pour un compteur) vs ' + cmpText"
+              >
+                vs {{ w.options.compare === 'year' ? 'an dernier' : 'préc.' }}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -720,6 +746,22 @@ const tableRows = computed(() =>
               <td class="px-2">{{ fmtValue(r.mean) }}</td>
               <td class="px-2">{{ r.counter ? '' : fmtValue(r.max) }}</td>
               <td class="pl-2">{{ fmtValue(r.last) }}</td>
+              <td
+                v-if="w.options.compare"
+                class="pl-2"
+                :class="
+                  r.delta === null
+                    ? 'text-muted-foreground'
+                    : r.delta >= 0
+                      ? 'text-signal'
+                      : 'text-offline'
+                "
+                data-testid="table-delta"
+              >
+                {{
+                  r.delta === null ? '—' : (r.delta >= 0 ? '+' : '') + fmtValue(r.delta, 1) + ' %'
+                }}
+              </td>
             </tr>
           </tbody>
         </table>

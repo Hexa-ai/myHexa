@@ -17,6 +17,7 @@ export type WidgetType =
   | 'map'
   | 'status'
   | 'image'
+  | 'document'
   | 'states'
   | 'table'
   | 'text'
@@ -60,6 +61,8 @@ export const DEFAULT_ALARM_STATES: StateLook[] = [
 ]
 
 export interface WidgetOptions {
+  /** documents : identifiants de device_documents affichés (plans, manuels, photos…) */
+  docs?: string[]
   /** voyant : une couleur, un libellé et éventuellement une image par valeur */
   states?: StateLook[]
   /** voyant : synthèse de plusieurs états en un seul (au moins un actif / tous actifs / le plus élevé) */
@@ -107,6 +110,7 @@ export const WIDGET_LABEL: Record<WidgetType, string> = {
   map: 'Carte',
   status: 'Statut',
   image: 'Image',
+  document: 'Documents',
   states: 'Créneaux d\u2019états',
   table: 'Tableau min / moy / max',
   text: 'Texte',

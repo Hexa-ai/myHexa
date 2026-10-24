@@ -8,7 +8,6 @@ import { useAuthStore } from '@/stores/auth'
 import AdminLayout from '@/views/admin/AdminLayout.vue'
 import DevicesView from '@/views/admin/DevicesView.vue'
 import DeviceDetailView from '@/views/admin/DeviceDetailView.vue'
-import DevicePeriodicView from '@/views/admin/DevicePeriodicView.vue'
 import FleetMapView from '@/views/admin/FleetMapView.vue'
 import AlarmsView from '@/views/admin/AlarmsView.vue'
 import InterventionsView from '@/views/admin/InterventionsView.vue'
@@ -48,11 +47,31 @@ export const router = createRouter({
       children: [
         { path: 'devices', name: 'admin-devices', component: DevicesView },
         { path: 'devices/:id', name: 'admin-device-detail', component: DeviceDetailView },
-        { path: 'devices/:id/periodic', name: 'admin-device-periodic', component: DevicePeriodicView },
-        { path: 'devices/:id/history', name: 'admin-device-history', component: () => import('@/views/admin/DeviceHistoryView.vue') },
+        {
+          path: 'devices/:id/periodic',
+          redirect: (to) => ({ name: 'admin-device-history', params: { id: to.params.id } }),
+        },
+        {
+          path: 'dashboards',
+          name: 'admin-dashboards',
+          component: () => import('@/views/admin/DashboardsView.vue'),
+        },
+        {
+          path: 'devices/:id/history',
+          name: 'admin-device-history',
+          component: () => import('@/views/admin/DeviceHistoryView.vue'),
+        },
         { path: 'map', name: 'admin-map', component: FleetMapView },
-        { path: 'dashboard/:scope(device|project)/:id', name: 'admin-dashboard', component: () => import('@/views/admin/DashboardView.vue') },
-        { path: 'projects', name: 'admin-projects', component: () => import('@/views/admin/ProjectsView.vue') },
+        {
+          path: 'dashboard/:scope(device|project)/:id',
+          name: 'admin-dashboard',
+          component: () => import('@/views/admin/DashboardView.vue'),
+        },
+        {
+          path: 'projects',
+          name: 'admin-projects',
+          component: () => import('@/views/admin/ProjectsView.vue'),
+        },
         { path: 'alarms', name: 'admin-alarms', component: AlarmsView },
         { path: 'interventions', name: 'admin-interventions', component: InterventionsView },
         {
@@ -61,13 +80,42 @@ export const router = createRouter({
           component: RecipientsView,
           beforeEnter: requireAdmin,
         },
-        { path: 'alarm-recipients', name: 'admin-alarm-recipients', component: AlarmRecipientsView },
+        {
+          path: 'alarm-recipients',
+          name: 'admin-alarm-recipients',
+          component: AlarmRecipientsView,
+        },
         { path: 'updates', name: 'admin-updates', component: UpdatesView },
-        { path: 'staff/companies', name: 'staff-companies', component: StaffCompaniesView, beforeEnter: requireStaff },
-        { path: 'staff/companies/:id', name: 'staff-company-detail', component: StaffCompanyDetailView, beforeEnter: requireStaff },
-        { path: 'staff/devices', name: 'staff-devices', component: StaffDevicesView, beforeEnter: requireStaff },
-        { path: 'staff/devices/new', name: 'staff-device-new', component: StaffDeviceNewView, beforeEnter: requireStaffAdmin },
-        { path: 'staff/devices/:id/edit', name: 'staff-device-edit', component: StaffDeviceEditView, beforeEnter: requireStaffAdmin },
+        {
+          path: 'staff/companies',
+          name: 'staff-companies',
+          component: StaffCompaniesView,
+          beforeEnter: requireStaff,
+        },
+        {
+          path: 'staff/companies/:id',
+          name: 'staff-company-detail',
+          component: StaffCompanyDetailView,
+          beforeEnter: requireStaff,
+        },
+        {
+          path: 'staff/devices',
+          name: 'staff-devices',
+          component: StaffDevicesView,
+          beforeEnter: requireStaff,
+        },
+        {
+          path: 'staff/devices/new',
+          name: 'staff-device-new',
+          component: StaffDeviceNewView,
+          beforeEnter: requireStaffAdmin,
+        },
+        {
+          path: 'staff/devices/:id/edit',
+          name: 'staff-device-edit',
+          component: StaffDeviceEditView,
+          beforeEnter: requireStaffAdmin,
+        },
         { path: '', redirect: { name: 'admin-devices' } },
       ],
     },

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { uploadImage } from '@/composables/useBranding'
+import { supabase } from '@/lib/supabase'
 // PROTOTYPE — édition d'un bloc : type, titre, largeur, sources (box + variable), opération, options.
 import { computed, ref } from 'vue'
 import type { DeviceWithStatus } from '@/composables/useDevices'
@@ -47,7 +48,9 @@ async function pickImage(ev: Event, set: (url: string) => void) {
   }
 }
 const WIDTHS: WidgetWidth[] = ['1/4', '1/3', '1/2', '2/3', 'full']
-const needsVars = computed(() => !['status', 'image', 'text', 'map'].includes(w.value.type))
+const needsVars = computed(
+  () => !['status', 'image', 'text', 'map', 'document'].includes(w.value.type),
+)
 const multi = computed(() => props.devices.length > 1)
 
 const newDev = ref(props.devices[0]?.id ?? '')
@@ -80,7 +83,29 @@ function setType(t: WidgetType) {
     w.value.sources = props.devices.map((d) => ({ device: d.id, var: '' }))
     w.value.options.fields ??= ['online', 'last_seen', 'uptime', 'version']
   } else if (['image', 'text'].includes(t)) w.value.sources = []
-  else w.value.sources = w.value.sources.filter((s) => s.var)
+  else if (t === 'document') {
+    w.value.sources = []
+    if (w.value.width === '1/4' || w.value.width === '1/3') w.value.width = '1/2'
+    w.value.options.docs ??= []
+    void loadDocs()
+  } else w.value.sources = w.value.sources.filter((s) => s.var)
+}
+// documents des box du tableau (plans, manuels, photos) : choix libre, affichés dans le bloc
+const docs = ref<{ id: string; device_id: string; name: string; kind: string }[]>([])
+async function loadDocs() {
+  const ids = props.devices.map((d) => d.id)
+  if (!ids.length) return
+  const { data } = await supabase
+    .from('device_documents')
+    .select('id, device_id, name, kind')
+    .in('device_id', ids)
+    .order('name')
+  docs.value = data ?? []
+}
+if (w.value.type === 'document') void loadDocs()
+function toggleDoc(id: string) {
+  const a = w.value.options.docs ?? []
+  w.value.options.docs = a.includes(id) ? a.filter((x) => x !== id) : [...a, id]
 }
 function toggleField(f: string) {
   const a = w.value.options.fields ?? []
@@ -359,6 +384,22 @@ function save() {
       </template>
 
       <!-- options -->
+      <div v-if="w.type === 'table'" class="grid sm:grid-cols-2 gap-3 mb-3">
+        <label class="text-sm">
+          <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+            >Comparer avec</span
+          >
+          <select
+            data-testid="widget-compare-table"
+            v-model="w.options.compare"
+            class="mt-1 w-full bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+          >
+            <option :value="null">rien</option>
+            <option value="previous">période précédente</option>
+            <option value="year">même période l'an dernier</option>
+          </select>
+        </label>
+      </div>
       <div v-if="['value', 'gauge'].includes(w.type)" class="grid sm:grid-cols-2 gap-3 mb-3">
         <label class="text-sm">
           <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
@@ -371,11 +412,12 @@ function save() {
             <option v-for="(lbl, s) in STAT_LABEL" :key="s" :value="s as Stat">{{ lbl }}</option>
           </select>
         </label>
-        <label v-if="w.type === 'value'" class="text-sm">
+        <label class="text-sm">
           <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
             >Comparer avec</span
           >
           <select
+            data-testid="widget-compare"
             v-model="w.options.compare"
             class="mt-1 w-full bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
           >
@@ -548,6 +590,34 @@ function save() {
             </label>
           </div>
         </template>
+      </div>
+      <div v-if="w.type === 'document'" class="mb-3" data-testid="docs-editor">
+        <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
+          Documents à afficher
+        </div>
+        <p v-if="!docs.length" class="text-xs text-muted-foreground">
+          Aucun document sur ces box (à ajouter depuis la fiche de la box).
+        </p>
+        <div v-for="d in devices" :key="d.id">
+          <template v-if="docs.some((x) => x.device_id === d.id)">
+            <div v-if="devices.length > 1" class="font-mono text-[10px] text-muted-foreground mt-2">
+              {{ d.name }}
+            </div>
+            <label
+              v-for="x in docs.filter((x) => x.device_id === d.id)"
+              :key="x.id"
+              class="flex items-center gap-2 text-sm py-0.5"
+            >
+              <input
+                type="checkbox"
+                :checked="(w.options.docs ?? []).includes(x.id)"
+                data-testid="doc-check"
+                @change="toggleDoc(x.id)"
+              />
+              <span class="truncate">{{ x.name }}</span>
+            </label>
+          </template>
+        </div>
       </div>
       <label v-if="w.type === 'image'" class="block text-sm mb-3">
         <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"

@@ -26,6 +26,7 @@ import {
 import DashboardWidget from '@/components/dashboard/DashboardWidget.vue'
 import WidgetEditor from '@/components/dashboard/WidgetEditor.vue'
 import ReportsPanel from '@/components/dashboard/ReportsPanel.vue'
+import DashboardNavDrawer from '@/components/dashboard/DashboardNavDrawer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -326,6 +327,20 @@ const SPAN: Record<string, string> = {
   '2/3': 'col-span-12 lg:col-span-8',
   full: 'col-span-12',
 }
+// navigation : arborescence (panneau) + fil d'Ariane Tableaux de bord > projet > box
+const treeOpen = ref(false)
+const treeVersion = ref(0)
+watch(dashboards, () => treeVersion.value++)
+const navCurrent = computed(() => ({
+  scope: scope.value,
+  id: targetId.value,
+  d: current.value?.id ?? null,
+}))
+const parentProject = computed(() =>
+  scope.value === 'device'
+    ? (projects.value.find((p) => p.device_ids.includes(targetId.value)) ?? null)
+    : null,
+)
 const backTo = computed(() =>
   scope.value === 'device'
     ? { name: 'admin-device-detail', params: { id: targetId.value } }
@@ -341,12 +356,53 @@ const backTo = computed(() =>
       isFull && 'bg-background overflow-auto h-full',
     ]"
   >
-    <RouterLink
-      :to="backTo"
-      class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-signal"
+    <nav
+      v-if="!isFull"
+      class="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+      data-testid="dash-breadcrumb"
     >
-      ← {{ scope === 'device' ? 'retour à la box' : 'retour au projet' }}
-    </RouterLink>
+      <button
+        class="inline-flex items-center gap-1.5 px-2 py-1 -ml-2 rounded border border-transparent hover:border-border hover:text-foreground"
+        data-testid="dash-tree-open"
+        title="Arborescence des tableaux de bord"
+        @click="treeOpen = true"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          class="size-3.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+        >
+          <path d="M4 6h16M4 12h10M4 18h13" />
+        </svg>
+        Arborescence
+      </button>
+      <RouterLink :to="{ name: 'admin-dashboards' }" class="hover:text-signal"
+        >Tableaux de bord</RouterLink
+      >
+      <template v-if="parentProject">
+        <span>›</span>
+        <RouterLink
+          :to="{ name: 'admin-dashboard', params: { scope: 'project', id: parentProject.id } }"
+          class="hover:text-signal normal-case tracking-normal"
+          data-testid="dash-crumb-project"
+          >{{ parentProject.name }}</RouterLink
+        >
+      </template>
+      <span>›</span>
+      <span class="text-foreground normal-case tracking-normal">{{ heading }}</span>
+      <RouterLink :to="backTo" class="ml-auto hover:text-signal">
+        {{ scope === 'device' ? 'fiche de la box' : 'fiche du projet' }} →
+      </RouterLink>
+    </nav>
+    <DashboardNavDrawer
+      :open="treeOpen"
+      :current="navCurrent"
+      :version="treeVersion"
+      @close="treeOpen = false"
+    />
     <header class="mt-3 mb-4 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
       <div class="min-w-0">
         <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-1">
@@ -358,7 +414,7 @@ const backTo = computed(() =>
         <select
           v-if="dashboards.length > 1 || (dashboards.length && proposed)"
           :value="current?.id ?? ''"
-          class="bg-card border border-border rounded-sm text-xs font-mono px-2 py-1.5"
+          class="md:hidden bg-card border border-border rounded-sm text-xs font-mono px-2 py-1.5"
           data-testid="dash-select"
           @change="select(($event.target as HTMLSelectElement).value || null)"
         >
@@ -410,12 +466,24 @@ const backTo = computed(() =>
         </button>
         <button
           v-if="!editing"
-          class="hidden md:inline-flex text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60"
+          class="hidden md:inline-flex items-center justify-center size-[30px] rounded border border-border hover:border-signal/60 text-muted-foreground hover:text-foreground"
+          :aria-label="isFull ? 'Quitter le plein écran' : 'Plein écran'"
           :title="isFull ? 'Quitter le plein écran (Échap)' : 'Afficher le tableau en plein écran'"
           data-testid="dash-fullscreen"
           @click="toggleFull"
         >
-          {{ isFull ? 'Quitter' : 'Plein écran' }}
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path v-if="!isFull" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+            <path v-else d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+          </svg>
         </button>
         <button
           v-if="canManage && !editing"
@@ -438,6 +506,26 @@ const backTo = computed(() =>
     </div>
 
     <!-- barre d'édition -->
+    <!-- onglets : plusieurs tableaux de bord pour la même box / le même projet -->
+    <nav
+      v-if="!editing && dashboards.length > 1"
+      class="hidden md:flex gap-1 border-b border-border mb-4 overflow-x-auto"
+      data-testid="dash-tabs"
+    >
+      <button
+        v-for="d in dashboards"
+        :key="d.id"
+        :class="[
+          'px-3 py-2 text-sm whitespace-nowrap border-b-2 -mb-px transition',
+          current?.id === d.id
+            ? 'border-signal text-foreground'
+            : 'border-transparent text-muted-foreground hover:text-foreground',
+        ]"
+        @click="select(d.id ?? null)"
+      >
+        {{ d.name }}
+      </button>
+    </nav>
     <div
       v-if="editing && current"
       class="mb-4 border border-signal/40 rounded-md bg-card/60 p-3 flex flex-col sm:flex-row sm:items-center gap-2"

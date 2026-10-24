@@ -47,19 +47,8 @@ async function loadInterventionCounts() {
   openInterventionsByDevice.value = map
 }
 
-// Set des device_id ayant au moins un rapport périodique remonté.
-const devicesWithReports = ref<Set<string>>(new Set())
-
-async function loadDevicesWithReports() {
-  const { data } = await supabase
-    .from('reports')
-    .select('device_id')
-    .in('type', ['daily', 'weekly'])
-  devicesWithReports.value = new Set((data ?? []).map((row) => row.device_id))
-}
-
 async function loadAll() {
-  await Promise.all([load(), loadInterventionCounts(), loadDevicesWithReports(), loadProjects()])
+  await Promise.all([load(), loadInterventionCounts(), loadProjects()])
 }
 
 const { reachable: tsReachable, probe: probeTs } = useTailscaleReachable()
@@ -68,8 +57,8 @@ function openDevice(id: string) {
   router.push({ name: 'admin-device-detail', params: { id } })
 }
 
-function openReports(id: string) {
-  router.push({ name: 'admin-device-periodic', params: { id }, query: { type: 'daily' } })
+function openDashboard(id: string) {
+  router.push({ name: 'admin-dashboard', params: { scope: 'device', id } })
 }
 
 const qrModalDevice = ref<{ id: string; name: string | null } | null>(null)
@@ -124,7 +113,6 @@ interface Row {
   vnc: string | null
   shared: boolean
   sharedFrom: string | null
-  hasReports: boolean
   project: string | null
 }
 
@@ -147,7 +135,6 @@ const rows = computed<Row[]>(() => {
       vnc: online ? vncUrl(d.vnc_host, d.vnc_port) : null,
       shared: eff !== null && d.company_id !== null && d.company_id !== eff,
       sharedFrom: d.company_name,
-      hasReports: devicesWithReports.value.has(d.id),
       project: projectOf.value.get(d.id)?.name ?? null,
     }
   })
@@ -508,14 +495,13 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
                 >
                   …
                 </span>
-                <!-- Reports button: masqué tant qu'aucun rapport daily/weekly
-                     n'est remonté (has_periodic_reports côté RPC) -->
+                <!-- tableau de bord de la box -->
                 <button
-                  v-if="r.hasReports"
                   type="button"
-                  title="Rapports quotidiens / hebdomadaires"
+                  title="Tableau de bord"
+                  data-testid="device-dashboard"
                   class="inline-flex items-center justify-center size-7 border border-border text-muted-foreground rounded-md hover:border-signal/60 hover:text-signal transition"
-                  @click.stop="openReports(r.id)"
+                  @click.stop="openDashboard(r.id)"
                 >
                   <svg
                     viewBox="0 0 24 24"
@@ -526,8 +512,10 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
                     stroke-linecap="round"
                     stroke-linejoin="round"
                   >
-                    <path d="M3 3v18h18" />
-                    <path d="M7 14l4-4 4 4 5-6" />
+                    <rect x="3" y="3" width="7" height="9" rx="1" />
+                    <rect x="14" y="3" width="7" height="5" rx="1" />
+                    <rect x="14" y="12" width="7" height="9" rx="1" />
+                    <rect x="3" y="16" width="7" height="5" rx="1" />
                   </svg>
                 </button>
                 <!-- QR intervention button -->
@@ -659,12 +647,11 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
             </a>
           </template>
           <button
-            v-if="r.hasReports"
             type="button"
             class="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] border border-border text-foreground px-2.5 py-1 rounded-md"
-            @click.stop="openReports(r.id)"
+            @click.stop="openDashboard(r.id)"
           >
-            Rapports
+            Tableau de bord
           </button>
         </div>
       </button>

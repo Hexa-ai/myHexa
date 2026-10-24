@@ -1,7 +1,7 @@
 // Edge Function: report-run (PROTOTYPE, myHexa-test)
 // Génère (et envoie) les rapports périodiques à partir des blocs d'un tableau de bord.
 //   POST x-cron-secret {}                                    -> traite les modèles échus (cron toutes les 15 min)
-//   POST JWT {action:'preview', dashboard_id, frequency, compare?, at?}  -> HTML (images en data URI) + CSV, rien n'est envoyé
+//   POST JWT {action:'preview', dashboard_id, frequency, at?} (comparaison : réglée sur chaque bloc)  -> HTML (images en data URI) + CSV, rien n'est envoyé
 //   POST JWT {action:'run', template_id}                      -> génère + envoie maintenant (admin de l'entreprise)
 // Mail : HTML une colonne (600 px), graphiques en PNG inline (cid), CSV en pièce jointe en option.
 // Sur un projet sans configuration Gmail (test), le rapport est archivé avec le statut « not_sent ».
@@ -44,20 +44,25 @@ interface Device {
 interface Ctx {
   from: number
   to: number
-  cmpFrom: number | null
-  cmpTo: number | null
+  /** périodes de comparaison demandées par les blocs (option « comparer avec » du bloc) */
+  cmpRanges: Map<string, [number, number]>
   tz: string
   devices: Map<string, Device>
   meta: Map<string, Map<string, VarMeta>>
   data: Map<string, Series>
-  cmp: Map<string, Series>
+  cmp: Map<string, Map<string, Series>>
   images: { cid: string; png: Uint8Array; type?: string }[]
   multi: boolean
 }
 
 // ---------- période ----------
-function shift(from: number, to: number, compare: string): [number, number] | null {
-  if (compare === 'previous') return [from - (to - from), from]
+// période précédente = la vraie période calendaire d'avant (veille, semaine d'avant, mois d'avant) ;
+// an dernier = mêmes dates un an plus tôt
+async function shift(from: number, to: number, compare: string, freq: string, tz: string): Promise<[number, number] | null> {
+  if (compare === 'previous') {
+    const [a, b] = await periodFor(freq, tz, new Date(from).toISOString())
+    return b === from ? [a, b] : [from - (to - from), from]
+  }
   if (compare === 'year') {
     const y = (t: number) => {
       const d = new Date(t)
@@ -68,6 +73,7 @@ function shift(from: number, to: number, compare: string): [number, number] | nu
   }
   return null
 }
+const CMP_LABEL: Record<string, string> = { previous: 'période préc.', year: 'an dernier' }
 
 // ---------- données ----------
 async function loadAll(widgets: Widget[], ctx: Ctx) {
@@ -78,9 +84,10 @@ async function loadAll(widgets: Widget[], ctx: Ctx) {
       const meta = ctx.meta.get(dev) ?? new Map()
       const r = await readSeries(admin, admin, dev, [...vars], ctx.from, ctx.to, meta, { tz: ctx.tz })
       for (const s of r.series) ctx.data.set(dev + '|' + s.var, s)
-      if (ctx.cmpFrom !== null) {
-        const c = await readSeries(admin, admin, dev, [...vars], ctx.cmpFrom, ctx.cmpTo!, meta, { tz: ctx.tz })
-        for (const s of c.series) ctx.cmp.set(dev + '|' + s.var, s)
+      for (const [k, [a, b]] of ctx.cmpRanges) {
+        const c = await readSeries(admin, admin, dev, [...vars], a, b, meta, { tz: ctx.tz })
+        const m = ctx.cmp.get(k) ?? ctx.cmp.set(k, new Map()).get(k)!
+        for (const s of c.series) m.set(dev + '|' + s.var, s)
       }
     }),
   )
@@ -215,9 +222,13 @@ const DEFAULT_STATES = [
 ]
 const empty = (title: string, t = 'pas de données sur la période'): Block => ({ title, parts: [{ k: 'text', t, color: '#9ca3af' }] })
 
-async function renderWidget(w: Widget, ctx: Ctx, cmpLabel: string): Promise<Block | null> {
+async function renderWidget(w: Widget, ctx: Ctx): Promise<Block | null> {
   const ser = seriesOf(w, ctx.data, ctx)
-  const cser = seriesOf(w, ctx.cmp, ctx)
+  // comparaison réglée sur le bloc (la même qu'à l'écran)
+  const cmpKind = w.options.compare && ctx.cmpRanges.has(w.options.compare) ? w.options.compare : null
+  const cmpMap = cmpKind ? ctx.cmp.get(cmpKind) ?? new Map<string, Series>() : new Map<string, Series>()
+  const cmpLabel = cmpKind ? CMP_LABEL[cmpKind] : ''
+  const cser = seriesOf(w, cmpMap, ctx)
   const title = w.title || (ser.length === 1 ? ser[0].label : '') || ''
   const span = ctx.to - ctx.from
   switch (w.type) {
@@ -274,7 +285,7 @@ async function renderWidget(w: Widget, ctx: Ctx, cmpLabel: string): Promise<Bloc
         return { title: title || gs[0].label, parts: [{ k: 'imgs', list, caption: `${statLabel} de la période` }] }
       }
       if (!ser.length) return empty(title || 'Valeur', 'pas de données')
-      const cmp = ctx.cmpFrom !== null
+      const cmp = !!cmpKind
       return {
         title: title || statLabel,
         sub: statLabel + ' de la période',
@@ -367,12 +378,12 @@ async function renderWidget(w: Widget, ctx: Ctx, cmpLabel: string): Promise<Bloc
       return parts.length ? { title: title || 'Créneaux d’états', parts } : empty(title || 'Créneaux d’états', 'pas de données')
     }
     case 'table': {
-      const cmp = ctx.cmpFrom !== null
+      const cmp = !!cmpKind
       const rows = w.sources
         .filter((s) => s.var)
         .map((s) => {
           const d = ctx.data.get(s.device + '|' + s.var)
-          const c = ctx.cmp.get(s.device + '|' + s.var)
+          const c = cmpMap.get(s.device + '|' + s.var)
           const pts = (d?.points ?? []) as Pt[]
           const counter = isCounter(d)
           const main = statOf(pts, counter ? 'total' : 'mean')
@@ -427,6 +438,8 @@ async function renderWidget(w: Widget, ctx: Ctx, cmpLabel: string): Promise<Bloc
     }
     case 'text':
       return { title: title || '', parts: [{ k: 'text', t: w.options.text ?? '' }] }
+    case 'document':
+      return null // documents : consultables dans le portail, pas dans le rapport
     case 'image':
       return w.options.url && /^https:\/\//.test(w.options.url) ? { title: title || '', parts: [{ k: 'url', url: w.options.url }] } : null
   }
@@ -513,7 +526,7 @@ async function fetchImage(url: string): Promise<Uint8Array | null> {
 }
 
 // ---------- génération complète ----------
-async function buildReport(dash: any, freq: string, compare: string, tz: string, from: number, to: number, reportName: string) {
+async function buildReport(dash: any, freq: string, tz: string, from: number, to: number, reportName: string) {
   const { data: widgets } = await admin.from('dashboard_widgets').select('type, width, title, sources, op, options').eq('dashboard_id', dash.id).order('position')
   const { data: company } = await admin.from('companies').select('name, logo_path').eq('id', dash.company_id).single()
   const logo = await loadLogo(company?.logo_path)
@@ -539,12 +552,15 @@ async function buildReport(dash: any, freq: string, compare: string, tz: string,
   const { data: cat } = await admin.from('ts_vars').select('device_id, var, unit, category, description').in('device_id', devIds)
   const meta = new Map<string, Map<string, VarMeta>>()
   for (const c of cat ?? []) (meta.get(c.device_id) ?? meta.set(c.device_id, new Map()).get(c.device_id)!).set(c.var, c)
-  const cmpR = shift(from, to, compare)
+  const cmpRanges = new Map<string, [number, number]>()
+  for (const k of new Set(ws.map((w) => w.options?.compare).filter((x): x is string => !!x && x in CMP_LABEL))) {
+    const r = await shift(from, to, k, freq, tz)
+    if (r) cmpRanges.set(k, r)
+  }
   const ctx: Ctx = {
     from,
     to,
-    cmpFrom: cmpR?.[0] ?? null,
-    cmpTo: cmpR?.[1] ?? null,
+    cmpRanges,
     tz,
     devices: new Map((devs ?? []).map((d: any) => [d.id, d])),
     meta,
@@ -555,7 +571,6 @@ async function buildReport(dash: any, freq: string, compare: string, tz: string,
   }
   if (dash.scope === 'device') scopeName = ctx.devices.get(dash.device_id)?.name ?? ''
   await loadAll(ws, ctx)
-  const cmpLabel = compare === 'year' ? 'an dernier' : 'période préc.'
   const fmtD = new Intl.DateTimeFormat('fr-FR', { timeZone: tz, dateStyle: 'long' })
   const periodLabel =
     freq === 'daily' ? fmtD.format(from)
@@ -564,7 +579,7 @@ async function buildReport(dash: any, freq: string, compare: string, tz: string,
   const blocks: Block[] = []
   for (const w of ws) {
     try {
-      const b = await renderWidget(w, ctx, cmpLabel)
+      const b = await renderWidget(w, ctx)
       if (b) blocks.push(b)
     } catch (e) {
       blocks.push({ title: w.title ?? w.type, parts: [{ k: 'text', t: `bloc non généré : ${(e as Error).message}`, color: '#b91c1c' }] })
@@ -585,7 +600,6 @@ async function buildReport(dash: any, freq: string, compare: string, tz: string,
   <div style="font:600 11px Arial,sans-serif;letter-spacing:2px;color:#00a88a;text-transform:uppercase">${esc(company?.name ?? '')}</div>
   <div style="font:600 22px Arial,sans-serif;color:#111827;margin-top:4px">${esc(title)}</div>
   <div style="font:14px Arial,sans-serif;color:#374151;margin-top:2px">${scopeName && scopeName !== title ? esc(scopeName) + ' — ' : ''}${esc(periodLabel)}</div>
-  ${ctx.cmpFrom !== null ? `<div style="font:12px Arial,sans-serif;color:#6b7280;margin-top:2px">Comparaison : ${compare === 'year' ? 'même période l’an dernier' : 'période précédente'}</div>` : ''}
 </td></tr>
 ${body}
 <tr><td style="padding:6px 0 0 0;font:11px Arial,sans-serif;color:#9ca3af">Généré avec myHexa · Hexa-AI. Heures en ${esc(tz)}.
@@ -594,13 +608,11 @@ ${body}
   const fmtF = new Intl.DateTimeFormat('fr-FR', { timeZone: tz, dateStyle: 'short', timeStyle: 'short' })
   const csv = toCsv(ctx, ws, [`myHexa · ${scopeName} · ${reportName}`, `Période : ${fmtF.format(from)} → ${fmtF.format(to)} (${tz})`, ''])
   if (logo) ctx.images.push({ cid: 'logo', png: logo.bytes, type: logo.type })
-  const cmpNote = ctx.cmpFrom !== null ? `Comparaison : ${compare === 'year' ? 'même période l’an dernier' : 'période précédente'}` : undefined
   const pdf = () =>
     buildPdf({
       brand: company?.name ?? '',
       title,
       subtitle: `${scopeName && scopeName !== title ? scopeName + ' — ' : ''}${periodLabel}`,
-      note: cmpNote,
       footer: `Généré avec myHexa · Hexa-AI, le ${fmtF.format(Date.now())} · heures en ${tz}`,
       logo: logo?.bytes,
       blocks: blocks as PdfBlock[],
@@ -637,7 +649,7 @@ async function runTemplate(tpl: any, trigger: 'cron' | 'manual') {
   let pdfBytes: Uint8Array | null = null
   let pdfPath = ''
   try {
-    const r = await buildReport(dash, tpl.frequency, tpl.compare, tpl.tz, from, to, tpl.name)
+    const r = await buildReport(dash, tpl.frequency, tpl.tz, from, to, tpl.name)
     html = r.html
     csv = r.csv
     pdfBytes = await r.pdf()
@@ -742,7 +754,7 @@ Deno.serve(async (req) => {
       const tz = body.tz || 'Europe/Paris'
       const [from, to] = await periodFor(freq, tz, body.at || new Date().toISOString())
       const t0 = Date.now()
-      const r = await buildReport(dash, freq, body.compare || 'none', tz, from, to, body.name || FREQ_LABEL[freq])
+      const r = await buildReport(dash, freq, tz, from, to, body.name || FREQ_LABEL[freq])
       const pdf = body.pdf ? b64(await r.pdf()) : undefined
       return ok({ subject: r.subject, html: inlineImages(r.html, r.images), csv: r.csv, pdf, images: r.images.length, from, to, ms: Date.now() - t0, mail: mailerConfigured() })
     }

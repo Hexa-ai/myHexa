@@ -116,7 +116,8 @@ begin
       on conflict (device_id, var) do update
         set unit = coalesce(excluded.unit, ts_vars.unit), description = coalesce(excluded.description, ts_vars.description);
       insert into ts_dirty (device_id, day) values (new.device_id, v_day) on conflict (device_id, day) do update set since = now();
-    elsif new.type::text in ('daily', 'weekly') and new.period_start is not null then
+    -- seul le rapport journalier alimente l'historique (avec le statut) ; l'hebdo n'est plus lu
+    elsif new.type::text = 'daily' and new.period_start is not null then
       for d in 0 .. greatest(coalesce(new.period_end - new.period_start, 1) - 1, 0) loop
         insert into ts_dirty (device_id, day) values (new.device_id, new.period_start + d) on conflict (device_id, day) do update set since = now();
       end loop;

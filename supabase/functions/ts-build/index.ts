@@ -1,7 +1,9 @@
 // Edge Function: ts-build (PROTOTYPE, myHexa-test)
 // Construit l'historique Parquet des jours marqués dans ts_dirty :
-//   1. brut du jour  raw/.../YYYY-MM-DD.parquet  = rapport journalier (courbes 5 min, compteurs horaires, changements
-//      d'état, stats min/moy/max de toutes les favorites) + rapport hebdo (horaire) + statuts 30 min du tampon.
+//   1. brut du jour  raw/.../YYYY-MM-DD.parquet  = deux sources seulement :
+//        - le rapport journalier (courbes 5 min, compteurs horaires, changements d'état, stats min/moy/max) ;
+//        - les statuts 30 min du tampon (toutes les variables numériques).
+//      Le rapport hebdo n'est pas lu (doublon). Volumes / énergies : intégration de la courbe retenue, sans estimation.
 //      Fusion avec le fichier existant : une source présente remplace la même source, les autres sont conservées
 //      (un rapport purgé de la base reste dans le Parquet).
 //   2. agrégats du jour fusionnés dans : agg/1m (semaine ISO), agg/1h (mois), agg/1d (année).
@@ -104,28 +106,6 @@ function fromDaily(payload: Json, dayStart: number, meta: Map<string, VarMeta>):
   return out
 }
 
-/** Lignes du jour issues d'un rapport hebdo (courbes horaires, compteurs journaliers). */
-function fromWeekly(payload: Json, dayStart: number, meta: Map<string, VarMeta>): TsRow[] {
-  const out: TsRow[] = []
-  const vars = Array.isArray(payload.variables) ? (payload.variables as Json[]) : []
-  for (const v of vars) {
-    const name = typeof v.name === 'string' ? v.name : null
-    const chart = (v.chart ?? {}) as Json
-    const cat = String(v.category ?? 'measure').toLowerCase()
-    if (!name || cat === 'position') continue
-    const pts = Array.isArray(chart.points) ? (chart.points as Json[]) : []
-    for (const p of pts) {
-      const t = Number(p.ts)
-      const val = num(p.value)
-      if (val === null || t < dayStart || t >= dayStart + DAY) continue
-      const daily = chart.type === 'bar' && pts.length <= 7
-      out.push({ ts: t, var: name, v: val, vmin: null, vmax: null, n: 1, res: daily ? 86400 : 3600, src: daily ? SRC.STATS : SRC.WEEKLY })
-    }
-    if (!meta.has(name)) meta.set(name, { category: cat, unit: (v.unit as string) || null, description: (v.description as string) || null, res: 3600 })
-  }
-  return out
-}
-
 /** Remplace dans `old` les (variable, source) présents dans `fresh`. */
 function mergeSources(old: TsRow[], fresh: TsRow[]): TsRow[] {
   const keys = new Set(fresh.map((r) => r.var + '|' + r.src))
@@ -156,17 +136,17 @@ function derivedName(src: string, kind: 'flow' | 'power') {
 }
 
 /** Intègre chaque débit / puissance du jour en total horaire (trapèzes, pas de trou > max(15 min, 3 × pas médian),
- *  valeurs négatives ramenées à 0). Sans courbe : estimation journalière = moyenne du jour × 24 h. */
+ *  valeurs négatives ramenées à 0). Sans courbe exploitable : pas de volume (pas d'estimation). */
 function deriveIntegrals(raw: TsRow[], meta: Map<string, VarMeta>, dayStart: number): TsRow[] {
   const out: TsRow[] = []
-  const { curve, stats } = bestCurve(raw.filter((r) => r.src !== SRC.DERIVED))
+  const { curve } = bestCurve(raw.filter((r) => r.src !== SRC.DERIVED))
   const existing = new Set(raw.filter((r) => r.src !== SRC.DERIVED).map((r) => r.var.toLowerCase()))
   for (const [name, m] of meta) {
     const f = UNIT_FACTOR[normUnit(m.unit)]
     if (!f || m.category === 'counter') continue
     const [factor, outUnit, kind] = f
     const dn = derivedName(name, kind)
-    if (existing.has(dn.toLowerCase())) continue // déjà fourni par le rapport (derived_payload)
+    if (existing.has(dn.toLowerCase())) continue // la box fournit déjà ce volume
     const pts = curve.filter((r) => r.var === name && r.v !== null && r.res > 0).sort((a, b) => a.ts - b.ts)
     if (pts.length >= 2) {
       const dts = pts.slice(1).map((p, i) => (p.ts - pts[i].ts) / 1000).sort((a, b) => a - b)
@@ -186,16 +166,6 @@ function deriveIntegrals(raw: TsRow[], meta: Map<string, VarMeta>, dayStart: num
         description: `Dérivé de '${name}' par intégration (pas ${Math.round(dts[Math.floor(dts.length / 2)] / 60)} min)`,
         res: 3600,
       })
-    } else {
-      const st = stats.find((r) => r.var === name && r.v !== null)
-      if (!st) continue
-      out.push({ ts: dayStart, var: dn, v: Math.max(st.v!, 0) * 86400 * factor, vmin: null, vmax: null, n: 1, res: 86400, src: SRC.DERIVED })
-      meta.set(dn, {
-        category: 'counter',
-        unit: outUnit,
-        description: `Estimé : moyenne journalière de '${name}' × 24 h (pas de courbe)`,
-        res: 86400,
-      })
     }
   }
   return out
@@ -209,14 +179,12 @@ async function buildDay(device: string, company: string, day: string) {
   // fuseau : celui du dernier rapport journalier, sinon du statut, sinon Paris
   const { data: reps } = await admin
     .from('reports')
-    .select('type, period_start, period_end, received_at, payload, derived_payload')
+    .select('type, period_start, period_end, received_at, payload')
     .eq('device_id', device)
-    .in('type', ['daily', 'weekly'])
-    .lte('period_start', day)
-    .gt('period_end', day)
+    .eq('type', 'daily')
+    .eq('period_start', day)
     .order('received_at', { ascending: false })
   const daily = (reps ?? []).find((r) => r.type === 'daily' && r.period_start === day)
-  const weekly = (reps ?? []).filter((r) => r.type === 'weekly')
   let dayStart: number
   const tr = (daily?.payload as Json | undefined)?.time_range as Json | undefined
   if (tr && Number(tr.start_ms)) dayStart = Number(tr.start_ms)
@@ -228,16 +196,6 @@ async function buildDay(device: string, company: string, day: string) {
 
   const fresh: TsRow[] = []
   if (daily) fresh.push(...fromDaily(daily.payload as Json, dayStart, meta))
-  // volumes / énergies intégrés par la base (reports.derived_payload, Debit_* -> Volume_*) : compteurs horaires
-  if (daily?.derived_payload) fresh.push(...fromDaily(daily.derived_payload as Json, dayStart, meta))
-  for (const w of weekly) {
-    const rows = [
-      ...fromWeekly(w.payload as Json, dayStart, meta),
-      ...(w.derived_payload ? fromWeekly(w.derived_payload as Json, dayStart, meta) : []),
-    ]
-    // une variable déjà couverte par le journalier ne prend pas l'hebdo
-    fresh.push(...rows.filter((r) => !fresh.some((f) => f.var === r.var && f.src === (r.src === SRC.STATS ? SRC.STATS : SRC.REPORT))))
-  }
   const { data: buf } = await admin.from('ts_buffer').select('var, ts, v').eq('device_id', device).eq('day', day).limit(50000)
   for (const b of buf ?? []) {
     fresh.push({ ts: Date.parse(b.ts as string), var: b.var as string, v: b.v as number, vmin: null, vmax: null, n: 1, res: 1800, src: SRC.STATUS })
@@ -247,7 +205,8 @@ async function buildDay(device: string, company: string, day: string) {
 
   const rawPath = `raw/${base}/year=${y}/month=${m}/${day}.parquet`
   const oldRaw = await download(rawPath)
-  let raw = mergeSources(oldRaw ? await readAll(oldRaw) : [], fresh)
+  // anciens fichiers : on retire les points hebdo (source abandonnée)
+  let raw = mergeSources(oldRaw ? (await readAll(oldRaw)).filter((r) => r.src !== SRC.WEEKLY) : [], fresh)
   if (!raw.length) return { day, rows: 0 }
   // les unités des anciennes variables viennent du catalogue
   const { data: cat } = await admin.from('ts_vars').select('var, category, unit, description').eq('device_id', device)
