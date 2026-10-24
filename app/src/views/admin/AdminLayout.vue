@@ -62,7 +62,7 @@ const breadcrumb = computed(() => {
     'admin-alarm-recipients': "destinataires d'alarme",
     'staff-companies': 'staff / companies',
     'staff-company-detail': 'staff / company',
-    'staff-devices': 'staff / devices',
+    'staff-devices': 'parc des box',
     'admin-updates': 'mises à jour',
     'staff-device-new': 'staff / new device',
   }
@@ -155,7 +155,12 @@ const isDashboards = computed(
 )
 const isAlarms = computed(() => route.name === 'admin-alarms')
 const isUpdates = computed(() => route.name === 'admin-updates')
-const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
+const isFleet = computed(() => String(route.name ?? '').startsWith('staff-device'))
+const isStaff = computed(() => String(route.name ?? '').startsWith('staff-') && !isFleet.value)
+function goFleet() {
+  router.push({ name: 'staff-devices' })
+  closeSidebar()
+}
 </script>
 
 <template>
@@ -568,6 +573,37 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
             class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal"
             >●</span
           >
+        </button>
+        <button
+          :title="collapsed ? 'Parc des box' : undefined"
+          v-if="auth.isHexaStaff"
+          data-testid="nav-fleet"
+          :class="[
+            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
+            isFleet
+              ? 'text-foreground bg-secondary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+          ]"
+          @click="goFleet"
+        >
+          <span
+            :class="[
+              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
+              isFleet ? 'bg-signal' : 'bg-transparent',
+            ]"
+          />
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+          >
+            <path d="M3 7l9-4 9 4-9 4-9-4Z" />
+            <path d="M3 7v10l9 4 9-4V7" />
+            <path d="M12 11v10" />
+          </svg>
+          <span class="tracking-tight">Parc des box</span>
         </button>
       </nav>
 
