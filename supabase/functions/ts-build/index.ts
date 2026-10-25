@@ -177,6 +177,22 @@ function deriveIntegrals(raw: TsRow[], meta: Map<string, VarMeta>, dayStart: num
   return out
 }
 
+/** analyse des dérives (analyze-report) d'une journée construite */
+async function analyzeDay(reportId: string) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/analyze-report`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${SERVICE_ROLE}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ report_id: reportId }),
+      signal: AbortSignal.timeout(60_000),
+    })
+    const j = (await r.json().catch(() => ({}))) as { data?: { inserted_count?: number } }
+    return { report_id: reportId, status: r.status, inserted: j?.data?.inserted_count ?? null }
+  } catch (e) {
+    return { report_id: reportId, error: String(e) }
+  }
+}
+
 async function buildDay(device: string, company: string, day: string) {
   const [y, m] = day.split('-')
   const base = `company=${company}/device=${device}`
@@ -185,7 +201,7 @@ async function buildDay(device: string, company: string, day: string) {
   // fuseau : celui du dernier rapport journalier, sinon du statut, sinon Paris
   const { data: reps } = await admin
     .from('reports')
-    .select('type, period_start, period_end, received_at, payload')
+    .select('id, type, period_start, period_end, received_at, payload')
     .eq('device_id', device)
     .eq('type', 'daily')
     .eq('period_start', day)
@@ -234,7 +250,7 @@ async function buildDay(device: string, company: string, day: string) {
         await index(device, level, period, path, kept, bytes.length)
       }
     }
-    return { day, rows: 0 }
+    return { day, rows: 0, report_id: null as string | null }
   }
   // les unités des anciennes variables viennent du catalogue
   const { data: cat } = await admin.from('ts_vars').select('var, category, unit, description').eq('device_id', device)
@@ -298,7 +314,7 @@ async function buildDay(device: string, company: string, day: string) {
     })),
   })
   if (error) throw new Error(error.message)
-  return { day, rows: raw.length, bytes: rawBytes.length }
+  return { day, rows: raw.length, bytes: rawBytes.length, report_id: (daily?.id as string | undefined) ?? null }
 }
 
 Deno.serve(async (req) => {
@@ -314,6 +330,7 @@ Deno.serve(async (req) => {
   if (error) return Response.json({ error: error.message }, { status: 500 })
   const companies = new Map<string, string>()
   const done: unknown[] = []
+  const analyses: Promise<unknown>[] = []
   const failed: unknown[] = []
   for (const t of todo ?? []) {
     if (Date.now() - started > 25_000) break // le reste au prochain passage
@@ -324,7 +341,11 @@ Deno.serve(async (req) => {
         c = data!.company_id as string
         companies.set(t.device_id, c)
       }
-      done.push({ device: t.device_id, ...(await buildDay(t.device_id, c, t.day)) })
+      const r = await buildDay(t.device_id, c, t.day)
+      done.push({ device: t.device_id, ...r })
+      // analyse des dérives sur l'historique, une fois la journée construite (journées récentes seulement :
+      // une reconstruction de l'historique ne doit pas produire des centaines d'alertes)
+      if (r.report_id && Date.now() - Date.parse(t.day) < 4 * DAY) analyses.push(analyzeDay(r.report_id))
       // ne retire la marque que si elle n'a pas été renouvelée pendant la construction
       await admin.from('ts_dirty').delete().eq('device_id', t.device_id).eq('day', t.day).lte('since', t.since)
     } catch (e) {
@@ -332,5 +353,6 @@ Deno.serve(async (req) => {
     }
   }
   await admin.rpc('ts_buffer_purge')
-  return Response.json({ done: done.length, failed, items: done, ms: Date.now() - started })
+  const analyzed = await Promise.all(analyses)
+  return Response.json({ done: done.length, failed, items: done, analyzed, ms: Date.now() - started })
 })

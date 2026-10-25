@@ -79,33 +79,38 @@ function kindClass(kind: string): string {
   return 'bg-secondary text-muted-foreground border border-border'
 }
 function consolidationTag(ins: ReportInsight): { label: string; cls: string } | null {
-  const ev = ins.evidence as { consolidation?: string } | null
+  const ev = ins.evidence as {
+    consolidation?: string
+    days_off_7d?: number
+    days_7d?: number
+  } | null
   const c = ev?.consolidation
   if (!c) return null
-  if (c === 'confirmed_at_weekly_scale')
+  const k = ev?.days_off_7d != null ? ` (${ev.days_off_7d} j / ${ev.days_7d})` : ''
+  if (c === 'confirmed_7d' || c === 'confirmed_at_weekly_scale')
     return {
-      label: 'Confirmé à l’échelle hebdo',
+      label: `Confirmé sur 7 jours${k}`,
       cls: 'bg-offline-soft text-offline border-offline/40',
     }
-  if (c === 'mild_weekly_signal')
-    return { label: 'Signal hebdo modéré', cls: 'bg-amber/15 text-amber border-amber/40' }
-  if (c === 'demoted_no_weekly_confirmation')
+  if (c === 'mild_7d_signal' || c === 'mild_weekly_signal')
+    return { label: `Signal modéré sur 7 jours${k}`, cls: 'bg-amber/15 text-amber border-amber/40' }
+  if (c === 'isolated_peak' || c === 'demoted_no_weekly_confirmation')
     return {
-      label: 'Pic isolé (non confirmé hebdo)',
+      label: 'Pic isolé (un seul jour)',
       cls: 'bg-secondary text-muted-foreground border-border',
     }
-  if (c === 'no_weekly_data')
+  if (c === 'no_7d_history' || c === 'no_weekly_data')
     return {
-      label: 'Historique hebdo insuffisant',
+      label: 'Historique encore court',
       cls: 'bg-secondary/60 text-muted-foreground border-border',
     }
   return null
 }
 function kindExplain(kind: string): string {
   if (kind === 'anomaly')
-    return 'Écart inhabituel par rapport à l’historique récent (z-score > 2σ).'
+    return 'Court terme : journée inhabituelle par rapport aux 28 jours précédents (écart > 2σ).'
   if (kind === 'trend')
-    return 'Dérive significative de la moyenne sur plusieurs périodes consécutives.'
+    return 'Long terme : dérive lente des moyennes hebdomadaires sur plusieurs semaines.'
   if (kind === 'alarm_burst')
     return 'Concentration d’événements d’alarme nettement plus élevée que d’habitude.'
   if (kind === 'threshold_cross') return 'Une valeur a dépassé un seuil configuré.'

@@ -255,7 +255,6 @@ const ingressRoutes = computed(() => {
   return [
     { label: 'État', url: `${ingressBaseUrl}/${host}/status` },
     { label: 'Rapport journalier', url: `${ingressBaseUrl}/${host}/report/daily` },
-    { label: 'Rapport hebdomadaire', url: `${ingressBaseUrl}/${host}/report/weekly` },
   ]
 })
 const copiedIngress = ref(false)
