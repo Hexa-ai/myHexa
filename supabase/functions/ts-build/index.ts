@@ -459,6 +459,7 @@ Deno.serve(async (req) => {
     limit?: number
     events_backfill?: boolean
     rebuild_1d?: boolean
+    check?: boolean
   }
   if (body.rebuild_1d) {
     let q = admin.from('ts_files').select('device_id, level, period, path').in('level', ['1d', 'raw'])
@@ -473,6 +474,33 @@ Deno.serve(async (req) => {
       if (e) return Response.json({ error: e.message }, { status: 500 })
     }
     return Response.json({ dropped_1d: files.filter((f) => f.level === '1d').length, queued_days: days.length })
+  }
+  if (body.check) {
+    // contrôle : jours présents dans le brut mais absents d'un niveau d'agrégat (1 min, 1 h), par box
+    let q = admin.from('ts_files').select('device_id, level, period, path').in('level', ['raw', '1m', '1h'])
+    if (body.device) q = q.eq('device_id', body.device)
+    const { data, error } = await q
+    if (error) return Response.json({ error: error.message }, { status: 500 })
+    const byDev = new Map<string, { raw: Set<string>; agg: Record<string, Set<string>> }>()
+    for (const f of data ?? []) {
+      const e = byDev.get(f.device_id) ?? { raw: new Set<string>(), agg: { '1m': new Set<string>(), '1h': new Set<string>() } }
+      byDev.set(f.device_id, e)
+      if (f.level === 'raw') e.raw.add(f.period as string)
+      else {
+        const buf = await download(f.path as string)
+        if (buf) for (const r of await readAll(buf)) e.agg[f.level].add(new Date(r.ts).toISOString().slice(0, 10))
+      }
+    }
+    const gaps = []
+    for (const [dev, e] of byDev) {
+      for (const lvl of ['1m', '1h']) {
+        // un jour brut sans aucune ligne au niveau agrégé (on ignore aujourd'hui, en cours)
+        const today = new Date().toISOString().slice(0, 10)
+        const miss = [...e.raw].filter((d) => d < today && !e.agg[lvl].has(d)).sort()
+        if (miss.length) gaps.push({ device: dev, level: lvl, missing: miss })
+      }
+    }
+    return Response.json({ devices: byDev.size, gaps })
   }
   if (body.events_backfill) {
     // reprise des événements d'alarme : une box (device) ou toutes celles qui ont des rapports
@@ -501,8 +529,16 @@ Deno.serve(async (req) => {
   const done: unknown[] = []
   const analyses: Promise<unknown>[] = []
   const failed: unknown[] = []
+  const busy: unknown[] = []
   for (const t of todo ?? []) {
     if (Date.now() - started > 25_000) break // le reste au prochain passage
+    // une seule construction à la fois par box : sinon deux appels réécrivent les mêmes fichiers
+    // d'agrégats et le dernier efface les journées de l'autre. Box occupée : jour laissé en file.
+    const { data: locked, error: le } = await admin.rpc('ts_build_try_lock', { p_device: t.device_id, p_ttl_s: 120 })
+    if (le || !locked) {
+      busy.push({ device: t.device_id, day: t.day })
+      continue
+    }
     try {
       let c = companies.get(t.device_id)
       if (!c) {
@@ -519,9 +555,11 @@ Deno.serve(async (req) => {
       await admin.from('ts_dirty').delete().eq('device_id', t.device_id).eq('day', t.day).lte('since', t.since)
     } catch (e) {
       failed.push({ device: t.device_id, day: t.day, error: String(e) })
+    } finally {
+      await admin.rpc('ts_build_unlock', { p_device: t.device_id })
     }
   }
   await admin.rpc('ts_buffer_purge')
   const analyzed = await Promise.all(analyses)
-  return Response.json({ done: done.length, failed, items: done, analyzed, ms: Date.now() - started })
+  return Response.json({ done: done.length, failed, busy: busy.length, items: done, analyzed, ms: Date.now() - started })
 })
