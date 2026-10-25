@@ -1,0 +1,122 @@
+/* Style « appareil » (PROTO test) — inspiré de Teenage Engineering.
+   Fond gris chaud, modules comme des touches, chiffres fins, étiquettes en minuscules.
+   Couleur réservée aux états : orange = alarme / action, vert / jaune / rouge = états des box.
+   Activé par la classe .appareil sur <html> (useTheme, VITE_UI_STYLE=appareil sur le test). */
+
+:root.appareil.light,
+:root.appareil:not(.dark) {
+  --background: #efefed;
+  --foreground: #141414;
+  --card: #f8f8f6;
+  --card-foreground: #141414;
+  --popover: #fbfbfa;
+  --popover-foreground: #141414;
+  --primary: #141414;
+  --primary-foreground: #f4f4f2;
+  --secondary: #e6e6e3;
+  --secondary-foreground: #141414;
+  --muted: #e6e6e3;
+  --muted-foreground: #85857f;
+  --accent: #ff4f12;
+  --accent-foreground: #ffffff;
+  --destructive: #e3342b;
+  --border: #d6d6d2;
+  --input: #fbfbfa;
+  --ring: #ff4f12;
+  --signal: #141414;
+  --signal-bright: #141414;
+  --signal-deep: #000000;
+  --signal-soft: rgb(20 20 20 / 0.06);
+  --signal-glow: transparent;
+  --offline: #e3342b;
+  --offline-soft: rgb(227 52 43 / 0.08);
+  --warn: #b98200;
+  --amber: #ff4f12;
+  --hairline: #d6d6d2;
+  --grid-line: transparent;
+  --grain-opacity: 0;
+}
+
+/* variante sombre mate */
+:root.appareil.dark {
+  --background: #121417;
+  --foreground: #ececea;
+  --card: #1a1d21;
+  --card-foreground: #ececea;
+  --popover: #22262b;
+  --popover-foreground: #ececea;
+  --primary: #ececea;
+  --primary-foreground: #121417;
+  --secondary: #22262b;
+  --secondary-foreground: #ececea;
+  --muted: #22262b;
+  --muted-foreground: #8d939a;
+  --accent: #ff5a1f;
+  --accent-foreground: #ffffff;
+  --destructive: #ff5a52;
+  --border: #2c3137;
+  --input: #1a1d21;
+  --ring: #ff5a1f;
+  --signal: #ececea;
+  --signal-bright: #ffffff;
+  --signal-deep: #c9c9c4;
+  --signal-soft: rgb(236 236 234 / 0.08);
+  --signal-glow: transparent;
+  --offline: #ff5a52;
+  --offline-soft: rgb(255 90 82 / 0.10);
+  --warn: #e9a400;
+  --amber: #ff5a1f;
+  --hairline: #2c3137;
+  --grid-line: transparent;
+  --grain-opacity: 0;
+}
+
+.appareil {
+  --radius: 0.875rem;
+  --font-sans: 'Inter Tight', 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+.appareil body {
+  background-image: none;
+  letter-spacing: -0.005em;
+}
+/* étiquettes techniques : minuscules, mono, discrètes */
+.appareil .uppercase {
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+/* chiffres : fins et tabulaires */
+.appareil .tabular {
+  font-weight: 300;
+}
+.appareil .tabular.font-semibold,
+.appareil .tabular.font-bold,
+.appareil .tabular.font-medium {
+  font-weight: 400;
+}
+.appareil h1,
+.appareil h2 {
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+/* boutons : pilules à contour fin */
+.appareil [data-slot='button'],
+.appareil button.rounded-md,
+.appareil a.rounded-md {
+  border-radius: 999px;
+}
+/* modules : pas d'ombre ni de lueur, filet fin */
+.appareil .glow-signal,
+.appareil .shadow,
+.appareil .shadow-sm,
+.appareil .shadow-md,
+.appareil .shadow-lg {
+  box-shadow: none !important;
+}
+.appareil .pulse-dot {
+  animation: none;
+}
+/* sélection et focus : orange */
+.appareil ::selection {
+  background: var(--accent);
+  color: #fff;
+}

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DocumentsBlock from '@/components/dashboard/DocumentsBlock.vue'
+import { seriesColors } from '@/composables/useTheme'
 import AlarmBlock from '@/components/dashboard/AlarmBlock.vue'
 import DeviceMap, { type MarkerInput } from '@/components/DeviceMap.vue'
 // PROTOTYPE — rendu d'un bloc de tableau de bord (commun aux futurs rapports).
@@ -36,7 +37,7 @@ const props = defineProps<{
   multiDevice: boolean
 }>()
 
-const COLORS = ['#00d4aa', '#5b8cff', '#f5a524', '#e05dd0', '#ff7a7a', '#8bd450']
+const COLORS = seriesColors(['#00d4aa', '#5b8cff', '#f5a524', '#e05dd0', '#ff7a7a', '#8bd450'])
 const w = computed(() => props.widget)
 const meta = (dev: string, v: string) => props.catalogs[dev]?.find((x) => x.var === v) ?? null
 const devName = (id: string) => props.devices.get(id)?.name ?? '—'
@@ -509,7 +510,7 @@ const tableRows = computed(() =>
             <path
               :d="`M12 60 A48 48 0 0 1 ${it.x.toFixed(2)} ${it.y.toFixed(2)}`"
               fill="none"
-              stroke="#00d4aa"
+              :stroke="COLORS[0]"
               stroke-width="10"
               stroke-linecap="round"
             />

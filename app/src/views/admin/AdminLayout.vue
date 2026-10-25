@@ -2,11 +2,11 @@
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { useTheme } from '@/composables/useTheme'
+import { useTheme, styleSwitchAvailable } from '@/composables/useTheme'
 import { useAlarmCounts, ALARM_COUNTS_KEY } from '@/composables/useAlarmCounts'
 import StaffBar from '@/components/staff/StaffBar.vue'
 
-const { theme, toggle: toggleTheme } = useTheme()
+const { theme, toggle: toggleTheme, uiStyle, toggleStyle } = useTheme()
 const alarms = useAlarmCounts()
 provide(ALARM_COUNTS_KEY, alarms)
 
@@ -738,6 +738,15 @@ function goFleet() {
             <span class="uppercase tracking-wider">Live</span>
           </span>
           <span class="tabular text-[10px] sm:text-[11px]">{{ clock }}</span>
+          <button
+            v-if="styleSwitchAvailable"
+            data-testid="style-switch"
+            :title="uiStyle === 'appareil' ? 'Revenir au style classique' : 'Essayer le style appareil'"
+            class="ml-1 h-7 px-2.5 inline-flex items-center rounded-md border border-border hover:text-foreground transition font-mono text-[10px]"
+            @click="toggleStyle"
+          >
+            {{ uiStyle === 'appareil' ? 'classique' : 'appareil' }}
+          </button>
           <button
             :title="theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'"
             class="ml-1 size-7 inline-flex items-center justify-center rounded-md border border-border hover:border-signal/60 hover:text-foreground transition"

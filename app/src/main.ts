@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import App from './App.vue'
 import '@/composables/useTheme'
 import './style.css'
+import './theme-appareil.css'
 
 const app = createApp(App)
 const pinia = createPinia()
