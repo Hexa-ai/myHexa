@@ -44,6 +44,12 @@ async function upload(path: string, bytes: Uint8Array) {
     .upload(path, new Blob([bytes as BlobPart], { type: 'application/vnd.apache.parquet' }), { upsert: true })
   if (error) throw new Error(`upload ${path}: ${error.message}`)
 }
+/** fichier devenu vide : supprimé du bucket et de l'index (sinon d'anciens points survivent) */
+async function drop(device: string, level: string, period: string, path: string) {
+  await admin.storage.from(BUCKET).remove([path])
+  const { error } = await admin.from('ts_files').delete().eq('device_id', device).eq('level', level).eq('period', period)
+  if (error) throw new Error('ts_files delete: ' + error.message)
+}
 async function index(device: string, level: string, period: string, path: string, rows: TsRow[], bytes: number) {
   const ts = rows.map((r) => r.ts)
   const { error } = await admin.from('ts_files').upsert({
@@ -207,7 +213,29 @@ async function buildDay(device: string, company: string, day: string) {
   const oldRaw = await download(rawPath)
   // anciens fichiers : on retire les points hebdo (source abandonnée)
   let raw = mergeSources(oldRaw ? (await readAll(oldRaw)).filter((r) => r.src !== SRC.WEEKLY) : [], fresh)
-  if (!raw.length) return { day, rows: 0 }
+  if (!raw.length) {
+    // plus rien pour ce jour (ex. ancien fichier purement hebdo) : brut et tranches d'agrégats retirés
+    if (oldRaw) await drop(device, 'raw', day, rawPath)
+    const wk0 = isoWeek(day)
+    for (const [level, period, path] of [
+      ['1m', wk0.key, `agg/1m/${base}/year=${wk0.key.slice(0, 4)}/${wk0.key}.parquet`],
+      ['1h', `${y}-${m}`, `agg/1h/${base}/year=${y}/${y}-${m}.parquet`],
+      ['1d', y, `agg/1d/${base}/${y}.parquet`],
+    ]) {
+      const old = await download(path)
+      if (!old) continue
+      const rows = await readAll(old)
+      const kept = mergeRange(rows, [], dayStart, dayStart + DAY)
+      if (kept.length === rows.length) continue
+      if (!kept.length) await drop(device, level, period, path)
+      else {
+        const bytes = writeTs(kept, { level, period })
+        await upload(path, bytes)
+        await index(device, level, period, path, kept, bytes.length)
+      }
+    }
+    return { day, rows: 0 }
+  }
   // les unités des anciennes variables viennent du catalogue
   const { data: cat } = await admin.from('ts_vars').select('var, category, unit, description').eq('device_id', device)
   for (const c of cat ?? []) {
@@ -245,8 +273,12 @@ async function buildDay(device: string, company: string, day: string) {
   ]
   for (const [level, period, path, rows] of levels) {
     const old = await download(path)
+    if (!old && !rows.length) continue
     const merged = mergeRange(old ? await readAll(old) : [], rows, dayStart, dayEnd)
-    if (!merged.length) continue
+    if (!merged.length) {
+      await drop(device, level, period, path)
+      continue
+    }
     const bytes = writeTs(merged, { level, period })
     await upload(path, bytes)
     await index(device, level, period, path, merged, bytes.length)
