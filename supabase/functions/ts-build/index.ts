@@ -7,9 +7,13 @@
 //      Fusion avec le fichier existant : une source présente remplace la même source, les autres sont conservées
 //      (un rapport purgé de la base reste dans le Parquet).
 //   2. agrégats du jour fusionnés dans : agg/1m (semaine ISO), agg/1h (mois), agg/1d (année).
+//   3. événements d'alarme du journalier dans events/…/YYYY-MM.parquet (le journalier remplace son jour).
+//      POST {events_backfill: true, device?} : reprise unique de tous les journaliers + anciens hebdo
+//      (un jour couvert par un journalier ne prend que les événements du journalier).
 // Appelée par pg_net à l'arrivée d'un rapport journalier ({device}) et par le cron horaire. Protégée par x-cron-secret.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { aggregate, bestCurve, isoWeek, readAll, SRC, writeTs, zonedMidnight, type TsRow } from '../_shared/tsparquet.ts'
+import { EV_SRC, eventsFromPayload, eventsPath, monthOf, readEvents, writeEvents, type AlarmEvent } from '../_shared/alarms.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -193,6 +197,65 @@ async function analyzeDay(reportId: string) {
   }
 }
 
+// ---------- événements d'alarme ----------
+async function putEvents(device: string, company: string, month: string, rows: AlarmEvent[], existed: boolean) {
+  const path = eventsPath(company, device, month)
+  if (!rows.length) {
+    if (existed) await drop(device, 'events', month, path)
+    return 0
+  }
+  const bytes = writeEvents(rows)
+  await upload(path, bytes)
+  const ts = rows.map((r) => r.ts)
+  const { error } = await admin.from('ts_files').upsert({
+    device_id: device,
+    level: 'events',
+    period: month,
+    path,
+    t_from: new Date(Math.min(...ts)).toISOString(),
+    t_to: new Date(Math.max(...ts)).toISOString(),
+    rows: rows.length,
+    bytes: bytes.length,
+    updated_at: new Date().toISOString(),
+  })
+  if (error) throw new Error('ts_files events: ' + error.message)
+  return rows.length
+}
+/** le journalier du jour remplace les événements de ce jour dans le fichier du mois */
+async function buildEvents(device: string, company: string, day: string, payload: Json) {
+  const month = monthOf(day)
+  const old = await download(eventsPath(company, device, month))
+  const fresh = eventsFromPayload(payload, day, EV_SRC.DAILY)
+  if (!old && !fresh.length) return 0
+  const kept = old ? (await readEvents(old)).filter((e) => e.day !== day) : []
+  await putEvents(device, company, month, [...kept, ...fresh], !!old)
+  return fresh.length
+}
+async function backfillEvents(device: string, company: string) {
+  const { data: reps, error } = await admin
+    .from('reports')
+    .select('type, period_start, ev:payload->alarm_events, tz:payload->metadata->>timezone')
+    .eq('device_id', device)
+    .in('type', ['daily', 'weekly'])
+    .limit(5000)
+  if (error) throw new Error(error.message)
+  const dailyDays = new Set((reps ?? []).filter((r) => r.type === 'daily').map((r) => r.period_start as string))
+  const all: AlarmEvent[] = []
+  for (const r of reps ?? []) {
+    const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: (r.tz as string) || 'Europe/Paris' })
+    if (r.type === 'daily') all.push(...eventsFromPayload({ alarm_events: r.ev }, r.period_start as string, EV_SRC.DAILY))
+    else all.push(...eventsFromPayload({ alarm_events: r.ev }, (ts) => fmt.format(new Date(ts)), EV_SRC.WEEKLY).filter((e) => !dailyDays.has(e.day)))
+  }
+  const byMonth = new Map<string, AlarmEvent[]>()
+  for (const e of all) (byMonth.get(monthOf(e.day)) ?? byMonth.set(monthOf(e.day), []).get(monthOf(e.day))!).push(e)
+  const { data: existing } = await admin.from('ts_files').select('period').eq('device_id', device).eq('level', 'events')
+  const had = new Set((existing ?? []).map((x) => x.period as string))
+  let n = 0
+  for (const [month, rows] of byMonth) n += await putEvents(device, company, month, rows, had.has(month))
+  for (const month of had) if (!byMonth.has(month)) await putEvents(device, company, month, [], true)
+  return { device, months: byMonth.size, events: n }
+}
+
 async function buildDay(device: string, company: string, day: string) {
   const [y, m] = day.split('-')
   const base = `company=${company}/device=${device}`
@@ -216,6 +279,7 @@ async function buildDay(device: string, company: string, day: string) {
     dayStart = zonedMidnight(day, tz)
   }
 
+  if (daily) await buildEvents(device, company, day, daily.payload as Json)
   const fresh: TsRow[] = []
   if (daily) fresh.push(...fromDaily(daily.payload as Json, dayStart, meta))
   const { data: buf } = await admin.from('ts_buffer').select('var, ts, v').eq('device_id', device).eq('day', day).limit(50000)
@@ -320,7 +384,23 @@ async function buildDay(device: string, company: string, day: string) {
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('method not allowed', { status: 405 })
   if (!CRON_SECRET || req.headers.get('x-cron-secret') !== CRON_SECRET) return new Response('forbidden', { status: 403 })
-  const body = (await req.json().catch(() => ({}))) as { device?: string; limit?: number }
+  const body = (await req.json().catch(() => ({}))) as { device?: string; limit?: number; events_backfill?: boolean }
+  if (body.events_backfill) {
+    // reprise des événements d'alarme : une box (device) ou toutes celles qui ont des rapports
+    let dq = admin.from('devices').select('id, company_id').not('company_id', 'is', null)
+    if (body.device) dq = dq.eq('id', body.device)
+    const { data: devs, error: de } = await dq
+    if (de) return Response.json({ error: de.message }, { status: 500 })
+    const out = []
+    for (const d of devs ?? []) {
+      try {
+        out.push(await backfillEvents(d.id as string, d.company_id as string))
+      } catch (e) {
+        out.push({ device: d.id, error: String(e) })
+      }
+    }
+    return Response.json({ backfill: out.filter((x: any) => x.events || x.error) })
+  }
   // quota CPU des Edge Functions : petits lots (≈ 8 jours-box par appel), le cron repasse toutes les 10 min
   const limit = Math.min(Math.max(Number(body.limit) || 8, 1), 20)
   const started = Date.now()

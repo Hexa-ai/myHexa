@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DocumentsBlock from '@/components/dashboard/DocumentsBlock.vue'
+import AlarmBlock from '@/components/dashboard/AlarmBlock.vue'
 import DeviceMap, { type MarkerInput } from '@/components/DeviceMap.vue'
 // PROTOTYPE — rendu d'un bloc de tableau de bord (commun aux futurs rapports).
 import { computed } from 'vue'
@@ -122,6 +123,8 @@ const cmpShort = computed(() =>
 const title = computed(() => {
   if (w.value.title) return w.value.title
   if (w.value.type === 'map') return 'Localisation'
+  if (w.value.type === 'alarm_history') return 'Historique des alarmes'
+  if (w.value.type === 'alarm_stats') return 'Statistiques des alarmes'
   if (series.value.length === 1) return series.value[0].label
   const first = w.value.sources.find((s) => s.var)
   const multiNoOp = w.value.sources.filter((x) => x.var).length > 1 && !w.value.op
@@ -711,6 +714,15 @@ const tableRows = computed(() =>
 
     <!-- documents des box -->
     <DocumentsBlock v-else-if="w.type === 'document'" :ids="w.options.docs ?? []" />
+
+    <!-- alarmes : historique / statistiques (rapports journaliers) -->
+    <AlarmBlock
+      v-else-if="w.type === 'alarm_history' || w.type === 'alarm_stats'"
+      :widget="w"
+      :range="range"
+      :devices="devices"
+      :multi-device="multiDevice"
+    />
 
     <!-- image -->
     <template v-else-if="w.type === 'image'">

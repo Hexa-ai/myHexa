@@ -21,6 +21,8 @@ export type WidgetType =
   | 'states'
   | 'table'
   | 'text'
+  | 'alarm_history'
+  | 'alarm_stats'
 export type WidgetWidth = '1/4' | '1/3' | '1/2' | '2/3' | 'full'
 export type Op = 'sum' | 'mean' | 'min' | 'max'
 export type Stat = 'last' | 'mean' | 'min' | 'max' | 'total'
@@ -79,6 +81,11 @@ export interface WidgetOptions {
   min?: number | null
   max?: number | null
   decimals?: number
+  /** blocs d'alarmes : alarmes retenues (vide = toutes), gravités, nb de lignes, graphique en barres */
+  alarms?: string[]
+  severities?: ('error' | 'warning' | 'info')[]
+  limit?: number
+  chart?: boolean
 }
 export interface Widget {
   id?: string
@@ -114,7 +121,11 @@ export const WIDGET_LABEL: Record<WidgetType, string> = {
   states: 'Créneaux d\u2019états',
   table: 'Tableau min / moy / max',
   text: 'Texte',
+  alarm_history: 'Historique d\u2019alarmes',
+  alarm_stats: 'Statistiques d\u2019alarmes',
 }
+/** blocs d'alarmes : les sources ne portent que les box (var vide), le filtre est dans les options */
+export const isAlarmWidget = (t: WidgetType) => t === 'alarm_history' || t === 'alarm_stats'
 export const STAT_LABEL: Record<Stat, string> = {
   last: 'Dernière valeur',
   mean: 'Moyenne',

@@ -4,6 +4,9 @@
 //   POST JWT {action:'preview', dashboard_id, frequency, at?} (comparaison : réglée sur chaque bloc)  -> HTML (images en data URI) + CSV, rien n'est envoyé
 //   POST JWT {action:'run', template_id}                      -> génère + envoie maintenant (admin de l'entreprise)
 // Mail : HTML une colonne (600 px), graphiques en PNG inline (cid), CSV en pièce jointe en option.
+// Données complètes : avant un envoi programmé, on attend que les journaliers des box (celles qui en envoient)
+// couvrent toute la période, en réessayant à chaque passage du cron, au plus REPORT_WAIT_HOURS (6 h) ;
+// passé ce délai, le rapport part avec la mention « données incomplètes » et la liste des box concernées.
 // Sur un projet sans configuration Gmail (test), le rapport est archivé avec le statut « not_sent ».
 // REPORT_MAIL_ALLOW_DOMAIN (facultatif) : seuls les destinataires de ce domaine reçoivent le mail (test : équipe).
 // deno-lint-ignore-file no-explicit-any
@@ -13,12 +16,14 @@ import { readSeries, type Series, type VarMeta } from '../_shared/tsread.ts'
 import { fmtNum, gaugeSvg, svgToPng, timeChartSvg, type ChartSeries, type Pt } from '../_shared/svgchart.ts'
 import { mailerConfigured, sendMail } from '../_shared/mailer.ts'
 import { buildPdf, type PdfBlock } from '../_shared/pdfreport.ts'
+import { fmtDur, loadEvents, occurrences, SEV_COLOR, SEV_LABEL, stats, type Severity } from '../_shared/alarms.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
 const CRON_SECRET = Deno.env.get('CRON_SECRET') ?? ''
 const ALLOW_DOMAIN = (Deno.env.get('REPORT_MAIL_ALLOW_DOMAIN') ?? '').toLowerCase().trim()
+const WAIT_MS = Number(Deno.env.get('REPORT_WAIT_HOURS') ?? 6) * 3600e3
 const APP_URL = Deno.env.get('APP_URL') ?? 'https://my.hexa-ai.fr'
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } })
 
@@ -464,6 +469,69 @@ async function renderWidget(w: Widget, ctx: Ctx): Promise<Block | null> {
         .filter((r): r is Cell[] => !!r)
       return { title: title || 'Box', sub: w.type === 'map' ? 'carte disponible dans le portail' : 'au moment de l’envoi', parts: [{ k: 'rows', widths: [0.55, 0.45], rows }] }
     }
+    case 'alarm_history':
+    case 'alarm_stats': {
+      const ids = [...new Set(w.sources.map((x) => x.device))]
+      const f = {
+        names: w.options.alarms?.length ? (w.options.alarms as string[]) : null,
+        severities: (w.options.severities?.length ? w.options.severities : ['error', 'warning']) as Severity[],
+      }
+      const occOf = async (a: number, b: number) =>
+        (await Promise.all(ids.map(async (d) => occurrences(d, await loadEvents(admin, admin, d, a, b), a, b, f)))).flat().sort((x, y) => y.start - x.start)
+      const occ = await occOf(ctx.from, ctx.to)
+      const name = (d: string, n: string) => (ctx.multi ? `${devName(ctx, d)} · ${n}` : n)
+      const sevTxt = f.severities.map((x) => SEV_LABEL[x].toLowerCase()).join(', ') + (f.names ? ` · ${f.names.length} alarme(s) choisie(s)` : '')
+      if (w.type === 'alarm_history') {
+        const t = title || 'Historique des alarmes'
+        if (!occ.length) return empty(t, 'aucune alarme sur la période')
+        const max = Math.min(Math.max(Number(w.options.limit) || 50, 5), 200)
+        const fmtD = new Intl.DateTimeFormat('fr-FR', { timeZone: ctx.tz, dateStyle: 'short', timeStyle: 'short' })
+        const rows: Cell[][] = occ.slice(0, max).map((o) => [
+          { t: name(o.device, o.name) + (o.description && o.description !== o.name ? ` · ${o.description}` : ''), dot: SEV_COLOR[o.severity] },
+          { t: fmtD.format(o.start), color: '#6b7280', right: true },
+          o.end ? { t: fmtD.format(o.end), color: '#6b7280', right: true } : { t: 'en cours', color: '#b91c1c', right: true },
+          { t: fmtDur(o.duration), right: true },
+        ])
+        const parts: Part[] = [{ k: 'rows', head: ['Alarme', 'Début', 'Fin', 'Durée'], widths: [0.44, 0.2, 0.2, 0.16], rows }]
+        if (occ.length > max) parts.push({ k: 'text', t: `+ ${occ.length - max} autres occurrences sur la période`, color: '#6b7280', size: 11 })
+        return { title: t, sub: sevTxt, parts }
+      }
+      const t = title || 'Statistiques des alarmes'
+      const st = stats(occ, ctx.from, ctx.to)
+      const cmpR = cmpKind ? ctx.cmpRanges.get(cmpKind) : null
+      const prev = cmpR ? stats(await occOf(cmpR[0], cmpR[1]), cmpR[0], cmpR[1]) : null
+      if (!st.rows.length && !prev?.rows.length) return empty(t, 'aucune alarme sur la période')
+      const pct = (x: number) => (x >= 10 ? x.toFixed(0) : x.toFixed(1)).replace('.', ',') + ' %'
+      const dCnt = (cur: number, old: number | undefined): Cell => {
+        const d = cur - (old ?? 0)
+        return { t: d === 0 ? '=' : (d > 0 ? '+' : '') + d, right: true, color: d > 0 ? '#b91c1c' : d < 0 ? '#15803d' : '#6b7280' }
+      }
+      const rows: Cell[][] = st.rows.map((r) => [
+        { t: name(r.device, r.name) + (r.ongoing ? ' (en cours)' : ''), dot: SEV_COLOR[r.severity] },
+        { t: String(r.count), right: true, bold: true },
+        ...(prev ? [dCnt(r.count, prev.rows.find((x) => x.device === r.device && x.name === r.name)?.count)] : []),
+        { t: pct(r.share_count), right: true },
+        { t: fmtDur(r.duration), right: true },
+        { t: pct(r.share_duration), right: true },
+        { t: pct(r.presence), right: true },
+      ])
+      const sevs = f.severities.filter((x) => st.totals[x].count || prev?.totals[x].count)
+      const totals = sevs.map((x) => `${SEV_LABEL[x]} : ${st.totals[x].count} (${fmtDur(st.totals[x].duration)})${prev ? `, ${cmpLabel.toLowerCase()} ${prev.totals[x].count}` : ''}`).join('   ')
+      return {
+        title: t,
+        sub: sevTxt,
+        parts: [
+          { k: 'text', t: totals, size: 12, bold: true },
+          {
+            k: 'rows',
+            head: ['Alarme', 'Nb', ...(prev ? ['Écart'] : []), '% nb', 'Durée', '% durée', 'Présence'],
+            widths: prev ? [0.34, 0.08, 0.1, 0.1, 0.14, 0.12, 0.12] : [0.4, 0.1, 0.12, 0.14, 0.12, 0.12],
+            rows,
+          },
+          { k: 'text', t: '% = part parmi les alarmes retenues ; présence = part du temps de la période passée en alarme', color: '#9ca3af', size: 10 },
+        ],
+      }
+    }
     case 'text':
       return { title: title || '', parts: [{ k: 'text', t: w.options.text ?? '' }] }
     case 'document':
@@ -554,10 +622,9 @@ async function fetchImage(url: string): Promise<Uint8Array | null> {
 }
 
 // ---------- génération complète ----------
-async function buildReport(dash: any, freq: string, tz: string, from: number, to: number, reportName: string) {
+/** box d'un tableau de bord (cible + sources des blocs) */
+async function dashScope(dash: any) {
   const { data: widgets } = await admin.from('dashboard_widgets').select('type, width, title, sources, op, options').eq('dashboard_id', dash.id).order('position')
-  const { data: company } = await admin.from('companies').select('name, logo_path').eq('id', dash.company_id).single()
-  const logo = await loadLogo(company?.logo_path)
   let devIds: string[] = []
   let scopeName = ''
   if (dash.scope === 'device') devIds = [dash.device_id]
@@ -569,6 +636,58 @@ async function buildReport(dash: any, freq: string, tz: string, from: number, to
   } else devIds = dash.device_ids ?? []
   const ws = (widgets ?? []) as Widget[]
   for (const w of ws) for (const s of w.sources) if (!devIds.includes(s.device)) devIds.push(s.device)
+  return { ws, devIds, scopeName }
+}
+
+export interface Gap {
+  device: string
+  name: string
+  missing_ms: number
+}
+/** Les journaliers reçus couvrent-ils [from, to) ? Seules les box qui ont envoyé un journalier ces 7 derniers
+ *  jours sont attendues (une box qui n'en envoie pas ne bloque pas). `pending` = jours encore à verser dans l'historique. */
+export async function coverage(devIds: string[], from: number, to: number, now = Date.now()) {
+  if (!devIds.length) return { gaps: [] as Gap[], pending: 0 }
+  const stop = Math.min(to, now)
+  const { data: reps, error } = await admin
+    .from('reports')
+    .select('device_id, received_at, tr:payload->time_range')
+    .eq('type', 'daily')
+    .in('device_id', devIds)
+    .gte('received_at', new Date(Math.min(from, now - 7 * 864e5) - 864e5).toISOString())
+    .limit(5000)
+  if (error) throw new Error(error.message)
+  const active = new Set<string>()
+  const iv = new Map<string, [number, number][]>()
+  for (const r of reps ?? []) {
+    if (Date.parse(r.received_at as string) > now - 7 * 864e5) active.add(r.device_id as string)
+    const a = Number((r.tr as any)?.start_ms)
+    const b = Number((r.tr as any)?.end_ms)
+    if (Number.isFinite(a) && Number.isFinite(b) && b > from && a < stop) (iv.get(r.device_id) ?? iv.set(r.device_id, []).get(r.device_id)!).push([a, b])
+  }
+  const { data: names } = await admin.from('devices').select('id, name').in('id', [...active])
+  const gaps: Gap[] = []
+  for (const d of active) {
+    let missing = 0
+    let cur = from
+    for (const [a, b] of (iv.get(d) ?? []).sort((x, y) => x[0] - y[0])) {
+      if (a > cur) missing += Math.min(a, stop) - cur
+      cur = Math.max(cur, b)
+      if (cur >= stop) break
+    }
+    if (cur < stop) missing += stop - cur
+    if (missing > 5 * 60e3) gaps.push({ device: d, name: names?.find((x) => x.id === d)?.name ?? d, missing_ms: missing })
+  }
+  const { count } = await admin.from('ts_dirty').select('device_id', { count: 'exact', head: true }).in('device_id', [...active])
+  return { gaps, pending: count ?? 0 }
+}
+
+async function buildReport(dash: any, freq: string, tz: string, from: number, to: number, reportName: string) {
+  const { data: company } = await admin.from('companies').select('name, logo_path').eq('id', dash.company_id).single()
+  const logo = await loadLogo(company?.logo_path)
+  const { ws, devIds, scopeName: sn } = await dashScope(dash)
+  let scopeName = sn
+  const cov = await coverage(devIds, from, to)
   const { data: devRows, error: de } = await admin.from('devices').select('id, name, last_connection_at, latitude').in('id', devIds)
   if (de) throw new Error(de.message)
   const devs = await Promise.all(
@@ -605,6 +724,18 @@ async function buildReport(dash: any, freq: string, tz: string, from: number, to
     : freq === 'monthly' ? new Intl.DateTimeFormat('fr-FR', { timeZone: tz, month: 'long', year: 'numeric' }).format(from)
     : `du ${fmtD.format(from)} au ${fmtD.format(to - 1)}`
   const blocks: Block[] = []
+  if (cov.gaps.length)
+    blocks.push({
+      title: 'Données incomplètes',
+      sub: 'rapport journalier de la box pas (encore) reçu pour toute la période',
+      parts: [
+        {
+          k: 'rows',
+          widths: [0.6, 0.4],
+          rows: cov.gaps.map((g) => [{ t: g.name, dot: '#d97706' }, { t: `${fmtDur(g.missing_ms)} manquantes`, right: true, color: '#b45309' }]),
+        },
+      ],
+    })
   for (const w of ws) {
     try {
       const b = await renderWidget(w, ctx)
@@ -663,10 +794,11 @@ async function periodFor(freq: string, tz: string, at: string) {
 }
 
 /** génère, archive et envoie un modèle de rapport */
-async function runTemplate(tpl: any, trigger: 'cron' | 'manual') {
+async function runTemplate(tpl: any, trigger: 'cron' | 'manual', at = new Date().toISOString()) {
   const t0 = Date.now()
   const runId = crypto.randomUUID()
-  const [from, to] = await periodFor(tpl.frequency, tpl.tz, new Date().toISOString())
+  // période = celle de l'échéance prévue (un envoi retardé couvre toujours la même journée / semaine / mois)
+  const [from, to] = await periodFor(tpl.frequency, tpl.tz, at)
   const { data: dash } = await admin.from('dashboards').select('*').eq('id', tpl.dashboard_id).single()
   let status = 'not_sent'
   let error: string | null = null
@@ -757,17 +889,30 @@ Deno.serve(async (req) => {
       .eq('enabled', true)
       .lte('next_run_at', new Date().toISOString())
       .order('next_run_at')
-      .limit(Number(body.limit) || 3)
-    const out = []
+      .limit(20)
+    const out: any[] = []
+    let runs = 0
     for (const tpl of due ?? []) {
+      if (runs >= (Number(body.limit) || 3)) break
+      // données complètes ? sinon on laisse l'échéance en place et le cron réessaie (au plus WAIT_MS)
+      const at = tpl.next_run_at as string
+      const [pf, pt] = await periodFor(tpl.frequency, tpl.tz, at)
+      const { data: dash } = await admin.from('dashboards').select('*').eq('id', tpl.dashboard_id).single()
+      const cov = dash ? await coverage((await dashScope(dash)).devIds, pf, pt) : { gaps: [], pending: 0 }
+      const late = Date.now() - Date.parse(at)
+      if ((cov.gaps.length || cov.pending) && late < WAIT_MS) {
+        out.push({ template: tpl.id, waiting: cov.gaps.map((g) => g.name), pending: cov.pending, late_min: Math.round(late / 60e3) })
+        continue
+      }
+      runs++
       // échéance suivante posée AVANT génération : pas de double envoi si la génération échoue ou dépasse le temps
       const { data: nx } = await admin.rpc('report_next_run', {
         p_freq: tpl.frequency, p_hour: tpl.send_hour, p_weekday: tpl.weekday, p_monthday: tpl.monthday, p_tz: tpl.tz, p_after: new Date().toISOString(),
       })
       await admin.from('report_templates').update({ next_run_at: nx }).eq('id', tpl.id)
-      out.push({ template: tpl.id, ...(await runTemplate(tpl, 'cron')) })
+      out.push({ template: tpl.id, ...(await runTemplate(tpl, 'cron', at)) })
     }
-    return ok({ done: out.length, runs: out })
+    return ok({ done: runs, runs: out })
   }
 
   // --- utilisateur ---

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { uploadImage } from '@/composables/useBranding'
+import AlarmWidgetEditor from '@/components/dashboard/AlarmWidgetEditor.vue'
 import { supabase } from '@/lib/supabase'
 // PROTOTYPE — édition d'un bloc : type, titre, largeur, sources (box + variable), opération, options.
 import { computed, ref } from 'vue'
@@ -13,6 +14,7 @@ import {
   STAT_LABEL,
   STATUS_FIELDS,
   WIDGET_LABEL,
+  isAlarmWidget,
   type Op,
   type Stat,
   type Widget,
@@ -49,7 +51,7 @@ async function pickImage(ev: Event, set: (url: string) => void) {
 }
 const WIDTHS: WidgetWidth[] = ['1/4', '1/3', '1/2', '2/3', 'full']
 const needsVars = computed(
-  () => !['status', 'image', 'text', 'map', 'document'].includes(w.value.type),
+  () => !['status', 'image', 'text', 'map', 'document'].includes(w.value.type) && !isAlarmWidget(w.value.type),
 )
 const multi = computed(() => props.devices.length > 1)
 
@@ -79,6 +81,12 @@ function setType(t: WidgetType) {
     if (w.value.width === '1/4' || w.value.width === '1/3') w.value.width = '1/2'
     w.value.sources = props.devices.map((d) => ({ device: d.id, var: '' }))
     initStates()
+  } else if (isAlarmWidget(t)) {
+    w.value.op = null
+    if (!w.value.sources.length || w.value.sources.some((s) => s.var))
+      w.value.sources = props.devices.map((d) => ({ device: d.id, var: '' }))
+    w.value.options.severities ??= ['error', 'warning']
+    if (w.value.width === '1/4' || w.value.width === '1/3') w.value.width = t === 'alarm_history' ? 'full' : '1/2'
   } else if (t === 'status') {
     w.value.sources = props.devices.map((d) => ({ device: d.id, var: '' }))
     w.value.options.fields ??= ['online', 'last_seen', 'uptime', 'version']
@@ -558,6 +566,7 @@ function save() {
           </select>
         </div>
       </div>
+      <AlarmWidgetEditor v-if="isAlarmWidget(w.type)" :key="w.type" :widget="w" :devices="devices" />
       <div v-if="w.type === 'status'" class="mb-3">
         <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
           Champs
