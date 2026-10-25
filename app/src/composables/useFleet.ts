@@ -237,18 +237,33 @@ export function parseCsv(text: string): string[][] {
   return rows
 }
 
+/** rapport journalier de la box : fuseau déclaré et retard (réception - fin de la période couverte) */
+export interface DailyHealth {
+  device_id: string
+  tz: string | null
+  last_day: string
+  period_end: string
+  received_at: string
+  lag_hours: number
+}
+/** au-delà, la box envoie la journée trop tard (fuseau autre que celui du site, le plus souvent UTC) */
+export const DAILY_LATE_HOURS = 3
+export const SITE_TZ = 'Europe/Paris'
+
 export function useFleet() {
   const devices = ref<FleetDevice[]>([])
   const defaultWarranty = ref(24)
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const daily = ref<Map<string, DailyHealth>>(new Map())
 
   async function load() {
     loading.value = true
     error.value = null
-    const [d, s] = await Promise.all([
+    const [d, s, h] = await Promise.all([
       sb.from('devices').select(FLEET_COLS).order('created_at', { ascending: false }),
       sb.from('fleet_settings').select('default_warranty_months').maybeSingle(),
+      sb.rpc('fleet_daily_health'),
     ])
     loading.value = false
     if (d.error) {
@@ -257,6 +272,12 @@ export function useFleet() {
     }
     devices.value = (d.data ?? []) as FleetDevice[]
     if (s.data) defaultWarranty.value = s.data.default_warranty_months
+    daily.value = new Map(
+      ((h.data ?? []) as DailyHealth[]).map((x) => [
+        x.device_id,
+        { ...x, lag_hours: Number(x.lag_hours) },
+      ]),
+    )
   }
 
   async function setDefaultWarranty(n: number) {
@@ -280,7 +301,7 @@ export function useFleet() {
     if (i >= 0) devices.value[i] = data as FleetDevice
   }
 
-  return { devices, defaultWarranty, loading, error, load, setDefaultWarranty, updateField }
+  return { devices, daily, defaultWarranty, loading, error, load, setDefaultWarranty, updateField }
 }
 
 /** message d'erreur Postgres lisible */

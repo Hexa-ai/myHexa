@@ -14,6 +14,8 @@ import {
   warrantyText,
   toCsv,
   STATUS_LABEL,
+  DAILY_LATE_HOURS,
+  SITE_TZ,
   type EditableField,
   type FleetDevice,
   type FleetStatus,
@@ -27,7 +29,7 @@ const auth = useAuthStore()
 const router = useRouter()
 const canEdit = computed(() => auth.isHexaStaffAdmin)
 const { companies, fetch: fetchCompanies } = useStaffCompanies()
-const { devices, defaultWarranty, loading, error, load, setDefaultWarranty, updateField } =
+const { devices, daily, defaultWarranty, loading, error, load, setDefaultWarranty, updateField } =
   useFleet()
 
 const hexaId = computed(() => companies.value.find((c) => c.is_hexa_internal)?.id ?? '')
@@ -39,6 +41,20 @@ const fStatus = ref<'all' | FleetStatus>('all')
 const fCompany = ref('all')
 const fWarranty = ref<'all' | 'ok' | 'soon' | 'expired'>('all')
 const fAnomaly = ref(false)
+const fLate = ref(false)
+/** journalier reçu trop tard ou fuseau différent de celui du site */
+const lateDaily = (d: FleetDevice) => {
+  const h = daily.value.get(d.id)
+  return !!h && (h.lag_hours > DAILY_LATE_HOURS || (!!h.tz && h.tz !== SITE_TZ))
+}
+const dailyTitle = (d: FleetDevice) => {
+  const h = daily.value.get(d.id)
+  if (!h) return 'Aucun rapport journalier reçu depuis 30 jours'
+  const base = `Dernier journalier : journée du ${fmtDay(h.last_day)}, reçu ${h.lag_hours} h après la fin de la journée couverte.`
+  return h.tz && h.tz !== SITE_TZ
+    ? `${base} Fuseau de la box : ${h.tz}. À régler sur ${SITE_TZ} (réglage de la box) : journalier envoyé avec un jour de retard, mails de la box décalés.`
+    : base
+}
 
 const dupMac = computed(() => {
   const m = new Map<string, number>()
@@ -82,6 +98,7 @@ const filtered = computed(() => {
     if (fCompany.value !== 'all' && d.company_id !== fCompany.value) return false
     if (fWarranty.value !== 'all' && w(d).state !== fWarranty.value) return false
     if (fAnomaly.value && !anomalies(d).length) return false
+    if (fLate.value && !lateDaily(d)) return false
     if (!s) return true
     return [
       d.name,
@@ -103,11 +120,13 @@ const counts = computed(() => {
     scrapped: 0,
     soon: 0,
     anomalies: 0,
+    late: 0,
   }
   for (const d of devices.value) {
     c[d.fleet_status]++
     if (w(d).state === 'soon') c.soon++
     if (anomalies(d).length) c.anomalies++
+    if (lateDaily(d)) c.late++
   }
   return c
 })
@@ -371,6 +390,14 @@ onMounted(() => {
           counts.anomalies
         }})
       </label>
+      <label
+        class="inline-flex items-center gap-1.5 text-sm"
+        title="Fuseau de la box différent de celui du site, ou journalier reçu en retard"
+      >
+        <input v-model="fLate" type="checkbox" data-testid="fleet-late" /> Journalier en retard ({{
+          counts.late
+        }})
+      </label>
     </div>
 
     <div
@@ -422,6 +449,7 @@ onMounted(() => {
             <th :class="TH">Entreprise</th>
             <th :class="TH">Statut</th>
             <th :class="TH">Garantie</th>
+            <th :class="TH">Journalier</th>
             <th :class="[TH, 'w-8']"></th>
           </tr>
         </thead>
@@ -517,6 +545,17 @@ onMounted(() => {
                 <span class="text-muted-foreground">· {{ fmtDay(w(d).end) }}</span>
               </template>
             </td>
+            <td
+              class="px-2 py-1 text-xs whitespace-nowrap"
+              :class="lateDaily(d) ? 'text-amber-600' : 'text-muted-foreground'"
+              :title="dailyTitle(d)"
+              data-testid="fleet-daily"
+            >
+              <template v-if="daily.get(d.id)">
+                {{ daily.get(d.id)!.tz ?? '?' }}
+                <span>· {{ Math.round(daily.get(d.id)!.lag_hours) }} h</span>
+              </template>
+            </td>
             <td class="px-2 py-1 text-right">
               <button
                 class="text-[10px] font-mono uppercase text-muted-foreground hover:text-signal"
@@ -528,7 +567,7 @@ onMounted(() => {
             </td>
           </tr>
           <tr v-if="!filtered.length && !loading">
-            <td colspan="10" class="px-4 py-8 text-center text-muted-foreground text-sm">
+            <td colspan="11" class="px-4 py-8 text-center text-muted-foreground text-sm">
               Aucune box
             </td>
           </tr>

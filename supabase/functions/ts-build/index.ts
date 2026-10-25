@@ -256,6 +256,60 @@ async function backfillEvents(device: string, company: string) {
   return { device, months: byMonth.size, events: n }
 }
 
+const SITE_TZ = 'Europe/Paris'
+const siteDate = (t: number) => new Intl.DateTimeFormat('en-CA', { timeZone: SITE_TZ }).format(new Date(t))
+const nextDate = (d: string) => new Date(Date.parse(d + 'T12:00:00Z') + DAY).toISOString().slice(0, 10)
+/** journées de Paris qui recoupent [from, to) : [date, début, fin] */
+export function siteDays(from: number, to: number): [string, number, number][] {
+  const out: [string, number, number][] = []
+  let d = siteDate(from)
+  for (let a = zonedMidnight(d, SITE_TZ); a < to; ) {
+    const n = nextDate(d)
+    const b = zonedMidnight(n, SITE_TZ)
+    out.push([d, a, b])
+    d = n
+    a = b
+  }
+  return out
+}
+/** 1 j des journées de Paris recoupant [from, to), recalculé depuis les fichiers 1 h (box hors fuseau du site) */
+async function rebuildSiteDays(device: string, base: string, counters: Set<string>, from: number, to: number) {
+  const days = siteDays(from, to)
+  const lo = days[0][1]
+  const hi = days[days.length - 1][2]
+  // fichiers 1 h qui peuvent contenir ces heures (rangés par jour de la box, donc mois UTC ou local)
+  const months = new Set<string>()
+  for (const t of [lo, hi - 1]) {
+    months.add(new Date(t).toISOString().slice(0, 7))
+    months.add(siteDate(t).slice(0, 7))
+  }
+  const hours = new Map<string, TsRow>()
+  for (const ym of months) {
+    const buf = await download(`agg/1h/${base}/year=${ym.slice(0, 4)}/${ym}.parquet`)
+    if (buf) for (const r of await readAll(buf)) if (r.ts >= lo && r.ts < hi) hours.set(r.var + '|' + r.ts, r)
+  }
+  const byYear = new Map<string, { rows: TsRow[]; lo: number; hi: number }>()
+  for (const [d, a, b] of days) {
+    const yr = byYear.get(d.slice(0, 4)) ?? byYear.set(d.slice(0, 4), { rows: [], lo: a, hi: b }).get(d.slice(0, 4))!
+    yr.lo = Math.min(yr.lo, a)
+    yr.hi = Math.max(yr.hi, b)
+    yr.rows.push(...aggregate([...hours.values()].filter((r) => r.ts >= a && r.ts < b), DAY, counters, a))
+  }
+  for (const [yy, { rows, lo: a, hi: b }] of byYear) {
+    const path = `agg/1d/${base}/${yy}.parquet`
+    const old = await download(path)
+    if (!old && !rows.length) continue
+    const merged = mergeRange(old ? await readAll(old) : [], rows, a, b)
+    if (!merged.length) {
+      await drop(device, '1d', yy, path)
+      continue
+    }
+    const bytes = writeTs(merged, { level: '1d', period: yy })
+    await upload(path, bytes)
+    await index(device, '1d', yy, path, merged, bytes.length)
+  }
+}
+
 async function buildDay(device: string, company: string, day: string) {
   const [y, m] = day.split('-')
   const base = `company=${company}/device=${device}`
@@ -346,10 +400,13 @@ async function buildDay(device: string, company: string, day: string) {
   ]
 
   const wk = isoWeek(day)
+  // 1 jour = journée du SITE (heure de Paris). Box réglée sur un autre fuseau (souvent UTC) : son journalier
+  // ne tombe pas sur nos journées -> le 1 j est recalculé depuis le 1 h pour les journées de Paris touchées.
+  const aligned = dayStart === zonedMidnight(day, SITE_TZ)
   const levels: [string, string, string, TsRow[]][] = [
     ['1m', wk.key, `agg/1m/${base}/year=${wk.key.slice(0, 4)}/${wk.key}.parquet`, a1m],
     ['1h', `${y}-${m}`, `agg/1h/${base}/year=${y}/${y}-${m}.parquet`, a1h],
-    ['1d', y, `agg/1d/${base}/${y}.parquet`, a1d],
+    ...(aligned ? [['1d', y, `agg/1d/${base}/${y}.parquet`, a1d] as [string, string, string, TsRow[]]] : []),
   ]
   for (const [level, period, path, rows] of levels) {
     const old = await download(path)
@@ -363,6 +420,7 @@ async function buildDay(device: string, company: string, day: string) {
     await upload(path, bytes)
     await index(device, level, period, path, merged, bytes.length)
   }
+  if (!aligned) await rebuildSiteDays(device, base, counters, dayStart, dayEnd)
 
   // catalogue
   const vars = [...new Set(raw.map((r) => r.var))]
