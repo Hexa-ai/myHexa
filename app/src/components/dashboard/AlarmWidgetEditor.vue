@@ -110,7 +110,7 @@ const LBL = 'font-mono text-[10px] uppercase tracking-widest text-muted-foregrou
             :style="{ background: SEV_COLOR[n.severity] }"
           />
           <span class="font-mono truncate">{{ n.name }}</span>
-          <span v-if="n.description" class="text-muted-foreground truncate"
+          <span v-if="n.description && n.description !== n.name" class="text-muted-foreground truncate"
             >· {{ n.description }}</span
           >
         </label>

@@ -86,6 +86,7 @@ function setType(t: WidgetType) {
     if (!w.value.sources.length || w.value.sources.some((s) => s.var))
       w.value.sources = props.devices.map((d) => ({ device: d.id, var: '' }))
     w.value.options.severities ??= ['error', 'warning']
+    w.value.options.compare ??= null
     if (w.value.width === '1/4' || w.value.width === '1/3') w.value.width = t === 'alarm_history' ? 'full' : '1/2'
   } else if (t === 'status') {
     w.value.sources = props.devices.map((d) => ({ device: d.id, var: '' }))
