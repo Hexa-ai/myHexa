@@ -246,9 +246,8 @@ export interface DailyHealth {
   received_at: string
   lag_hours: number
 }
-/** au-delà, la box envoie la journée trop tard (fuseau autre que celui du site, le plus souvent UTC) */
+/** au-delà, la box envoie sa journée trop tard (fuseau de la box décalé par rapport à l'heure locale du site) */
 export const DAILY_LATE_HOURS = 3
-export const SITE_TZ = 'Europe/Paris'
 
 export function useFleet() {
   const devices = ref<FleetDevice[]>([])

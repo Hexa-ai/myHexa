@@ -15,7 +15,6 @@ import {
   toCsv,
   STATUS_LABEL,
   DAILY_LATE_HOURS,
-  SITE_TZ,
   type EditableField,
   type FleetDevice,
   type FleetStatus,
@@ -42,17 +41,14 @@ const fCompany = ref('all')
 const fWarranty = ref<'all' | 'ok' | 'soon' | 'expired'>('all')
 const fAnomaly = ref(false)
 const fLate = ref(false)
-/** journalier reçu trop tard ou fuseau différent de celui du site */
-const lateDaily = (d: FleetDevice) => {
-  const h = daily.value.get(d.id)
-  return !!h && (h.lag_hours > DAILY_LATE_HOURS || (!!h.tz && h.tz !== SITE_TZ))
-}
+/** journalier reçu trop tard (la box l'envoie bien après la fin de la journée couverte) */
+const lateDaily = (d: FleetDevice) => (daily.value.get(d.id)?.lag_hours ?? 0) > DAILY_LATE_HOURS
 const dailyTitle = (d: FleetDevice) => {
   const h = daily.value.get(d.id)
   if (!h) return 'Aucun rapport journalier reçu depuis 30 jours'
-  const base = `Dernier journalier : journée du ${fmtDay(h.last_day)}, reçu ${h.lag_hours} h après la fin de la journée couverte.`
-  return h.tz && h.tz !== SITE_TZ
-    ? `${base} Fuseau de la box : ${h.tz}. À régler sur ${SITE_TZ} (réglage de la box) : journalier envoyé avec un jour de retard, mails de la box décalés.`
+  const base = `Dernier journalier : journée du ${fmtDay(h.last_day)} (fuseau de la box : ${h.tz ?? 'inconnu'}), reçu ${h.lag_hours} h après la fin de la journée couverte.`
+  return lateDaily(d)
+    ? `${base} La box envoie sa journée trop tard (son fuseau est sans doute en avance ou en retard sur l'heure locale du site) : vérifier son réglage de fuseau.`
     : base
 }
 
@@ -392,7 +388,7 @@ onMounted(() => {
       </label>
       <label
         class="inline-flex items-center gap-1.5 text-sm"
-        title="Fuseau de la box différent de celui du site, ou journalier reçu en retard"
+        title="Journalier reçu plus de 3 h après la fin de la journée couverte"
       >
         <input v-model="fLate" type="checkbox" data-testid="fleet-late" /> Journalier en retard ({{
           counts.late

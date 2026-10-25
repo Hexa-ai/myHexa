@@ -9,6 +9,7 @@
 //   2. agrégats du jour fusionnés dans : agg/1m (semaine ISO), agg/1h (mois), agg/1d (année).
 //   3. événements d'alarme du journalier dans events/…/YYYY-MM.parquet (le journalier remplace son jour).
 //      POST {events_backfill: true, device?} : reprise unique de tous les journaliers + anciens hebdo
+//      POST {rebuild_1d: true, device?} : supprime le niveau 1 j et remet tous les jours en file (passage aux journées UTC)
 //      (un jour couvert par un journalier ne prend que les événements du journalier).
 // Appelée par pg_net à l'arrivée d'un rapport journalier ({device}) et par le cron horaire. Protégée par x-cron-secret.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -256,33 +257,32 @@ async function backfillEvents(device: string, company: string) {
   return { device, months: byMonth.size, events: n }
 }
 
-const SITE_TZ = 'Europe/Paris'
-const siteDate = (t: number) => new Intl.DateTimeFormat('en-CA', { timeZone: SITE_TZ }).format(new Date(t))
+// niveau 1 j = journées UTC pour toutes les box, quel que soit leur réglage de fuseau. Jours, semaines et mois
+// dans le fuseau du lecteur (navigateur, modèle de rapport) : recalculés à la demande depuis le 1 h (ts-read).
+const DAY_TZ = 'UTC'
+const siteDate = (t: number) => new Date(t).toISOString().slice(0, 10)
 const nextDate = (d: string) => new Date(Date.parse(d + 'T12:00:00Z') + DAY).toISOString().slice(0, 10)
-/** journées de Paris qui recoupent [from, to) : [date, début, fin] */
-export function siteDays(from: number, to: number): [string, number, number][] {
+/** journées UTC qui recoupent [from, to) : [date, début, fin] */
+export function utcDays(from: number, to: number): [string, number, number][] {
   const out: [string, number, number][] = []
   let d = siteDate(from)
-  for (let a = zonedMidnight(d, SITE_TZ); a < to; ) {
+  for (let a = zonedMidnight(d, DAY_TZ); a < to; ) {
     const n = nextDate(d)
-    const b = zonedMidnight(n, SITE_TZ)
+    const b = zonedMidnight(n, DAY_TZ)
     out.push([d, a, b])
     d = n
     a = b
   }
   return out
 }
-/** 1 j des journées de Paris recoupant [from, to), recalculé depuis les fichiers 1 h (box hors fuseau du site) */
-async function rebuildSiteDays(device: string, base: string, counters: Set<string>, from: number, to: number) {
-  const days = siteDays(from, to)
+/** 1 j des journées UTC recoupant [from, to), recalculé depuis les fichiers 1 h (box réglée sur un autre fuseau que UTC) */
+async function rebuildUtcDays(device: string, base: string, counters: Set<string>, from: number, to: number, extra: TsRow[] = []) {
+  const days = utcDays(from, to)
   const lo = days[0][1]
   const hi = days[days.length - 1][2]
-  // fichiers 1 h qui peuvent contenir ces heures (rangés par jour de la box, donc mois UTC ou local)
+  // fichiers 1 h qui peuvent contenir ces heures (rangés par jour local de la box : mois voisins inclus)
   const months = new Set<string>()
-  for (const t of [lo, hi - 1]) {
-    months.add(new Date(t).toISOString().slice(0, 7))
-    months.add(siteDate(t).slice(0, 7))
-  }
+  for (const t of [lo - DAY, lo, hi - 1, hi + DAY]) months.add(siteDate(t).slice(0, 7))
   const hours = new Map<string, TsRow>()
   for (const ym of months) {
     const buf = await download(`agg/1h/${base}/year=${ym.slice(0, 4)}/${ym}.parquet`)
@@ -294,12 +294,18 @@ async function rebuildSiteDays(device: string, base: string, counters: Set<strin
     yr.lo = Math.min(yr.lo, a)
     yr.hi = Math.max(yr.hi, b)
     yr.rows.push(...aggregate([...hours.values()].filter((r) => r.ts >= a && r.ts < b), DAY, counters, a))
+    yr.rows.push(...extra.filter((r) => r.ts >= a && r.ts < b))
   }
   for (const [yy, { rows, lo: a, hi: b }] of byYear) {
     const path = `agg/1d/${base}/${yy}.parquet`
     const old = await download(path)
     if (!old && !rows.length) continue
-    const merged = mergeRange(old ? await readAll(old) : [], rows, a, b)
+    // garde les lignes d'autres variables déjà présentes ces jours-là (stats seules d'une journée voisine de la box),
+    // si elles sont bien à minuit UTC
+    const keys = new Set(rows.map((r) => r.var + '|' + r.ts))
+    const prev = old ? await readAll(old) : []
+    const kept = prev.filter((r) => r.ts >= a && r.ts < b && r.ts % DAY === 0 && !keys.has(r.var + '|' + r.ts))
+    const merged = mergeRange(prev, [...rows, ...kept].sort((x, y) => x.ts - y.ts || (x.var < y.var ? -1 : 1)), a, b)
     if (!merged.length) {
       await drop(device, '1d', yy, path)
       continue
@@ -400,9 +406,9 @@ async function buildDay(device: string, company: string, day: string) {
   ]
 
   const wk = isoWeek(day)
-  // 1 jour = journée du SITE (heure de Paris). Box réglée sur un autre fuseau (souvent UTC) : son journalier
-  // ne tombe pas sur nos journées -> le 1 j est recalculé depuis le 1 h pour les journées de Paris touchées.
-  const aligned = dayStart === zonedMidnight(day, SITE_TZ)
+  // 1 jour = journée UTC. Journalier d'une box réglée en UTC : pris tel quel (stats calculées par la box) ;
+  // autre fuseau : le 1 j est recalculé depuis le 1 h pour les journées UTC touchées.
+  const aligned = dayStart === zonedMidnight(day, DAY_TZ)
   const levels: [string, string, string, TsRow[]][] = [
     ['1m', wk.key, `agg/1m/${base}/year=${wk.key.slice(0, 4)}/${wk.key}.parquet`, a1m],
     ['1h', `${y}-${m}`, `agg/1h/${base}/year=${y}/${y}-${m}.parquet`, a1h],
@@ -420,7 +426,13 @@ async function buildDay(device: string, company: string, day: string) {
     await upload(path, bytes)
     await index(device, level, period, path, merged, bytes.length)
   }
-  if (!aligned) await rebuildSiteDays(device, base, counters, dayStart, dayEnd)
+  if (!aligned) {
+    // variables sans courbe (stats du rapport seules) : rattachées à la journée UTC la plus proche du début de la journée de la box
+    const withHours = new Set(a1h.map((r) => r.var))
+    const utcDay = Math.round(dayStart / DAY) * DAY
+    const statOnly = a1d.filter((r) => !withHours.has(r.var)).map((r) => ({ ...r, ts: utcDay }))
+    await rebuildUtcDays(device, base, counters, dayStart, dayEnd, statOnly)
+  }
 
   // catalogue
   const vars = [...new Set(raw.map((r) => r.var))]
@@ -442,7 +454,26 @@ async function buildDay(device: string, company: string, day: string) {
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('method not allowed', { status: 405 })
   if (!CRON_SECRET || req.headers.get('x-cron-secret') !== CRON_SECRET) return new Response('forbidden', { status: 403 })
-  const body = (await req.json().catch(() => ({}))) as { device?: string; limit?: number; events_backfill?: boolean }
+  const body = (await req.json().catch(() => ({}))) as {
+    device?: string
+    limit?: number
+    events_backfill?: boolean
+    rebuild_1d?: boolean
+  }
+  if (body.rebuild_1d) {
+    let q = admin.from('ts_files').select('device_id, level, period, path').in('level', ['1d', 'raw'])
+    if (body.device) q = q.eq('device_id', body.device)
+    const { data, error } = await q
+    if (error) return Response.json({ error: error.message }, { status: 500 })
+    const files = data ?? []
+    for (const f of files.filter((f) => f.level === '1d')) await drop(f.device_id, '1d', f.period, f.path)
+    const days = files.filter((f) => f.level === 'raw').map((f) => ({ device_id: f.device_id, day: f.period, since: new Date().toISOString() }))
+    for (let i = 0; i < days.length; i += 500) {
+      const { error: e } = await admin.from('ts_dirty').upsert(days.slice(i, i + 500), { onConflict: 'device_id,day' })
+      if (e) return Response.json({ error: e.message }, { status: 500 })
+    }
+    return Response.json({ dropped_1d: files.filter((f) => f.level === '1d').length, queued_days: days.length })
+  }
   if (body.events_backfill) {
     // reprise des événements d'alarme : une box (device) ou toutes celles qui ont des rapports
     let dq = admin.from('devices').select('id, company_id').not('company_id', 'is', null)
