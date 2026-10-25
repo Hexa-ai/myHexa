@@ -204,6 +204,9 @@ Deno.serve(async (req) => {
         role,
         restrict_to_devices: body.restrict_to_devices ?? null,
         shared_devices: body.shared_devices ?? null,
+        // personne « alarmes seulement » invitée : elle obtient son compte et l'accès portail
+        auth_user_id: existing.auth_user_id ?? authUserId,
+        portal_access: true,
       })
       .eq('id', existing.id)
       .select('*')

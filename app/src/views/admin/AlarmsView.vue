@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useDevices } from '@/composables/useDevices'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { injectAlarmCounts } from '@/composables/useAlarmCounts'
+import { fetchAlarms, fmtDur as fmtDuration } from '@/composables/useAlarmHistory'
 
 const alarmCounts = injectAlarmCounts()
 const auth = useAuthStore()
@@ -21,17 +22,25 @@ import {
 const router = useRouter()
 const { devices, loading: devicesLoading, error: devicesError, load: loadDevices } = useDevices()
 
+// historique = occurrences (apparition -> disparition) issues des rapports journaliers (fichiers Parquet) ;
+// une alarme du jour n'y entre que le lendemain : le fil de l'eau (dernier statut) montre l'instant présent
 interface HistoryRow {
   device_id: string
   device_name: string | null
-  ts: string | null
-  variable_name: string | null
+  ts: string
+  end: string | null
+  duration: number
+  ongoing: boolean
+  before: boolean
+  variable_name: string
   description: string | null
-  type_alarm: string | null
-  state_label: string | null
+  type_alarm: string
 }
 
+const HISTORY_SPANS = { 7: '7 jours', 30: '30 jours', 90: '3 mois', 365: '1 an' } as const
+const historyDays = ref<7 | 30 | 90 | 365>(30)
 const history = ref<HistoryRow[]>([])
+const historyTotal = ref(0)
 const historyLoading = ref(false)
 const historyError = ref<string | null>(null)
 
@@ -39,23 +48,34 @@ async function loadHistory() {
   if (history.value.length === 0) historyLoading.value = true
   historyError.value = null
   try {
-    const { data, error: err } = await supabase
-      .rpc('alarm_history')
-      .order('ts', { ascending: false, nullsFirst: false })
-    if (err) {
-      historyError.value = err.message
-      return
-    }
-    history.value = (data ?? []) as HistoryRow[]
+    const ids = devices.value.map((d) => d.id)
+    const to = Date.now()
+    const r = await fetchAlarms(ids, to - historyDays.value * 864e5, to, { limit: 2000 })
+    const names = new Map(devices.value.map((d) => [d.id, d.name ?? d.id]))
+    historyTotal.value = r.total
+    history.value = r.occurrences.map((o) => ({
+      device_id: o.device,
+      device_name: names.get(o.device) ?? null,
+      ts: new Date(o.start).toISOString(),
+      end: o.end === null ? null : new Date(o.end).toISOString(),
+      duration: o.duration,
+      ongoing: o.ongoing,
+      before: o.before,
+      variable_name: o.name,
+      description: o.description && o.description !== o.name ? o.description : null,
+      type_alarm: o.severity,
+    }))
   } catch (e) {
     historyError.value = e instanceof Error ? e.message : 'Unknown error'
   } finally {
     historyLoading.value = false
   }
 }
+watch(historyDays, loadHistory)
 
 async function refreshAll() {
-  await Promise.all([loadDevices(), loadHistory(), loadInterventions()])
+  await Promise.all([loadDevices(), loadInterventions()])
+  await loadHistory()
 }
 useAutoRefresh(refreshAll, { intervalMs: 120_000 })
 watch(() => auth.effectiveCompanyId, refreshAll)
@@ -66,7 +86,7 @@ const TYPE_OPTIONS = ['error', 'warning', 'info'] as const
 type AlarmType = (typeof TYPE_OPTIONS)[number]
 
 const selectedDevice = ref<'all' | string>('all')
-const selectedTypes = ref<Set<AlarmType>>(new Set(TYPE_OPTIONS))
+const selectedTypes = ref<Set<AlarmType>>(new Set(['error', 'warning'])) // infos masquées par défaut
 const mode = ref<'live' | 'history' | 'signalements'>('live')
 
 // ------------------------------ Interventions --------------------------------
@@ -326,8 +346,7 @@ function openDevice(id: string) {
           Alarmes<span class="text-signal">.</span>
         </h1>
         <p class="mt-3 text-sm text-muted-foreground max-w-md">
-          Vue temps réel des alarmes actives + historique consolidé depuis les rapports
-          quotidiens et hebdomadaires.
+          Alarmes en cours d'après le dernier statut de chaque box ; historique d'après les rapports journaliers.
         </p>
       </div>
 
@@ -567,6 +586,24 @@ function openDevice(id: string) {
 
     <!-- History -->
     <template v-else-if="mode === 'history'">
+      <div class="flex flex-wrap items-center gap-2 mb-3 text-xs text-muted-foreground">
+        <span class="inline-flex gap-1 p-1 border border-border rounded-md bg-card/40">
+          <button
+            v-for="(lbl, d) in HISTORY_SPANS"
+            :key="d"
+            :data-testid="`hist-span-${d}`"
+            :class="[
+              'font-mono text-[10px] uppercase tracking-[0.18em] px-2.5 py-1 rounded transition',
+              historyDays === Number(d) ? 'bg-signal text-primary-foreground' : 'hover:text-foreground',
+            ]"
+            @click="historyDays = Number(d) as 7 | 30 | 90 | 365"
+          >
+            {{ lbl }}
+          </button>
+        </span>
+        <span>Une ligne par occurrence, d'après les rapports journaliers : les alarmes du jour y entrent le lendemain (en direct : « Fil de l'eau »).</span>
+        <span v-if="historyTotal > history.length">{{ history.length }} plus récentes sur {{ historyTotal }}.</span>
+      </div>
       <div
         v-if="historyLoading && !history.length"
         class="border border-border rounded-md bg-card/40 p-8 text-center font-mono text-sm text-muted-foreground"
@@ -589,23 +626,32 @@ function openDevice(id: string) {
         <table class="w-full text-sm min-w-[720px]">
           <thead>
             <tr class="border-b border-border bg-card/60">
-              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[140px]">Date</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[140px]">Début</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[140px]">Fin</th>
+              <th class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[90px]">Durée</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]">Type</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Device</th>
-              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Variable</th>
+              <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Alarme</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Description</th>
-              <th class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[80px]">État</th>
             </tr>
           </thead>
           <tbody>
             <tr
               v-for="a in filteredHistory"
-              :key="`${a.device_id}-${a.ts}-${a.variable_name}-${a.state_label}`"
+              :key="`${a.device_id}-${a.ts}-${a.variable_name}`"
+              data-testid="alarm-occ"
               class="border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition"
               @click="openDevice(a.device_id)"
             >
               <td class="px-4 py-3 font-mono text-xs text-muted-foreground tabular whitespace-nowrap">
                 {{ fmtFullDate(a.ts) }}
+              </td>
+              <td class="px-4 py-3 font-mono text-xs tabular whitespace-nowrap">
+                <span v-if="a.end" class="text-muted-foreground">{{ fmtFullDate(a.end) }}</span>
+                <span v-else class="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-offline-soft text-offline">en cours</span>
+              </td>
+              <td class="px-4 py-3 text-right font-mono text-xs tabular whitespace-nowrap">
+                {{ fmtDuration(a.duration) }}
               </td>
               <td class="px-4 py-3">
                 <span
@@ -618,16 +664,6 @@ function openDevice(id: string) {
               <td class="px-4 py-3 font-medium">{{ a.device_name || '—' }}</td>
               <td class="px-4 py-3 font-mono text-xs">{{ a.variable_name }}</td>
               <td class="px-4 py-3 text-muted-foreground text-xs">{{ a.description || '—' }}</td>
-              <td class="px-4 py-3 text-right">
-                <span
-                  :class="[
-                    'font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded',
-                    a.state_label === 'ON' ? 'bg-offline-soft text-offline' : 'bg-signal-soft text-signal',
-                  ]"
-                >
-                  {{ a.state_label || '—' }}
-                </span>
-              </td>
             </tr>
           </tbody>
         </table>
@@ -641,7 +677,7 @@ function openDevice(id: string) {
       >
         <button
           v-for="(a, i) in filteredHistory"
-          :key="`mh-${a.device_id}-${a.ts}-${a.variable_name}-${a.state_label}`"
+          :key="`mh-${a.device_id}-${a.ts}-${a.variable_name}`"
           class="w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
           :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
           @click="openDevice(a.device_id)"
@@ -659,10 +695,10 @@ function openDevice(id: string) {
             <span
               :class="[
                 'font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0',
-                a.state_label === 'ON' ? 'bg-offline-soft text-offline' : 'bg-signal-soft text-signal',
+                a.ongoing ? 'bg-offline-soft text-offline' : 'bg-secondary text-muted-foreground',
               ]"
             >
-              {{ a.state_label || '—' }}
+              {{ a.ongoing ? 'en cours' : fmtDuration(a.duration) }}
             </span>
           </div>
           <div class="flex items-center justify-between gap-2">

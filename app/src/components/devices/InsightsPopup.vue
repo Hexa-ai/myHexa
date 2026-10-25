@@ -18,13 +18,18 @@ const router = useRouter()
 const showAll = ref(false)
 
 function openReport(ins: ReportInsight) {
+  // ouvre l'historique sur la période analysée (jour ou semaine), variable concernée
+  const start = ins.report_period_start
+    ? new Date(ins.report_period_start + 'T00:00:00').getTime()
+    : Date.now() - 864e5
+  const span = (ins.period_kind === 'weekly' ? 7 : 1) * 864e5
   router.push({
-    name: 'admin-device-periodic',
+    name: 'admin-device-history',
     params: { id: props.deviceId },
     query: {
-      type: ins.period_kind,
-      ...(ins.report_period_start ? { period: ins.report_period_start } : {}),
-      ...(ins.variable_name ? { focus: ins.variable_name } : {}),
+      from: String(start),
+      to: String(start + span),
+      ...(ins.variable_name ? { v: ins.variable_name } : {}),
     },
   })
   emit('dismiss')
@@ -74,25 +79,51 @@ function kindClass(kind: string): string {
   return 'bg-secondary text-muted-foreground border border-border'
 }
 function consolidationTag(ins: ReportInsight): { label: string; cls: string } | null {
-  const ev = ins.evidence as { consolidation?: string } | null
+  const ev = ins.evidence as {
+    consolidation?: string
+    days_off_7d?: number
+    days_7d?: number
+  } | null
   const c = ev?.consolidation
   if (!c) return null
-  if (c === 'confirmed_at_weekly_scale') return { label: 'Confirmé à l’échelle hebdo', cls: 'bg-offline-soft text-offline border-offline/40' }
-  if (c === 'mild_weekly_signal') return { label: 'Signal hebdo modéré', cls: 'bg-amber/15 text-amber border-amber/40' }
-  if (c === 'demoted_no_weekly_confirmation') return { label: 'Pic isolé (non confirmé hebdo)', cls: 'bg-secondary text-muted-foreground border-border' }
-  if (c === 'no_weekly_data') return { label: 'Historique hebdo insuffisant', cls: 'bg-secondary/60 text-muted-foreground border-border' }
+  const k = ev?.days_off_7d != null ? ` (${ev.days_off_7d} j / ${ev.days_7d})` : ''
+  if (c === 'confirmed_7d' || c === 'confirmed_at_weekly_scale')
+    return {
+      label: `Confirmé sur 7 jours${k}`,
+      cls: 'bg-offline-soft text-offline border-offline/40',
+    }
+  if (c === 'mild_7d_signal' || c === 'mild_weekly_signal')
+    return { label: `Signal modéré sur 7 jours${k}`, cls: 'bg-amber/15 text-amber border-amber/40' }
+  if (c === 'isolated_peak' || c === 'demoted_no_weekly_confirmation')
+    return {
+      label: 'Pic isolé (un seul jour)',
+      cls: 'bg-secondary text-muted-foreground border-border',
+    }
+  if (c === 'no_7d_history' || c === 'no_weekly_data')
+    return {
+      label: 'Historique encore court',
+      cls: 'bg-secondary/60 text-muted-foreground border-border',
+    }
   return null
 }
 function kindExplain(kind: string): string {
-  if (kind === 'anomaly') return 'Écart inhabituel par rapport à l’historique récent (z-score > 2σ).'
-  if (kind === 'trend') return 'Dérive significative de la moyenne sur plusieurs périodes consécutives.'
-  if (kind === 'alarm_burst') return 'Concentration d’événements d’alarme nettement plus élevée que d’habitude.'
+  if (kind === 'anomaly')
+    return 'Court terme : journée inhabituelle par rapport aux 28 jours précédents (écart > 2σ).'
+  if (kind === 'trend')
+    return 'Long terme : dérive lente des moyennes hebdomadaires sur plusieurs semaines.'
+  if (kind === 'alarm_burst')
+    return 'Concentration d’événements d’alarme nettement plus élevée que d’habitude.'
   if (kind === 'threshold_cross') return 'Une valeur a dépassé un seuil configuré.'
-  if (kind === 'seasonal_deviation') return 'Écart par rapport au même créneau (jour/semaine) des périodes précédentes.'
+  if (kind === 'seasonal_deviation')
+    return 'Écart par rapport au même créneau (jour/semaine) des périodes précédentes.'
   return ''
 }
 function fmtEvidence(e: unknown): string {
-  try { return JSON.stringify(e, null, 2) } catch { return String(e) }
+  try {
+    return JSON.stringify(e, null, 2)
+  } catch {
+    return String(e)
+  }
 }
 
 // --- Synthèse "ce qu'il faut retenir" ---------------------------------------
@@ -160,13 +191,20 @@ const synthesisLead = computed(() => {
       class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
       @click.self="emit('dismiss')"
     >
-      <div class="bg-background w-full max-w-lg border border-border rounded-lg p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+      <div
+        class="bg-background w-full max-w-lg border border-border rounded-lg p-6 space-y-4 max-h-[85vh] overflow-y-auto"
+      >
         <header class="flex items-start justify-between gap-3">
           <div>
             <h2 class="text-lg font-semibold">Quoi de neuf sur cet équipement</h2>
             <p v-if="deviceName" class="text-xs text-muted-foreground mt-0.5">{{ deviceName }}</p>
           </div>
-          <button class="text-muted-foreground hover:text-foreground text-xl leading-none" @click="emit('dismiss')">×</button>
+          <button
+            class="text-muted-foreground hover:text-foreground text-xl leading-none"
+            @click="emit('dismiss')"
+          >
+            ×
+          </button>
         </header>
 
         <p v-if="insights.length === 0" class="text-sm text-muted-foreground">
@@ -178,16 +216,25 @@ const synthesisLead = computed(() => {
           <div class="border border-border rounded-md bg-card/40 p-4 space-y-2">
             <div class="flex items-center gap-2 flex-wrap">
               <span
-                :class="['font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold', kindClass(topInsight.kind)]"
+                :class="[
+                  'font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold',
+                  kindClass(topInsight.kind),
+                ]"
               >
                 {{ kindLabel(topInsight.kind, topInsight) }}
               </span>
               <span
-                :class="['font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded', severityClass(topInsight.severity)]"
+                :class="[
+                  'font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded',
+                  severityClass(topInsight.severity),
+                ]"
               >
                 {{ severityLabel(topInsight.severity) }}
               </span>
-              <span v-if="topInsight.variable_name" class="font-mono text-[10px] text-muted-foreground">
+              <span
+                v-if="topInsight.variable_name"
+                class="font-mono text-[10px] text-muted-foreground"
+              >
                 · {{ topInsight.variable_name }}
               </span>
             </div>
@@ -195,12 +242,22 @@ const synthesisLead = computed(() => {
               <span class="text-muted-foreground italic">{{ synthesisLead }}</span>
               <span class="block mt-1 font-medium">{{ topInsight.title }}</span>
             </p>
-            <p v-if="topInsight.body" class="text-sm text-muted-foreground">{{ topInsight.body }}</p>
-            <p v-else-if="kindExplain(topInsight.kind)" class="text-xs text-muted-foreground italic">
+            <p v-if="topInsight.body" class="text-sm text-muted-foreground">
+              {{ topInsight.body }}
+            </p>
+            <p
+              v-else-if="kindExplain(topInsight.kind)"
+              class="text-xs text-muted-foreground italic"
+            >
               {{ kindExplain(topInsight.kind) }}
             </p>
             <div v-if="consolidationTag(topInsight)" class="pt-1">
-              <span :class="['inline-block font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border', consolidationTag(topInsight)!.cls]">
+              <span
+                :class="[
+                  'inline-block font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border',
+                  consolidationTag(topInsight)!.cls,
+                ]"
+              >
                 {{ consolidationTag(topInsight)!.label }}
               </span>
             </div>
@@ -217,7 +274,10 @@ const synthesisLead = computed(() => {
                 class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
                 @click="showAll = true"
               >
-                Voir les {{ otherCount }} autre{{ otherCount > 1 ? 's' : '' }} signal{{ otherCount > 1 ? 'es' : '' }} →
+                Voir les {{ otherCount }} autre{{ otherCount > 1 ? 's' : '' }} signal{{
+                  otherCount > 1 ? 'es' : ''
+                }}
+                →
               </button>
             </div>
           </div>
@@ -240,16 +300,25 @@ const synthesisLead = computed(() => {
               <div class="flex items-start justify-between gap-2">
                 <div class="flex items-center gap-2 flex-wrap">
                   <span
-                    :class="['font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold', kindClass(ins.kind)]"
+                    :class="[
+                      'font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold',
+                      kindClass(ins.kind),
+                    ]"
                   >
                     {{ kindLabel(ins.kind, ins) }}
                   </span>
                   <span
-                    :class="['font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded', severityClass(ins.severity)]"
+                    :class="[
+                      'font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded',
+                      severityClass(ins.severity),
+                    ]"
                   >
                     {{ severityLabel(ins.severity) }}
                   </span>
-                  <span v-if="ins.variable_name" class="font-mono text-[10px] text-muted-foreground">
+                  <span
+                    v-if="ins.variable_name"
+                    class="font-mono text-[10px] text-muted-foreground"
+                  >
                     · {{ ins.variable_name }}
                   </span>
                 </div>
@@ -269,11 +338,20 @@ const synthesisLead = computed(() => {
                 {{ fmtPeriod(ins) }}
               </p>
               <div v-if="consolidationTag(ins)" class="pt-0.5">
-                <span :class="['inline-block font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border', consolidationTag(ins)!.cls]">
+                <span
+                  :class="[
+                    'inline-block font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border',
+                    consolidationTag(ins)!.cls,
+                  ]"
+                >
                   {{ consolidationTag(ins)!.label }}
                 </span>
               </div>
-              <pre v-if="expanded.has(ins.id)" class="text-[11px] font-mono bg-secondary/40 border border-border rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ fmtEvidence(ins.evidence) }}</pre>
+              <pre
+                v-if="expanded.has(ins.id)"
+                class="text-[11px] font-mono bg-secondary/40 border border-border rounded p-2 overflow-x-auto whitespace-pre-wrap"
+                >{{ fmtEvidence(ins.evidence) }}</pre
+              >
               <div class="pt-1">
                 <button
                   v-if="ins.report_period_start"

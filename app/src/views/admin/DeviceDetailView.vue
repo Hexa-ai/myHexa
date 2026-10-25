@@ -8,6 +8,7 @@ import DeviceReport from '@/components/DeviceReport.vue'
 import InsightsPopup from '@/components/devices/InsightsPopup.vue'
 import DeviceDocuments from '@/components/devices/DeviceDocuments.vue'
 import { useDeviceInsights } from '@/composables/useDeviceInsights'
+import DashboardLinks from '@/components/dashboard/DashboardLinks.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -51,7 +52,9 @@ const interventionUrl = computed(() => {
   return `${window.location.origin}/intervention?d=${device.value.id}`
 })
 
-async function geocodeAddress(address: string): Promise<{ lat: number; lng: number; displayName: string } | null> {
+async function geocodeAddress(
+  address: string,
+): Promise<{ lat: number; lng: number; displayName: string } | null> {
   const url = new URL('https://nominatim.openstreetmap.org/search')
   url.searchParams.set('q', address)
   url.searchParams.set('format', 'json')
@@ -157,6 +160,26 @@ async function loadDetail() {
 
 useAutoRefresh(loadDetail, { intervalMs: 120_000 })
 
+// tableau de bord « par défaut » de la box : ouvert à la place de la fiche (sauf lien explicite ?fiche=1)
+async function openDefaultDashboard() {
+  if (route.query.fiche) return
+  const id = String(route.params.id)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- table du proto absente des types générés
+  const { data } = await (supabase as any)
+    .from('dashboards')
+    .select('id')
+    .eq('device_id', id)
+    .eq('is_default', true)
+    .limit(1)
+  if (data?.[0] && String(route.params.id) === id && route.name === 'admin-device-detail')
+    router.replace({
+      name: 'admin-dashboard',
+      params: { scope: 'device', id },
+      query: { d: data[0].id },
+    })
+}
+openDefaultDashboard()
+
 // --- Insights intelligents (popup) ------------------------------------------
 const insightsApi = useDeviceInsights(() => device.value?.id ?? null)
 // Lance init dès que le device est chargé pour la 1ère fois
@@ -173,7 +196,11 @@ const shareEmail = ref('')
 const shareSubmitting = ref(false)
 const shareResult = ref<string | null>(null)
 
-interface CurrentShare { id: string; name: string; contact_email: string }
+interface CurrentShare {
+  id: string
+  name: string
+  contact_email: string
+}
 const currentShares = ref<CurrentShare[]>([])
 const sharesLoading = ref(false)
 const revokingId = ref<string | null>(null)
@@ -188,7 +215,9 @@ async function loadShares() {
       .contains('shared_devices', [device.value.id])
     if (err) throw new Error(err.message)
     currentShares.value = (data ?? []).map((r) => ({
-      id: r.id, name: r.name, contact_email: r.contact_email ?? '',
+      id: r.id,
+      name: r.name,
+      contact_email: r.contact_email ?? '',
     }))
   } catch (e) {
     shareResult.value = `Erreur : ${(e as Error).message}`
@@ -269,6 +298,13 @@ async function submitShare() {
       </button>
     </div>
 
+    <DashboardLinks
+      v-if="route.params.id"
+      :id="String(route.params.id)"
+      scope="device"
+      :can-manage="canShare"
+    />
+
     <!-- Insights intelligents popup -->
     <InsightsPopup
       :open="insightsApi.shouldShowPopup.value"
@@ -289,14 +325,21 @@ async function submitShare() {
         <div class="bg-background w-full max-w-md border border-border rounded-lg p-6 space-y-4">
           <header class="flex items-center justify-between">
             <h2 class="text-lg font-semibold">Partager cet équipement</h2>
-            <button class="text-muted-foreground hover:text-foreground text-xl leading-none" @click="shareOpen = false">×</button>
+            <button
+              class="text-muted-foreground hover:text-foreground text-xl leading-none"
+              @click="shareOpen = false"
+            >
+              ×
+            </button>
           </header>
           <p class="text-sm text-muted-foreground">
             Le destinataire (par email) verra cet équipement en plus de ses équipements habituels.
             Il doit déjà exister comme destinataire dans une compagnie ou comme guest.
           </p>
           <label class="block">
-            <span class="text-xs uppercase tracking-wide text-muted-foreground">Email du destinataire</span>
+            <span class="text-xs uppercase tracking-wide text-muted-foreground"
+              >Email du destinataire</span
+            >
             <input
               v-model="shareEmail"
               type="email"
@@ -306,7 +349,11 @@ async function submitShare() {
               @keyup.enter="submitShare"
             />
           </label>
-          <p v-if="shareResult" class="text-sm" :class="shareResult.startsWith('Erreur') ? 'text-red-500' : 'text-signal'">
+          <p
+            v-if="shareResult"
+            class="text-sm"
+            :class="shareResult.startsWith('Erreur') ? 'text-red-500' : 'text-signal'"
+          >
             {{ shareResult }}
           </p>
 
@@ -340,7 +387,12 @@ async function submitShare() {
           </div>
 
           <footer class="flex justify-end gap-2">
-            <button class="px-3 py-2 text-sm border border-border rounded-md" @click="shareOpen = false">Fermer</button>
+            <button
+              class="px-3 py-2 text-sm border border-border rounded-md"
+              @click="shareOpen = false"
+            >
+              Fermer
+            </button>
             <button
               :disabled="shareSubmitting"
               class="px-3 py-2 text-sm bg-primary text-primary-foreground rounded-md disabled:opacity-60"
@@ -378,7 +430,9 @@ async function submitShare() {
       :can-edit-vnc="canEdit"
       :vnc-host="device.vnc_host"
       :vnc-port="device.vnc_port"
-      :periodic-href="(t) => router.resolve({ name: 'admin-device-periodic', params: { id: device!.id }, query: { type: t } }).href"
+      :history-href="
+        router.resolve({ name: 'admin-device-history', params: { id: device!.id } }).href
+      "
       :intervention-url="interventionUrl"
       @save-location="onSaveLocation"
       @save-vnc="onSaveVnc"

@@ -81,5 +81,6 @@ export function useDevices() {
     }
   }
 
-  return { devices, loading, error, load }
+  // allDevices : non filtré par « agit comme » (vues ciblées sur une box / un projet précis)
+  return { devices, allDevices, loading, error, load }
 }

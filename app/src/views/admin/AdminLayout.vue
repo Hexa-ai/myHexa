@@ -33,8 +33,12 @@ watch(
 
 const now = ref(new Date())
 let timer: ReturnType<typeof setInterval> | undefined
-onMounted(() => { timer = setInterval(() => (now.value = new Date()), 1000) })
-onUnmounted(() => { if (timer) clearInterval(timer) })
+onMounted(() => {
+  timer = setInterval(() => (now.value = new Date()), 1000)
+})
+onUnmounted(() => {
+  if (timer) clearInterval(timer)
+})
 
 const clock = computed(() =>
   now.value.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -48,14 +52,18 @@ const breadcrumb = computed(() => {
   const map: Record<string, string> = {
     'admin-devices': 'devices',
     'admin-device-detail': 'devices / detail',
-    'admin-device-periodic': 'devices / rapports',
+    'admin-dashboards': 'tableaux de bord',
     'admin-map': 'map',
+    'admin-projects': 'projets',
+    'admin-dashboard': 'tableau de bord',
     'admin-alarms': 'alarms',
     'admin-interventions': 'interventions',
     'admin-recipients': 'destinataires',
+    'admin-alarm-recipients': "destinataires d'alarme",
     'staff-companies': 'staff / companies',
     'staff-company-detail': 'staff / company',
-    'staff-devices': 'staff / devices',
+    'staff-devices': 'parc des box',
+    'admin-updates': 'mises à jour',
     'staff-device-new': 'staff / new device',
   }
   return map[String(route.name ?? '')] ?? String(route.name ?? '')
@@ -80,21 +88,79 @@ const urgentDotClass = computed(() => {
 })
 const isInterventions = computed(() => route.name === 'admin-interventions')
 const isRecipients = computed(() => route.name === 'admin-recipients')
+const isAlarmRecipients = computed(() => route.name === 'admin-alarm-recipients')
 
 const sidebarOpen = ref(false)
-function closeSidebar() { sidebarOpen.value = false }
-function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
+// PC : menu réductible en barre d'icônes (choix mémorisé), pour laisser la place aux tableaux de bord
+const RAIL_KEY = 'hexa.sidebarCollapsed'
+const collapsed = ref(typeof localStorage !== 'undefined' && localStorage.getItem(RAIL_KEY) === '1')
+watch(collapsed, (v) => localStorage.setItem(RAIL_KEY, v ? '1' : '0'))
+function toggleCollapsed() {
+  collapsed.value = !collapsed.value
+}
+function closeSidebar() {
+  sidebarOpen.value = false
+}
+function toggleSidebar() {
+  sidebarOpen.value = !sidebarOpen.value
+}
 
-function goDevices() { router.push({ name: 'admin-devices' }); closeSidebar() }
-function goMap() { router.push({ name: 'admin-map' }); closeSidebar() }
-function goAlarms() { router.push({ name: 'admin-alarms' }); closeSidebar() }
-function goInterventions() { router.push({ name: 'admin-interventions' }); closeSidebar() }
-function goRecipients() { router.push({ name: 'admin-recipients' }); closeSidebar() }
-function goStaff() { router.push({ name: 'staff-companies' }); closeSidebar() }
-const isDevices = computed(() => route.name === 'admin-devices' || route.name === 'admin-device-detail' || route.name === 'admin-device-periodic')
+function goDevices() {
+  router.push({ name: 'admin-devices' })
+  closeSidebar()
+}
+function goMap() {
+  router.push({ name: 'admin-map' })
+  closeSidebar()
+}
+function goDashboards() {
+  router.push({ name: 'admin-dashboards' })
+  closeSidebar()
+}
+function goProjects() {
+  router.push({ name: 'admin-projects' })
+  closeSidebar()
+}
+function goAlarms() {
+  router.push({ name: 'admin-alarms' })
+  closeSidebar()
+}
+function goInterventions() {
+  router.push({ name: 'admin-interventions' })
+  closeSidebar()
+}
+function goRecipients() {
+  router.push({ name: 'admin-recipients' })
+  closeSidebar()
+}
+function goAlarmRecipients() {
+  router.push({ name: 'admin-alarm-recipients' })
+  closeSidebar()
+}
+function goStaff() {
+  router.push({ name: 'staff-companies' })
+  closeSidebar()
+}
+function goUpdates() {
+  router.push({ name: 'admin-updates' })
+  closeSidebar()
+}
+const isDevices = computed(
+  () => route.name === 'admin-devices' || route.name === 'admin-device-detail',
+)
 const isMap = computed(() => route.name === 'admin-map')
+const isProjects = computed(() => route.name === 'admin-projects')
+const isDashboards = computed(
+  () => route.name === 'admin-dashboards' || route.name === 'admin-dashboard',
+)
 const isAlarms = computed(() => route.name === 'admin-alarms')
-const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
+const isUpdates = computed(() => route.name === 'admin-updates')
+const isFleet = computed(() => String(route.name ?? '').startsWith('staff-device'))
+const isStaff = computed(() => String(route.name ?? '').startsWith('staff-') && !isFleet.value)
+function goFleet() {
+  router.push({ name: 'staff-devices' })
+  closeSidebar()
+}
 </script>
 
 <template>
@@ -108,12 +174,26 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
 
     <aside
       :class="[
-        'fixed md:static inset-y-0 left-0 w-64 shrink-0 border-r border-border bg-card md:bg-card/60 backdrop-blur-sm flex flex-col z-40 transition-transform md:translate-x-0',
+        'fixed md:static inset-y-0 left-0 w-64 shrink-0 border-r border-border bg-card md:bg-card/60 backdrop-blur-sm flex flex-col z-40 transition-[transform,width] md:translate-x-0',
         sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+        collapsed && 'rail md:w-16',
       ]"
+      data-testid="sidebar"
     >
       <!-- Logo -->
-      <div class="px-5 pt-6 pb-5 border-b border-border">
+      <div
+        v-if="collapsed"
+        class="hidden md:flex flex-col items-center gap-2 pt-5 pb-4 border-b border-border"
+      >
+        <img
+          src="/hexa-mark.png"
+          alt="Hexa-AI"
+          class="size-8 select-none"
+          :title="company"
+          draggable="false"
+        />
+      </div>
+      <div :class="['px-5 pt-6 pb-5 border-b border-border', collapsed && 'md:hidden']">
         <img
           :src="theme === 'dark' ? '/hexa-logo-dark.png' : '/hexa-logo-light.png'"
           alt="Hexa.ai"
@@ -123,15 +203,21 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
         <div class="mt-4 flex items-center justify-between gap-2">
           <div class="flex items-center gap-2 min-w-0">
             <span class="size-1.5 rounded-full bg-signal pulse-dot shrink-0" />
-            <span class="font-mono text-[11px] uppercase tracking-wider text-muted-foreground truncate">{{ company }}</span>
+            <span
+              class="font-mono text-[11px] uppercase tracking-wider text-muted-foreground truncate"
+              >{{ company }}</span
+            >
           </div>
-          <span class="font-mono text-[9px] uppercase tracking-[0.22em] text-signal/80 shrink-0">Edge</span>
+          <span class="font-mono text-[9px] uppercase tracking-[0.22em] text-signal/80 shrink-0"
+            >Edge</span
+          >
         </div>
       </div>
 
       <!-- Nav -->
       <nav class="flex-1 px-3 py-4 space-y-0.5">
         <button
+          :title="collapsed ? 'Devices' : undefined"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isDevices
@@ -146,15 +232,26 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
               isDevices ? 'bg-signal' : 'bg-transparent',
             ]"
           />
-          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+          >
             <path d="M12 2 3 7v10l9 5 9-5V7l-9-5Z" />
             <path d="M3 7l9 5 9-5M12 12v10" stroke-opacity="0.5" />
           </svg>
           <span class="tracking-tight">Devices</span>
-          <span v-if="isDevices" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
+          <span
+            v-if="isDevices"
+            class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal"
+            >●</span
+          >
         </button>
 
         <button
+          :title="collapsed ? 'Carte' : undefined"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isMap
@@ -169,15 +266,96 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
               isMap ? 'bg-signal' : 'bg-transparent',
             ]"
           />
-          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+          >
             <path d="M1 6v17l7-3 8 3 7-3V3l-7 3-8-3-7 3Z" />
             <path d="M8 3v17M16 6v17" stroke-opacity="0.5" />
           </svg>
           <span class="tracking-tight">Carte</span>
-          <span v-if="isMap" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
+          <span
+            v-if="isMap"
+            class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal"
+            >●</span
+          >
         </button>
 
         <button
+          :title="collapsed ? 'Tableaux de bord' : undefined"
+          :class="[
+            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
+            isDashboards
+              ? 'text-foreground bg-secondary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+          ]"
+          data-testid="nav-dashboards"
+          @click="goDashboards"
+        >
+          <span
+            :class="[
+              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
+              isDashboards ? 'bg-signal' : 'bg-transparent',
+            ]"
+          />
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+          >
+            <path d="M4 15a8 8 0 1 1 16 0" />
+            <path d="M12 15l4-4" />
+            <circle cx="12" cy="15" r="1.2" fill="currentColor" stroke="none" />
+            <path d="M4 19h16" stroke-opacity="0.5" />
+          </svg>
+          <span class="tracking-tight">Tableaux de bord</span>
+        </button>
+
+        <button
+          :title="collapsed ? 'Projets' : undefined"
+          :class="[
+            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
+            isProjects
+              ? 'text-foreground bg-secondary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+          ]"
+          data-testid="nav-projects"
+          @click="goProjects"
+        >
+          <span
+            :class="[
+              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
+              isProjects ? 'bg-signal' : 'bg-transparent',
+            ]"
+          />
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+          >
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" stroke-opacity="0.5" />
+            <rect x="14" y="14" width="7" height="7" rx="1" stroke-opacity="0.5" />
+          </svg>
+          <span class="tracking-tight">Projets</span>
+          <span
+            v-if="isProjects"
+            class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal"
+            >●</span
+          >
+        </button>
+
+        <button
+          :title="collapsed ? 'Alarmes' : undefined"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isAlarms
@@ -192,8 +370,16 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
               isAlarms ? 'bg-signal' : 'bg-transparent',
             ]"
           />
-          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
-            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+          >
+            <path
+              d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+            />
             <path d="M12 9v4M12 17h.01" />
           </svg>
           <span class="tracking-tight">Alarmes</span>
@@ -213,6 +399,7 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
         </button>
 
         <button
+          :title="collapsed ? 'Interventions' : undefined"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isInterventions
@@ -227,8 +414,16 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
               isInterventions ? 'bg-signal' : 'bg-transparent',
             ]"
           />
-          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
-            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+          >
+            <path
+              d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
+            />
           </svg>
           <span class="tracking-tight">Interventions</span>
           <span
@@ -247,6 +442,7 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
         </button>
 
         <button
+          :title="collapsed ? 'Destinataires' : undefined"
           v-if="isAdmin"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
@@ -262,26 +458,91 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
               isRecipients ? 'bg-signal' : 'bg-transparent',
             ]"
           />
-          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+          >
             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
             <circle cx="9" cy="7" r="4" />
             <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
           </svg>
           <span class="tracking-tight">Destinataires</span>
-          <span v-if="isRecipients" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
+          <span
+            v-if="isRecipients"
+            class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal"
+            >●</span
+          >
         </button>
-        <div class="px-3 py-2.5 text-sm text-muted-foreground/40 cursor-not-allowed select-none flex items-center gap-3">
-          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
-            <path d="M3 3v18h18" />
-            <path d="M7 14l4-4 4 4 5-6" />
+        <button
+          :title="collapsed ? 'Alertes · destinataires' : undefined"
+          :class="[
+            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
+            isAlarmRecipients
+              ? 'text-foreground bg-secondary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+          ]"
+          @click="goAlarmRecipients"
+        >
+          <span
+            :class="[
+              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
+              isAlarmRecipients ? 'bg-signal' : 'bg-transparent',
+            ]"
+          />
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+          >
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
           </svg>
-          <span>Reports</span>
-          <span class="ml-auto text-[9px] uppercase tracking-widest">soon</span>
-        </div>
+          <span class="tracking-tight">Alertes · destinataires</span>
+          <span
+            v-if="isAlarmRecipients"
+            class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal"
+            >●</span
+          >
+        </button>
+        <button
+          :title="collapsed ? 'Mises à jour' : undefined"
+          :class="[
+            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
+            isUpdates
+              ? 'text-foreground bg-secondary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+          ]"
+          data-testid="nav-updates"
+          @click="goUpdates"
+        >
+          <span
+            :class="[
+              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
+              isUpdates ? 'bg-signal' : 'bg-transparent',
+            ]"
+          />
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+          >
+            <path d="M12 3v12M7 10l5 5 5-5" />
+            <path d="M4 17v3h16v-3" />
+          </svg>
+          <span class="tracking-tight">Mises à jour</span>
+        </button>
 
         <div v-if="auth.isHexaStaff" class="my-3 border-t border-border" />
 
         <button
+          :title="collapsed ? 'Staff' : undefined"
           v-if="auth.isHexaStaff"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
@@ -297,20 +558,85 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
               isStaff ? 'bg-signal' : 'bg-transparent',
             ]"
           />
-          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+          >
             <path d="M12 2 4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6l-8-4Z" />
           </svg>
           <span class="tracking-tight">Staff</span>
-          <span v-if="isStaff" class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal">●</span>
+          <span
+            v-if="isStaff"
+            class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal"
+            >●</span
+          >
+        </button>
+        <button
+          :title="collapsed ? 'Parc des box' : undefined"
+          v-if="auth.isHexaStaff"
+          data-testid="nav-fleet"
+          :class="[
+            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
+            isFleet
+              ? 'text-foreground bg-secondary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+          ]"
+          @click="goFleet"
+        >
+          <span
+            :class="[
+              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
+              isFleet ? 'bg-signal' : 'bg-transparent',
+            ]"
+          />
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+          >
+            <path d="M3 7l9-4 9 4-9 4-9-4Z" />
+            <path d="M3 7v10l9 4 9-4V7" />
+            <path d="M12 11v10" />
+          </svg>
+          <span class="tracking-tight">Parc des box</span>
         </button>
       </nav>
 
       <!-- Session -->
-      <div class="border-t border-border px-4 py-4 space-y-2.5">
-        <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Session</div>
+      <div
+        v-if="collapsed"
+        class="hidden md:flex flex-col items-center gap-3 border-t border-border py-3"
+      >
+        <button
+          class="text-muted-foreground hover:text-signal transition"
+          :title="`Se déconnecter (${email})`"
+          @click="handleLogout"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+          >
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+          </svg>
+        </button>
+      </div>
+      <div :class="['border-t border-border px-4 py-4 space-y-2.5', collapsed && 'md:hidden']">
+        <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          Session
+        </div>
         <div class="text-xs truncate">{{ email }}</div>
         <div class="flex items-center justify-between">
-          <span class="font-mono text-[10px] uppercase px-1.5 py-0.5 border border-hairline rounded text-muted-foreground bg-secondary/60">
+          <span
+            class="font-mono text-[10px] uppercase px-1.5 py-0.5 border border-hairline rounded text-muted-foreground bg-secondary/60"
+          >
             {{ role }}
           </span>
           <button
@@ -321,22 +647,51 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
           </button>
         </div>
       </div>
+      <button
+        class="hidden md:flex items-center justify-center gap-2 border-t border-border py-2 text-[10px] font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground transition"
+        :title="collapsed ? 'Déplier le menu' : 'Réduire le menu'"
+        data-testid="sidebar-toggle"
+        @click="toggleCollapsed"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          :class="['size-4 transition-transform', collapsed && 'rotate-180']"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+        >
+          <path d="M15 6l-6 6 6 6" />
+        </svg>
+        <span v-if="!collapsed">Réduire</span>
+      </button>
     </aside>
 
     <div class="flex-1 flex flex-col min-w-0">
       <StaffBar v-if="auth.isHexaStaff" />
-      <header class="h-12 border-b border-border bg-background/60 backdrop-blur-sm flex items-center justify-between px-3 sm:px-5 md:px-6">
-        <div class="flex items-center gap-2 sm:gap-2.5 text-xs font-mono text-muted-foreground min-w-0">
+      <header
+        class="h-12 border-b border-border bg-background/60 backdrop-blur-sm flex items-center justify-between px-3 sm:px-5 md:px-6"
+      >
+        <div
+          class="flex items-center gap-2 sm:gap-2.5 text-xs font-mono text-muted-foreground min-w-0"
+        >
           <button
             class="md:hidden size-8 inline-flex items-center justify-center rounded-md border border-border hover:border-signal/60 text-muted-foreground hover:text-foreground transition shrink-0"
             aria-label="Menu"
             @click="toggleSidebar"
           >
-            <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <svg
+              viewBox="0 0 24 24"
+              class="size-4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
               <path d="M3 6h18M3 12h18M3 18h18" />
             </svg>
           </button>
-          <span class="text-signal hidden sm:inline">⬢</span>
+          <img src="/hexa-mark.png" alt="" class="hidden sm:inline size-4" draggable="false" />
           <span class="text-muted-foreground/50 hidden sm:inline">/</span>
           <span class="hidden sm:inline">admin</span>
           <span class="text-muted-foreground/50 hidden sm:inline">/</span>
@@ -362,8 +717,18 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
             :title="`${alarms.openInterventions.value} interventions ouvertes`"
             @click="router.push({ name: 'admin-interventions' })"
           >
-            <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+            <svg
+              viewBox="0 0 24 24"
+              class="size-3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
+              />
             </svg>
             <span class="tabular">{{ alarms.openInterventions.value }}</span>
             <span class="hidden sm:inline">interv.</span>
@@ -378,11 +743,31 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
             class="ml-1 size-7 inline-flex items-center justify-center rounded-md border border-border hover:border-signal/60 hover:text-foreground transition"
             @click="toggleTheme"
           >
-            <svg v-if="theme === 'dark'" viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <svg
+              v-if="theme === 'dark'"
+              viewBox="0 0 24 24"
+              class="size-3.5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+              <path
+                d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
+              />
             </svg>
-            <svg v-else viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <svg
+              v-else
+              viewBox="0 0 24 24"
+              class="size-3.5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
             </svg>
           </button>
@@ -397,7 +782,9 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
         </RouterView>
       </main>
 
-      <footer class="border-t border-border bg-card/40 px-6 py-2 flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+      <footer
+        class="border-t border-border bg-card/40 px-6 py-2 flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-muted-foreground"
+      >
         <span>Hexa.ai · myHexa edge ops</span>
         <span class="flex items-center gap-3">
           <span>build 2026.05.15</span>
@@ -409,7 +796,43 @@ const isStaff = computed(() => String(route.name ?? '').startsWith('staff-'))
 </template>
 
 <style scoped>
-.page-enter-active, .page-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
-.page-enter-from { opacity: 0; transform: translateY(4px); }
-.page-leave-to { opacity: 0; transform: translateY(-4px); }
+/* menu réduit (PC) : icônes seules, compteurs en pastille */
+@media (min-width: 768px) {
+  .rail nav {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+  .rail nav button {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .rail nav button > span.tracking-tight,
+  .rail nav button > span.ml-auto:not(.tabular) {
+    display: none;
+  }
+  .rail nav button > span.tabular {
+    position: absolute;
+    top: 1px;
+    right: 2px;
+    margin: 0;
+    padding: 0 3px;
+    font-size: 9px;
+    line-height: 14px;
+  }
+}
+.page-enter-active,
+.page-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
 </style>

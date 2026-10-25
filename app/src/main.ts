@@ -9,7 +9,12 @@ import './style.css'
 const app = createApp(App)
 const pinia = createPinia()
 app.use(pinia)
-app.use(router)
 
+// Restaurer la session AVANT d'installer le router : app.use(router) lance tout de suite
+// la première navigation, dont les guards voyaient alors « non connecté » et passaient
+// par /login (flash de la page de connexion à chaque rechargement).
 const auth = useAuthStore()
-auth.init().finally(() => app.mount('#app'))
+auth.init().finally(() => {
+  app.use(router)
+  app.mount('#app')
+})

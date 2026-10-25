@@ -22,6 +22,7 @@ const filtered = computed(() => {
 })
 
 function accessLabel(r: Recipient): string {
+  if (r.portal_access === false) return 'Pas d’accès portail · alarmes de box'
   const restrict = r.restrict_to_devices?.length ?? 0
   const shared = r.shared_devices?.length ?? 0
   const parts: string[] = []
@@ -60,10 +61,10 @@ function accessLabel(r: Recipient): string {
           </td>
           <td class="px-3 py-2">{{ r.contact_email ?? '—' }}</td>
           <td class="px-3 py-2">{{ r.phone ?? '—' }}</td>
-          <td class="px-3 py-2">{{ r.role }}</td>
+          <td class="px-3 py-2">{{ r.portal_access === false ? '—' : r.role }}</td>
           <td class="px-3 py-2">{{ accessLabel(r) }}</td>
           <td class="px-3 py-2 text-right space-x-3 whitespace-nowrap">
-            <button class="text-xs hover:underline" @click="emit('edit', r)">Éditer</button>
+            <button class="text-xs hover:underline" @click="r.portal_access === false ? $router.push({ name: 'admin-alarm-recipients', query: { person: r.id } }) : emit('edit', r)">Éditer</button>
             <button class="text-xs text-red-500 hover:underline" @click="emit('remove', r)">Supprimer</button>
           </td>
         </tr>
@@ -91,7 +92,7 @@ function accessLabel(r: Recipient): string {
           >externe</span>
         </span>
         <span class="font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary/60 text-muted-foreground shrink-0">
-          {{ r.role }}
+          {{ r.portal_access === false ? 'alarmes' : r.role }}
         </span>
       </div>
       <div class="text-xs text-muted-foreground space-x-1">
@@ -100,7 +101,7 @@ function accessLabel(r: Recipient): string {
         <span>· {{ accessLabel(r) }}</span>
       </div>
       <div class="mt-2 flex items-center gap-3 justify-end">
-        <button class="text-xs hover:underline" @click="emit('edit', r)">Éditer</button>
+        <button class="text-xs hover:underline" @click="r.portal_access === false ? $router.push({ name: 'admin-alarm-recipients', query: { person: r.id } }) : emit('edit', r)">Éditer</button>
         <button class="text-xs text-red-500 hover:underline" @click="emit('remove', r)">Supprimer</button>
       </div>
     </div>

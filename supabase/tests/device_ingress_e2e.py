@@ -94,6 +94,43 @@ check("/<host>/report/daily -> écrit", sql(f"select count(*) n from reports whe
 s, b = post("/fake-box-01", {}); check("/<host> seul -> 404", s == 404)
 sql("update companies set max_daily_reports = 2 where id='00000000-0000-0000-0000-00000000e2e0'")
 
+print("pilotage à distance (bloc remote)")
+def remote_status(acks=(), rh="aaaa000000000001"):
+    p = json.loads(json.dumps(status)); p["device"]["version"] = "1.3.12"
+    p["remote"] = {"protocol": 1, "state": {"recipients_count": 1, "recipients_hash": rh, "escalation_levels_count": 0, "escalation_hash": "",
+                   "update": {"installed": "1.3.12-i1", "candidate": "1.3.13-i2", "install_running": False, "reboot_required": True}}, "acks": list(acks)}
+    return p
+s, b = post("/fake-box-01/status", status, TOKEN); check("sans bloc remote -> réponse historique", b == {"message": "Workflow was started"}, b)
+s, b = post("/fake-box-01/status", remote_status(), TOKEN); check("avec remote, rien en file -> {commands: []}", s == 200 and b == {"commands": []}, (s, b))
+r = sql(f"select running_version, pkg_version, candidate_version, reboot_required, recipients_hash, recipients_hash_ref from devices where id='{D1}'")[0]
+check("état remote enregistré", r == {"running_version": "1.3.12", "pkg_version": "1.3.12-i1", "candidate_version": "1.3.13-i2", "reboot_required": True,
+      "recipients_hash": "aaaa000000000001", "recipients_hash_ref": "aaaa000000000001"}, r)
+sql(f"""delete from device_commands where device_id='{D1}';
+insert into device_commands (id, device_id, type, payload, created_by) values
+ ('cmd_test_snap01', '{D1}', 'send_snapshot', '{{}}', null),
+ ('cmd_test_recip01', '{D1}', 'set_recipients', '{{"recipients":[{{"id":"0000abcd","name":"Test","email":"t@example.com","phone":"","enabled":true,"filters":{{"info":false,"warning":true,"error":true}},"channels":{{"email":true,"sms":false,"call":false}},"schedule_days":["monday"]}}]}}', null);""")
+s, b = post("/fake-box-01/status", remote_status(), TOKEN)
+ids = [c["id"] for c in b.get("commands", [])]
+check("commandes servies dans l'ordre, format id/type/payload", ids == ["cmd_test_snap01", "cmd_test_recip01"] and b["commands"][1]["payload"]["recipients"][0]["id"] == "0000abcd", b)
+s, b = post("/fake-box-01/status", remote_status(), TOKEN); check("déjà envoyées (< 60 min) -> pas re-servies", b == {"commands": []}, b)
+acks = [{"id": "cmd_test_snap01", "type": "send_snapshot", "status": "ok", "detail": "snapshot sent", "at": "2026-10-23T10:00:00+02:00"},
+        {"id": "cmd_test_recip01", "type": "set_recipients", "status": "ok", "detail": "1 applied, 0 removed; ids=0000abcd", "at": "2026-10-23T10:00:00+02:00"},
+        {"id": "cmd_inconnu_0001", "type": "reboot", "status": "ok", "detail": "", "at": "2026-10-23T10:00:00+02:00"}]
+s, b = post("/fake-box-01/status", remote_status(acks, rh="bbbb000000000002"), TOKEN)
+r = {x["id"]: (x["state"], x["ack_status"]) for x in sql(f"select id, state, ack_status from device_commands where device_id='{D1}'")}
+check("acks ingérés (ok -> acked), ack inconnu ignoré", r == {"cmd_test_snap01": ("acked", "ok"), "cmd_test_recip01": ("acked", "ok")} and s == 200, r)
+r = sql(f"select recipients_hash, recipients_hash_ref from devices where id='{D1}'")[0]
+check("liste acceptée -> nouveau hash = référence", r["recipients_hash"] == r["recipients_hash_ref"] == "bbbb000000000002", r)
+post("/fake-box-01/status", remote_status(rh="cccc000000000003"), TOKEN)
+r = sql(f"select recipients_hash, recipients_hash_ref from devices where id='{D1}'")[0]
+check("modif locale sur la box -> hash ≠ référence (conflit détectable)", r["recipients_hash"] == "cccc000000000003" and r["recipients_hash_ref"] == "bbbb000000000002", r)
+sql(f"insert into device_commands (id, device_id, type, payload) values ('cmd_test_pend01', '{D1}', 'reboot', '{{}}')")
+post("/fake-box-01/status", remote_status(rh="cccc000000000003"), TOKEN)
+post("/fake-box-01/status", remote_status([{"id": "cmd_test_pend01", "type": "reboot", "status": "pending", "detail": "reboot scheduled in 15s", "at": "x"}], rh="cccc000000000003"), TOKEN)
+check("ack pending -> in_progress", sql("select state from device_commands where id='cmd_test_pend01'")[0]["state"] == "in_progress")
+s, b = post("/fake-box-01/status", remote_status(), "jeton-faux"); check("remote + jeton inconnu -> 200, rien servi", s == 200 and b == {"message": "Workflow was started"}, (s, b))
+sql(f"delete from device_commands where device_id='{D1}'")
+
 print("analyse IA (analyze-report déclenché en arrière-plan)")
 time.sleep(8)
 r = sql(f"select count(*) n from device_period_stats where device_id='{D1}'")[0]

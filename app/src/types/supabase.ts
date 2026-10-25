@@ -14,6 +14,136 @@ export type Database = {
   }
   public: {
     Tables: {
+      device_escalation: {
+        Row: {
+          baseline: Json | null
+          config: Json
+          device_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          baseline?: Json | null
+          config: Json
+          device_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          baseline?: Json | null
+          config?: Json
+          device_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_escalation_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: true
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      device_commands: {
+        Row: {
+          ack_detail: string | null
+          ack_status: string | null
+          acked_at: string | null
+          created_by: string | null
+          device_id: string
+          id: string
+          issued_at: string
+          payload: Json
+          sent_at: string | null
+          state: Database["public"]["Enums"]["device_command_state"]
+          type: string
+        }
+        Insert: {
+          ack_detail?: string | null
+          ack_status?: string | null
+          acked_at?: string | null
+          created_by?: string | null
+          device_id: string
+          id: string
+          issued_at?: string
+          payload?: Json
+          sent_at?: string | null
+          state?: Database["public"]["Enums"]["device_command_state"]
+          type: string
+        }
+        Update: {
+          ack_detail?: string | null
+          ack_status?: string | null
+          acked_at?: string | null
+          created_by?: string | null
+          device_id?: string
+          id?: string
+          issued_at?: string
+          payload?: Json
+          sent_at?: string | null
+          state?: Database["public"]["Enums"]["device_command_state"]
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_commands_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      alarm_subscriptions: {
+        Row: {
+          box_recipient_id: string
+          channels_override: Json | null
+          created_at: string
+          device_id: string
+          filters: Json
+          recipient_id: string
+          schedule_days_override: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          box_recipient_id?: string
+          channels_override?: Json | null
+          created_at?: string
+          device_id: string
+          filters?: Json
+          recipient_id: string
+          schedule_days_override?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          box_recipient_id?: string
+          channels_override?: Json | null
+          created_at?: string
+          device_id?: string
+          filters?: Json
+          recipient_id?: string
+          schedule_days_override?: string[] | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alarm_subscriptions_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alarm_subscriptions_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "recipients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           address: string | null
@@ -207,8 +337,11 @@ export type Database = {
       devices: {
         Row: {
           address: string | null
+          candidate_version: string | null
           company_id: string
           created_at: string
+          escalation_hash: string | null
+          escalation_hash_ref: string | null
           has_battery: boolean
           has_supercap: boolean
           id: string
@@ -220,6 +353,14 @@ export type Database = {
           name: string
           os_install_date: string | null
           os_version: string | null
+          pkg_version: string | null
+          reboot_required: boolean | null
+          update_running: boolean | null
+          recipients_hash: string | null
+          recipients_hash_ref: string | null
+          remote_protocol: number | null
+          remote_seen_at: string | null
+          running_version: string | null
           serial_number: string | null
           token: string | null
           updated_at: string
@@ -228,8 +369,11 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          candidate_version?: string | null
           company_id: string
           created_at?: string
+          escalation_hash?: string | null
+          escalation_hash_ref?: string | null
           has_battery?: boolean
           has_supercap?: boolean
           id?: string
@@ -241,6 +385,14 @@ export type Database = {
           name: string
           os_install_date?: string | null
           os_version?: string | null
+          pkg_version?: string | null
+          reboot_required?: boolean | null
+          update_running?: boolean | null
+          recipients_hash?: string | null
+          recipients_hash_ref?: string | null
+          remote_protocol?: number | null
+          remote_seen_at?: string | null
+          running_version?: string | null
           serial_number?: string | null
           token?: string | null
           updated_at?: string
@@ -249,8 +401,11 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          candidate_version?: string | null
           company_id?: string
           created_at?: string
+          escalation_hash?: string | null
+          escalation_hash_ref?: string | null
           has_battery?: boolean
           has_supercap?: boolean
           id?: string
@@ -262,6 +417,14 @@ export type Database = {
           name?: string
           os_install_date?: string | null
           os_version?: string | null
+          pkg_version?: string | null
+          reboot_required?: boolean | null
+          update_running?: boolean | null
+          recipients_hash?: string | null
+          recipients_hash_ref?: string | null
+          remote_protocol?: number | null
+          remote_seen_at?: string | null
+          running_version?: string | null
           serial_number?: string | null
           token?: string | null
           updated_at?: string
@@ -385,39 +548,51 @@ export type Database = {
       }
       recipients: {
         Row: {
-          auth_user_id: string
+          alarm_channels: Json
+          alarm_enabled: boolean
+          alarm_schedule_days: string[]
+          auth_user_id: string | null
           company_id: string | null
           contact_email: string | null
           created_at: string
           id: string
           name: string
           phone: string | null
+          portal_access: boolean
           restrict_to_devices: string[] | null
           role: string
           shared_devices: string[] | null
           updated_at: string
         }
         Insert: {
-          auth_user_id: string
+          alarm_channels?: Json
+          alarm_enabled?: boolean
+          alarm_schedule_days?: string[]
+          auth_user_id?: string | null
           company_id?: string | null
           contact_email?: string | null
           created_at?: string
           id?: string
           name: string
           phone?: string | null
+          portal_access?: boolean
           restrict_to_devices?: string[] | null
           role?: string
           shared_devices?: string[] | null
           updated_at?: string
         }
         Update: {
-          auth_user_id?: string
+          alarm_channels?: Json
+          alarm_enabled?: boolean
+          alarm_schedule_days?: string[]
+          auth_user_id?: string | null
           company_id?: string | null
           contact_email?: string | null
           created_at?: string
           id?: string
           name?: string
           phone?: string | null
+          portal_access?: boolean
           restrict_to_devices?: string[] | null
           role?: string
           shared_devices?: string[] | null
@@ -539,6 +714,29 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      alarm_resolve_escalation: {
+        Args: { p_config?: Json; p_device: string }
+        Returns: Json
+      }
+      alarm_member_channels: {
+        Args: { p_box_id: string; p_device: string }
+        Returns: Json
+      }
+      queue_send_snapshot: { Args: { p_device: string }; Returns: string }
+      queue_run_update: {
+        Args: { p_device: string; p_version?: string; p_reboot?: boolean }
+        Returns: Json
+      }
+      queue_reboot: { Args: { p_device: string; p_delay?: number }; Returns: Json }
+      cancel_device_command: { Args: { p_id: string }; Returns: Json }
+      queue_alarm_sync: {
+        Args: { p_device: string; p_force?: boolean; p_recipients?: boolean }
+        Returns: Json
+      }
+      import_alarm_config: { Args: { p_company: string }; Returns: Json }
+      can_manage_company: { Args: { p_company: string }; Returns: boolean }
+      alarm_reported_config: { Args: { p_device: string }; Returns: Json }
+      alarm_desired_recipients: { Args: { p_device: string }; Returns: Json }
       _derived_interpolate_cumul: {
         Args: { p_target: string; p_ts: string[]; p_val: number[] }
         Returns: number
@@ -603,21 +801,38 @@ export type Database = {
       list_company_recipients: {
         Args: { p_company_id: string }
         Returns: {
-          auth_user_id: string
+          alarm_channels: Json
+          alarm_enabled: boolean
+          alarm_schedule_days: string[]
+          auth_user_id: string | null
           company_id: string | null
           contact_email: string | null
           created_at: string
           id: string
           name: string
           phone: string | null
+          portal_access: boolean
           restrict_to_devices: string[] | null
           role: string
           shared_devices: string[] | null
           updated_at: string
         }[]
+        SetofOptions: {
+          from: "*"
+          to: "recipients"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
     }
     Enums: {
+      device_command_state:
+        | "queued"
+        | "sent"
+        | "in_progress"
+        | "acked"
+        | "failed"
+        | "cancelled"
       report_type: "status" | "daily" | "weekly"
       status_email_frequency: "none" | "daily" | "weekly"
     }
@@ -747,6 +962,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      device_command_state: ["queued", "sent", "in_progress", "acked", "failed", "cancelled"],
       report_type: ["status", "daily", "weekly"],
       status_email_frequency: ["none", "daily", "weekly"],
     },

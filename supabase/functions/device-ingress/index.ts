@@ -5,7 +5,7 @@
 // Routes (sous /functions/v1/device-ingress) :
 //   POST /provision/<hostname>                 body { mac }            -> 200 | 400 | 404 | 410
 //   POST /<hostname>/status                    Bearer <jeton box>      -> 200
-//   POST /<hostname>/report/<period>           Bearer <jeton box>      -> 200   (period = daily | weekly)
+//   POST /<hostname>/report/<period>           Bearer <jeton box>      -> 200   (period = daily ; weekly / monthly acceptés mais ignorés)
 //   (préfixe historique /ingress/... toujours accepté, ex. /ingress/<hostname>/status)
 //
 // À déployer avec verify_jwt = false : le Bearer est le jeton de la box, pas un JWT Supabase.
@@ -24,7 +24,6 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
   auth: { persistSession: false },
 });
 
-declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
 const N8N_ACK = { message: "Workflow was started" }; // corps que renvoyait n8n
 
@@ -68,10 +67,6 @@ async function readJson(req: Request): Promise<Record<string, unknown> | null> {
   }
 }
 
-function background(p: Promise<unknown>) {
-  if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(p);
-}
-
 async function provision(req: Request): Promise<Response> {
   const body = (await readJson(req)) ?? {};
   const mac = String(body.mac ?? "").trim();
@@ -96,34 +91,11 @@ async function provision(req: Request): Promise<Response> {
   return json(500, { error: "unknown state" });
 }
 
-async function analyze(reportId: string) {
-  try {
-    const r = await fetch(`${SUPABASE_URL}/functions/v1/analyze-report`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${SERVICE_ROLE}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ report_id: reportId }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!r.ok)
-      console.error(
-        "analyze-report",
-        reportId,
-        r.status,
-        (await r.text()).slice(0, 200),
-      );
-  } catch (e) {
-    console.error("analyze-report", reportId, String(e));
-  }
-}
-
 async function ingest(
   req: Request,
   hostname: string,
   period: string,
-): Promise<void> {
+): Promise<unknown> {
   const token = bearer(req);
   const payload = await readJson(req);
   if (!payload) {
@@ -138,10 +110,30 @@ async function ingest(
     });
     if (error) console.error("ingest_status", hostname, error.message);
     else if (!data) console.warn("ingress status: jeton inconnu", hostname);
-    return;
+    // Pilotage à distance : la box n'envoie le bloc remote que si « Enable remote management » est actif.
+    // Sans bloc remote -> réponse historique (les anciens firmwares ignorent le corps).
+    const remote = payload.remote;
+    if (error || !data || !remote || typeof remote !== "object") return;
+    const device = (payload.device ?? {}) as Record<string, unknown>;
+    const { data: commands, error: rErr } = await admin.rpc("ingest_remote", {
+      p_token: token,
+      p_remote: remote,
+      p_running_version: typeof device.version === "string" ? device.version : null,
+    });
+    if (rErr) {
+      console.error("ingest_remote", hostname, rErr.message);
+      return { commands: [] };
+    }
+    const list = Array.isArray(commands) ? commands : [];
+    if (list.length) console.log("remote: commandes servies", hostname, list.map((c) => c.type).join(","));
+    return { commands: list };
   }
 
-  if (period !== "daily" && period !== "weekly") {
+  if (period === "weekly" || period === "monthly") {
+    // rapports hebdo / mensuels : envoyés par mail par la box, plus utilisés par le portail (accusé de réception seul)
+    return;
+  }
+  if (period !== "daily") {
     console.warn("ingress: période non gérée", hostname, period);
     return;
   }
@@ -166,7 +158,7 @@ async function ingest(
     );
     return;
   }
-  background(analyze(reportId as string));
+  // l'analyse des dérives est lancée par ts-build une fois la journée ajoutée à l'historique
 }
 
 Deno.serve(async (req) => {
@@ -188,7 +180,8 @@ Deno.serve(async (req) => {
     if (r.length === 3 && r[1] === "report") period = r[2];
     if (period) {
       try {
-        await ingest(req, hostname, period);
+        const body = await ingest(req, hostname, period);
+        if (body) return json(200, body); // objet JSON (pas un tableau), cf. doc firmware piège n°1
       } catch (e) {
         console.error("ingress", hostname, period, String(e));
       }

@@ -308,6 +308,7 @@ Deno.serve(async (req) => {
     )
     .in('company_id', targetCompanyIds)
     .not('contact_email', 'is', null)
+    .eq('portal_access', true) // personnes « alarmes de box seulement » : pas de mail du portail
   const { data: recipientsGuest } = await admin
     .from('recipients')
     .select(
@@ -316,6 +317,7 @@ Deno.serve(async (req) => {
     .is('company_id', null)
     .not('shared_devices', 'is', null)
     .not('contact_email', 'is', null)
+    .eq('portal_access', true) // personnes « alarmes de box seulement » : pas de mail du portail
   const recipientsMap = new Map<string, Recipient>()
   for (const r of [...(recipientsCompany ?? []), ...(recipientsGuest ?? [])]) {
     if (!r.contact_email || !r.auth_user_id) continue
