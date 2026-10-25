@@ -183,6 +183,8 @@ begin
   loop
     v_devices := v_devices + 1;
     for r in select * from jsonb_array_elements(coalesce(d.notif -> 'recipients', '[]'::jsonb)) loop
+      -- emplacement vide de la box (ni nom, ni mail, ni téléphone) : ignoré, sinon une fiche « Sans nom » par import
+      continue when nullif(r ->> 'name', '') is null and nullif(r ->> 'email', '') is null and nullif(r ->> 'phone', '') is null;
       select p.id into v_person from recipients p
       where p.company_id = p_company and (
         (nullif(r ->> 'email', '') is not null and lower(p.contact_email) = lower(r ->> 'email'))
@@ -223,7 +225,8 @@ begin
              case when v_channels is distinct from p.alarm_channels then v_channels end,
              case when v_days is distinct from p.alarm_schedule_days then v_days end
       from recipients p where p.id = v_person
-      on conflict (recipient_id, device_id) do nothing;
+      -- les deux unicités (personne, box) et (box, destinataire de la box) : un second import ne doit pas échouer
+      on conflict do nothing;
       if found then v_subs := v_subs + 1; end if;
     end loop;
     if jsonb_array_length(coalesce(d.notif -> 'escalation' -> 'levels', '[]')) > 0 then

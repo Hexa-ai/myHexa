@@ -159,7 +159,7 @@ function state(b: Box): UState {
     return {
       key: 'reboot',
       label: 'Installée, redémarrage nécessaire',
-      detail: failed ?? 'la nouvelle version ne tourne qu’après redémarrage',
+      detail: failed ?? 'la nouvelle version tournera au prochain redémarrage de la box',
       tone: 'warn',
     }
   if (b.candidate_version)
@@ -228,17 +228,6 @@ async function runUpdates(ids: string[]) {
   confirmIds.value = null
   selected.value = []
   flash.value = out.join(' · ')
-  await load()
-}
-async function reboot(b: Box) {
-  if (!confirm(`Redémarrer ${b.name} ? La supervision est coupée quelques minutes.`)) return
-  const { data, error: e } = await supabase.rpc('queue_reboot', { p_device: b.id })
-  const r = data as { status: string; detail?: string } | null
-  flash.value = e
-    ? e.message
-    : r?.status === 'queued'
-      ? `${b.name} : redémarrage programmé`
-      : `${b.name} : ${r?.detail}`
   await load()
 }
 async function cancel(c: Cmd) {
@@ -363,13 +352,6 @@ onBeforeUnmount(() => clearInterval(timer))
             @click="confirmIds = [b.id]"
           >
             Mettre à jour
-          </button>
-          <button
-            v-if="s.key === 'reboot'"
-            class="px-2.5 py-1 text-xs border border-amber-400/60 text-amber-400 rounded-md"
-            @click="reboot(b)"
-          >
-            Redémarrer
           </button>
           <button
             v-if="s.cmd?.state === 'queued'"
