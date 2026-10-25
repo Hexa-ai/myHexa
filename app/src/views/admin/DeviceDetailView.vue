@@ -8,6 +8,7 @@ import DeviceReport from '@/components/DeviceReport.vue'
 import InsightsPopup from '@/components/devices/InsightsPopup.vue'
 import DeviceDocuments from '@/components/devices/DeviceDocuments.vue'
 import { useDeviceInsights } from '@/composables/useDeviceInsights'
+import DashboardLinks from '@/components/dashboard/DashboardLinks.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -159,6 +160,26 @@ async function loadDetail() {
 
 useAutoRefresh(loadDetail, { intervalMs: 120_000 })
 
+// tableau de bord « par défaut » de la box : ouvert à la place de la fiche (sauf lien explicite ?fiche=1)
+async function openDefaultDashboard() {
+  if (route.query.fiche) return
+  const id = String(route.params.id)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- table du proto absente des types générés
+  const { data } = await (supabase as any)
+    .from('dashboards')
+    .select('id')
+    .eq('device_id', id)
+    .eq('is_default', true)
+    .limit(1)
+  if (data?.[0] && String(route.params.id) === id && route.name === 'admin-device-detail')
+    router.replace({
+      name: 'admin-dashboard',
+      params: { scope: 'device', id },
+      query: { d: data[0].id },
+    })
+}
+openDefaultDashboard()
+
 // --- Insights intelligents (popup) ------------------------------------------
 const insightsApi = useDeviceInsights(() => device.value?.id ?? null)
 // Lance init dès que le device est chargé pour la 1ère fois
@@ -276,6 +297,13 @@ async function submitShare() {
         ↗ Partager avec un destinataire
       </button>
     </div>
+
+    <DashboardLinks
+      v-if="route.params.id"
+      :id="String(route.params.id)"
+      scope="device"
+      :can-manage="canShare"
+    />
 
     <!-- Insights intelligents popup -->
     <InsightsPopup

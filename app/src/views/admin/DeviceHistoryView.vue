@@ -6,6 +6,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import HistoryChart from '@/components/HistoryChart.vue'
+import TimeRangePicker from '@/components/TimeRangePicker.vue'
 import {
   fetchCatalog,
   fetchHistory,
@@ -297,6 +298,12 @@ const depth = (v: HistVar) => (v.fine ? 'courbe 5 min' : v.days > 1 ? 'tendance'
         >
           Tout
         </button>
+        <TimeRangePicker
+          :from="range.from"
+          :to="range.to"
+          :active="preset === null"
+          @apply="onRange"
+        />
       </div>
       <div class="flex items-center gap-1">
         <button

@@ -165,7 +165,7 @@ const row =
               row,
               here('project', n.p.id, b?.id) ? 'bg-signal/10 text-signal' : 'text-foreground',
             ]"
-            data-testid="tree-board"
+            :data-testid="b ? 'tree-board' : 'tree-empty'"
             @click="go('project', n.p.id, b?.id)"
           >
             <svg
@@ -180,8 +180,14 @@ const row =
               <path d="M12 15l4-4" />
             </svg>
             <span :class="['truncate', !b && 'italic text-muted-foreground']">{{
-              b?.name ?? 'Tableau proposé'
+              b?.name ?? 'Aucun tableau · en créer un'
             }}</span>
+            <span
+              v-if="b?.is_default"
+              class="ml-auto font-mono text-[9px] uppercase tracking-wider text-muted-foreground"
+              title="ouvert à la place de la fiche"
+              >défaut</span
+            >
           </button>
           <template v-for="x in n.devs" :key="x.d.id">
             <button :class="row" data-testid="tree-device" @click="toggle('d:' + x.d.id)">
@@ -213,7 +219,7 @@ const row =
                   row,
                   here('device', x.d.id, b?.id) ? 'bg-signal/10 text-signal' : 'text-foreground',
                 ]"
-                data-testid="tree-board"
+                :data-testid="b ? 'tree-board' : 'tree-empty'"
                 @click="go('device', x.d.id, b?.id)"
               >
                 <svg
@@ -228,8 +234,14 @@ const row =
                   <path d="M12 15l4-4" />
                 </svg>
                 <span :class="['truncate', !b && 'italic text-muted-foreground']">{{
-                  b?.name ?? 'Tableau proposé'
+                  b?.name ?? 'Aucun tableau · en créer un'
                 }}</span>
+                <span
+                  v-if="b?.is_default"
+                  class="ml-auto font-mono text-[9px] uppercase tracking-wider text-muted-foreground"
+                  title="ouvert à la place de la fiche"
+                  >défaut</span
+                >
               </button>
             </div>
           </template>
@@ -275,7 +287,7 @@ const row =
               row,
               here('device', x.d.id, b?.id) ? 'bg-signal/10 text-signal' : 'text-foreground',
             ]"
-            data-testid="tree-board"
+            :data-testid="b ? 'tree-board' : 'tree-empty'"
             @click="go('device', x.d.id, b?.id)"
           >
             <svg
@@ -290,8 +302,14 @@ const row =
               <path d="M12 15l4-4" />
             </svg>
             <span :class="['truncate', !b && 'italic text-muted-foreground']">{{
-              b?.name ?? 'Tableau proposé'
+              b?.name ?? 'Aucun tableau · en créer un'
             }}</span>
+            <span
+              v-if="b?.is_default"
+              class="ml-auto font-mono text-[9px] uppercase tracking-wider text-muted-foreground"
+              title="ouvert à la place de la fiche"
+              >défaut</span
+            >
           </button>
         </div>
       </template>

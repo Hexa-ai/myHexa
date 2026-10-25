@@ -26,6 +26,7 @@ import {
 import DashboardWidget from '@/components/dashboard/DashboardWidget.vue'
 import WidgetEditor from '@/components/dashboard/WidgetEditor.vue'
 import ReportsPanel from '@/components/dashboard/ReportsPanel.vue'
+import TimeRangePicker from '@/components/TimeRangePicker.vue'
 import DashboardNavDrawer from '@/components/dashboard/DashboardNavDrawer.vue'
 
 const route = useRoute()
@@ -72,6 +73,36 @@ const canManage = computed(
 )
 
 const period = ref<string>((route.query.period as string) || '24h')
+// plage précise (horloge) : prioritaire sur la période tant qu'elle est choisie, partagée par l'URL
+const qn = (k: string) => Number(route.query[k]) || 0
+const custom = ref<[number, number] | null>(
+  qn('from') && qn('to') > qn('from') ? [qn('from'), qn('to')] : null,
+)
+function applyCustom(r: { from: number; to: number }) {
+  custom.value = [r.from, r.to]
+  router.replace({ query: { ...route.query, from: String(r.from), to: String(r.to) } })
+  refresh()
+}
+function pickPeriod(k: string) {
+  const was = custom.value
+  custom.value = null
+  if (period.value !== k) period.value = k // le watcher met à jour l'URL (sans from / to) et recharge
+  else if (was) {
+    router.replace({ query: { ...route.query, from: undefined, to: undefined } })
+    refresh()
+  }
+}
+const fmtR = (t: number) =>
+  new Date(t).toLocaleString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+const customLabel = computed(() =>
+  custom.value ? `${fmtR(custom.value[0])} → ${fmtR(custom.value[1])}` : '',
+)
 
 // ---- rafraîchissement automatique (valeurs « dernière », périodes glissantes) ----
 const AUTO = [
@@ -91,6 +122,7 @@ function armAuto() {
   autoTimer = setInterval(async () => {
     // pas pendant l'édition, ni onglet masqué, ni chargement en cours
     if (editing.value || editWidget.value || document.hidden || loadingData.value) return
+    if (custom.value && custom.value[1] < Date.now()) return // plage précise passée : rien de neuf
     await loadDevices()
     await refresh()
   }, autoRefresh.value * 1000)
@@ -121,7 +153,8 @@ async function init() {
     dashboards.value = await loadDashboards(
       scope.value === 'device' ? { device: targetId.value } : { project: targetId.value },
     )
-    await select((route.query.d as string) || dashboards.value[0]?.id || null)
+    if (route.query.new && canManage.value) newDashboard(route.query.new === 'proposal')
+    else await select((route.query.d as string) || dashboards.value[0]?.id || null)
   } catch (e) {
     error.value = (e as Error).message
   } finally {
@@ -138,26 +171,43 @@ async function select(id: string | null) {
     proposed.value = false
     if (!route.query.period) period.value = d.period
   } else {
+    // aucun tableau enregistré : rien n'est créé automatiquement, l'utilisateur choisit d'en créer un
+    current.value = null
+    widgets.value = []
+    proposed.value = false
+    router.replace({ query: { ...route.query, d: undefined, new: undefined } })
+    return
+  }
+  router.replace({ query: { ...route.query, d: current.value.id || undefined, new: undefined } })
+  await refresh()
+}
+
+/** nouveau tableau (non enregistré) : vide, ou à partir d'une proposition */
+function newDashboard(fromProposal: boolean) {
+  {
     current.value = {
       company_id: companyId.value ?? '',
-      name: 'Vue d\u2019ensemble',
+      name: fromProposal ? 'Vue d\u2019ensemble' : 'Nouveau tableau',
       scope: scope.value,
       device_id: scope.value === 'device' ? targetId.value : null,
       project_id: scope.value === 'project' ? targetId.value : null,
       device_ids: [],
       period: '24h',
-      is_default: true,
+      is_default: false,
     }
-    widgets.value = defaultWidgets(scopeDevices.value, catalogs.value, scope.value)
+    widgets.value = fromProposal
+      ? defaultWidgets(scopeDevices.value, catalogs.value, scope.value)
+      : []
     proposed.value = true
+    editing.value = true
   }
-  router.replace({ query: { ...route.query, d: current.value.id || undefined } })
-  await refresh()
+  router.replace({ query: { ...route.query, d: undefined, new: undefined } })
+  refresh()
 }
 
 async function refresh() {
   lastRefresh.value = Date.now()
-  range.value = (PERIODS[period.value] ?? PERIODS['24h']).range(Date.now())
+  range.value = custom.value ?? (PERIODS[period.value] ?? PERIODS['24h']).range(Date.now())
   const srcs = widgets.value.flatMap((w) => w.sources).filter((s) => s.var)
   const cmp = widgets.value.filter((w) => w.options.compare)
   loadingData.value = true
@@ -184,7 +234,7 @@ function compareFor(w: Widget): SeriesMap | null {
   return m
 }
 watch(period, () => {
-  router.replace({ query: { ...route.query, period: period.value } })
+  router.replace({ query: { ...route.query, period: period.value, from: undefined, to: undefined } })
   refresh()
 })
 // clé texte : un tableau neuf déclencherait le watcher à chaque changement de query (période)
@@ -343,7 +393,7 @@ const parentProject = computed(() =>
 )
 const backTo = computed(() =>
   scope.value === 'device'
-    ? { name: 'admin-device-detail', params: { id: targetId.value } }
+    ? { name: 'admin-device-detail', params: { id: targetId.value }, query: { fiche: '1' } }
     : { name: 'admin-projects', query: { p: targetId.value } },
 )
 </script>
@@ -410,7 +460,7 @@ const backTo = computed(() =>
         </div>
         <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight truncate">{{ heading }}</h1>
       </div>
-      <div class="flex flex-wrap items-center gap-2">
+      <div v-if="current" class="flex flex-wrap items-center gap-2">
         <select
           v-if="dashboards.length > 1 || (dashboards.length && proposed)"
           :value="current?.id ?? ''"
@@ -428,15 +478,22 @@ const backTo = computed(() =>
             :key="k"
             :class="[
               'px-2.5 py-1.5 text-xs font-mono whitespace-nowrap',
-              period === k
+              period === k && !custom
                 ? 'bg-signal text-primary-foreground'
                 : 'bg-card text-muted-foreground hover:text-foreground',
             ]"
-            @click="period = k as string"
+            @click="pickPeriod(k as string)"
           >
             {{ p.label }}
           </button>
         </div>
+        <TimeRangePicker :from="range[0]" :to="range[1]" :active="!!custom" @apply="applyCustom" />
+        <span
+          v-if="custom"
+          class="text-[11px] font-mono text-signal whitespace-nowrap"
+          data-testid="range-label"
+          >{{ customLabel }}</span
+        >
         <label
           class="flex items-center gap-1 text-[11px] font-mono text-muted-foreground"
           :title="`Actualisé à ${new Date(lastRefresh).toLocaleTimeString('fr-FR')}`"
@@ -486,12 +543,20 @@ const backTo = computed(() =>
           </svg>
         </button>
         <button
-          v-if="canManage && !editing"
+          v-if="canManage && !editing && current"
           class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60"
           data-testid="dash-edit"
           @click="editing = true"
         >
           Modifier
+        </button>
+        <button
+          v-if="canManage && !editing && current"
+          class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60"
+          data-testid="dash-new"
+          @click="newDashboard(false)"
+        >
+          + Nouveau
         </button>
       </div>
     </header>
@@ -500,9 +565,37 @@ const backTo = computed(() =>
       v-if="proposed && !loading"
       class="mb-4 text-xs text-muted-foreground border border-dashed border-border rounded px-3 py-2"
     >
-      Tableau de bord proposé automatiquement (pas encore enregistré).<span v-if="canManage">
-        « Modifier » pour l'adapter.</span
-      >
+      Nouveau tableau de bord, pas encore enregistré.
+    </div>
+
+    <!-- aucun tableau : rien n'est créé d'office -->
+    <div
+      v-if="!current && !loading && !error"
+      class="border border-dashed border-border rounded-md px-6 py-10 text-center space-y-3"
+      data-testid="dash-empty"
+    >
+      <p class="text-sm">
+        Aucun tableau de bord pour {{ scope === 'device' ? 'cette box' : 'ce projet' }}.
+      </p>
+      <div v-if="canManage" class="flex flex-wrap justify-center gap-2">
+        <button
+          class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-signal bg-signal text-primary-foreground"
+          data-testid="dash-new-empty"
+          @click="newDashboard(false)"
+        >
+          Créer un tableau vide
+        </button>
+        <button
+          class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60"
+          data-testid="dash-new-proposal"
+          @click="newDashboard(true)"
+        >
+          Partir d'une proposition
+        </button>
+      </div>
+      <RouterLink :to="backTo" class="inline-block text-xs text-muted-foreground hover:text-signal">
+        {{ scope === 'device' ? 'Voir la fiche de la box' : 'Voir la fiche du projet' }} →
+      </RouterLink>
     </div>
 
     <!-- barre d'édition -->
@@ -536,8 +629,15 @@ const backTo = computed(() =>
         class="flex-1 bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
         data-testid="dash-name"
       />
-      <label class="text-xs flex items-center gap-1.5 text-muted-foreground"
-        ><input v-model="current.is_default" type="checkbox" /> par défaut</label
+      <label
+        class="text-xs flex items-center gap-1.5 text-muted-foreground"
+        :title="
+          scope === 'device'
+            ? 'Ouvrir ce tableau à la place de la fiche de la box'
+            : 'Tableau ouvert en premier pour ce projet'
+        "
+        ><input v-model="current.is_default" type="checkbox" data-testid="dash-default" />
+        {{ scope === 'device' ? 'ouvrir à la place de la fiche' : 'tableau par défaut' }}</label
       >
       <button
         class="text-xs px-3 py-1.5 rounded border border-border"
@@ -571,7 +671,7 @@ const backTo = computed(() =>
       </button>
       <button
         class="text-xs px-3 py-1.5 rounded border border-border"
-        @click="select(current.id ?? null)"
+        @click="select(current.id ?? dashboards[0]?.id ?? null)"
       >
         Annuler
       </button>
@@ -601,8 +701,9 @@ const backTo = computed(() =>
     >
       <div class="font-medium mb-2">Exporter les données du tableau de bord (Excel)</div>
       <p class="text-xs text-muted-foreground mb-2">
-        {{ exportSources.length }} variable(s), période affichée ({{ PERIODS[period]?.label }}). Une
-        ligne par date, une colonne par variable.
+        {{ exportSources.length }} variable(s), période affichée ({{
+          custom ? customLabel : PERIODS[period]?.label
+        }}). Une ligne par date, une colonne par variable.
       </p>
       <div class="flex flex-col sm:flex-row gap-3 mb-3">
         <label class="flex items-center gap-1.5"

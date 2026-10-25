@@ -225,6 +225,14 @@ export async function saveDashboard(d: Dashboard, widgets: Widget[]): Promise<st
     is_default: d.is_default,
   }
   let id = d.id
+  // un seul tableau par défaut par box / projet : les autres perdent la marque
+  if (d.is_default && (d.device_id || d.project_id)) {
+    let q = sb.from('dashboards').update({ is_default: false }).eq('is_default', true)
+    q = d.device_id ? q.eq('device_id', d.device_id) : q.eq('project_id', d.project_id)
+    if (id) q = q.neq('id', id)
+    const { error } = await q
+    if (error) throw new Error(error.message)
+  }
   if (id) {
     const { error } = await sb.from('dashboards').update(row).eq('id', id)
     if (error) throw new Error(error.message)
