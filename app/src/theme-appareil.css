@@ -72,7 +72,7 @@
 }
 
 .appareil {
-  --radius: 0.875rem;
+  --radius: 0.625rem;
   --font-sans: 'Inter Tight', 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
 .appareil body {
@@ -98,10 +98,9 @@
   font-weight: 400;
   letter-spacing: -0.02em;
 }
-/* boutons : pilules à contour fin */
-.appareil [data-slot='button'],
-.appareil button.rounded-md,
-.appareil a.rounded-md {
+/* boutons : pilules seulement pour les vrais boutons d'une ligne (pas les cartes ni les lignes de liste,
+   qui sont aussi des <a>/<button> rounded-md : en pilule elles deviennent des gélules, surtout sur mobile) */
+.appareil [data-slot='button'] {
   border-radius: 999px;
 }
 /* modules : pas d'ombre ni de lueur, filet fin */
