@@ -11,27 +11,27 @@
   --card-foreground: #141414;
   --popover: #fbfbfa;
   --popover-foreground: #141414;
-  --primary: #141414;
-  --primary-foreground: #f4f4f2;
+  --primary: #00d4aa;
+  --primary-foreground: #0a0f14;
   --secondary: #e6e6e3;
   --secondary-foreground: #141414;
   --muted: #e6e6e3;
   --muted-foreground: #85857f;
-  --accent: #d71921;
-  --accent-foreground: #ffffff;
+  --accent: #00d4aa;
+  --accent-foreground: #0a0f14;
   --destructive: #e3342b;
   --border: #d6d6d2;
   --input: #fbfbfa;
-  --ring: #d71921;
-  --signal: #141414;
-  --signal-bright: #141414;
-  --signal-deep: #000000;
-  --signal-soft: rgb(20 20 20 / 0.06);
+  --ring: #00d4aa;
+  --signal: #00876f;
+  --signal-bright: #00a887;
+  --signal-deep: #006b58;
+  --signal-soft: rgb(0 212 170 / 0.12);
   --signal-glow: transparent;
   --offline: #e3342b;
   --offline-soft: rgb(227 52 43 / 0.08);
   --warn: #b98200;
-  --amber: #d71921;
+  --amber: #e9a400;
   --hairline: #d6d6d2;
   --grid-line: transparent;
   --grain-opacity: 0;
@@ -45,27 +45,27 @@
   --card-foreground: #ececea;
   --popover: #22262b;
   --popover-foreground: #ececea;
-  --primary: #ececea;
-  --primary-foreground: #121417;
+  --primary: #00d4aa;
+  --primary-foreground: #0a0f14;
   --secondary: #22262b;
   --secondary-foreground: #ececea;
   --muted: #22262b;
   --muted-foreground: #8d939a;
-  --accent: #ff3b3b;
-  --accent-foreground: #ffffff;
+  --accent: #00d4aa;
+  --accent-foreground: #0a0f14;
   --destructive: #ff5a52;
   --border: #2c3137;
   --input: #1a1d21;
-  --ring: #ff3b3b;
-  --signal: #ececea;
-  --signal-bright: #ffffff;
-  --signal-deep: #c9c9c4;
-  --signal-soft: rgb(236 236 234 / 0.08);
+  --ring: #00d4aa;
+  --signal: #00d4aa;
+  --signal-bright: #33e0bd;
+  --signal-deep: #00a887;
+  --signal-soft: rgb(0 212 170 / 0.12);
   --signal-glow: transparent;
   --offline: #ff5a52;
   --offline-soft: rgb(255 90 82 / 0.10);
   --warn: #e9a400;
-  --amber: #ff3b3b;
+  --amber: #f0b429;
   --hairline: #2c3137;
   --grid-line: transparent;
   --grain-opacity: 0;
@@ -113,10 +113,10 @@
 .appareil .pulse-dot {
   animation: none;
 }
-/* sélection et focus : orange */
+/* sélection : turquoise */
 .appareil ::selection {
   background: var(--accent);
-  color: #fff;
+  color: #0a0f14;
 }
 
 /* ===== v2 : Teenage Engineering + Nothing ===== */
@@ -192,7 +192,7 @@
   font-weight: 400;
 }
 .appareil .w-key.w-key-hot {
-  background: var(--accent);
+  background: var(--destructive);
   color: #fff;
 }
 .appareil .w-key.w-key-hot [data-testid='indicator-label'] {
@@ -208,51 +208,67 @@
   --neu-dark: rgb(0 0 0 / 0.13);
   --neu-light: rgb(255 255 255 / 0.95);
 }
+/* apparition : chaque bloc monte doucement en se dégageant du fond, l'un après l'autre (≈ 1,6 s au total) */
 @keyframes neu-rise {
-  from { box-shadow: 0 0 0 var(--neu-dark), 0 0 0 var(--neu-light); }
+  0% { opacity: 0; transform: translateY(8px); }
+  45% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes neu-key {
+  0% { box-shadow: 0 0 0 var(--neu-dark), 0 0 0 var(--neu-light); }
 }
 @keyframes neu-press {
-  from { box-shadow: inset 0 0 0 rgb(0 0 0 / 0), inset 0 0 0 rgb(255 255 255 / 0); }
+  0% { box-shadow: 0 0 0 rgb(0 0 0 / 0), 0 0 0 rgb(255 255 255 / 0); }
+  50% { box-shadow: 4px 4px 8px var(--neu-dark), -4px -4px 8px var(--neu-light); }
 }
 @keyframes neu-knob {
-  from { filter: drop-shadow(0 0 0 rgb(0 0 0 / 0)) drop-shadow(0 0 0 rgb(255 255 255 / 0)); transform: scale(0.94); }
+  0% { transform: scale(0.96); }
 }
-/* modules du tableau de bord : même matière que le fond, sortis du fond */
-.appareil.light .w-mod {
-  background: var(--background);
-  box-shadow: 7px 7px 16px var(--neu-dark), -7px -7px 16px var(--neu-light);
-  animation: neu-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) 0.15s both;
+.appareil {
+  --neu-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
-.appareil.light [data-testid='widget-status'].w-mod {
-  background: #111;
-  box-shadow: 7px 7px 16px rgb(0 0 0 / 0.22), -7px -7px 16px var(--neu-light);
+/* modules du tableau de bord : plats ; ils apparaissent en fondu, l'un après l'autre */
+.appareil .w-mod {
+  animation: neu-rise 0.9s var(--neu-ease, ease-out) calc(0.05s + var(--i, 0) * 0.08s) both;
 }
 /* bouton rotatif en relief */
 .appareil.light .knob-body {
   fill: url(#knob-face);
   filter: drop-shadow(3px 3px 3px rgb(0 0 0 / 0.22)) drop-shadow(-3px -3px 3px rgb(255 255 255 / 0.95));
   transform-origin: 60px 60px;
-  animation: neu-knob 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) 0.35s both;
+  animation: neu-knob 1.2s var(--neu-ease) calc(0.35s + var(--i, 0) * 0.09s) both;
 }
 /* touches des voyants : bombées ; défaut = touche enfoncée */
 .appareil.light .w-key {
   background: linear-gradient(145deg, #f6f6f4, #e0e0dc);
   box-shadow: 5px 5px 10px var(--neu-dark), -5px -5px 10px var(--neu-light);
-  animation: neu-rise 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) 0.35s both;
+  animation: neu-key 0.9s var(--neu-ease) calc(0.5s + var(--i, 0) * 0.09s) both;
 }
 .appareil.light .w-key.w-key-hot {
-  background: var(--accent);
+  background: var(--destructive);
   box-shadow: inset 4px 4px 8px rgb(0 0 0 / 0.4), inset -3px -3px 6px rgb(255 255 255 / 0.2);
-  animation: neu-press 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) 0.5s both;
+  animation: neu-press 1.1s var(--neu-ease) calc(0.7s + var(--i, 0) * 0.09s) both;
 }
 /* compteurs de la liste des box : sortis du fond aussi */
-.appareil.light .big-num.text-xl {
-  text-shadow: 1px 1px 0 var(--neu-light);
-}
+
 @media (prefers-reduced-motion: reduce) {
   .appareil .w-mod,
   .appareil .w-key,
   .appareil .knob-body {
     animation: none !important;
   }
+}
+.appareil [data-testid='dash-grid'].opacity-60 {
+  opacity: 1;
+}
+/* l'aiguille balaie de zéro jusqu'à la valeur */
+@keyframes knob-sweep {
+  0% { transform: rotate(calc(var(--f, 0) * -270deg)); }
+}
+.appareil .knob-hand {
+  transform-origin: 60px 60px;
+  animation: knob-sweep 1.3s var(--neu-ease, ease-out) calc(0.45s + var(--i, 0) * 0.09s) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .appareil .knob-hand { animation: none !important; }
 }

@@ -38,12 +38,12 @@ if (typeof window !== 'undefined') {
   })
 }
 
-/** Couleurs des courbes : en style « appareil », encre d'abord, orange en second, puis tons sobres.
+/** Couleurs des courbes : en style « appareil », encre d'abord, turquoise en second, puis tons sobres.
  *  Lu au montage des composants (le changement de style recharge la page). */
 export function seriesColors(classic: string[]): string[] {
   if (uiStyle.value !== 'appareil') return classic
   const ink = theme.value === 'dark' ? '#ececea' : '#141414'
-  return [ink, '#d71921', '#8b8b86', '#3b6fd8', '#c99400', '#1d9a57', '#a855f7', '#0e7490', '#b45309', '#64748b']
+  return [ink, '#00a887', '#8b8b86', '#3b6fd8', '#c99400', '#1d9a57', '#a855f7', '#0e7490', '#b45309', '#64748b']
 }
 
 export function useTheme() {

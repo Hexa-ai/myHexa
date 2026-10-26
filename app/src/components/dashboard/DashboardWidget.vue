@@ -546,6 +546,8 @@ const tableRows = computed(() =>
                 y1="60"
                 :x2="knobHand(it.f).x"
                 :y2="knobHand(it.f).y"
+                class="knob-hand"
+                :style="{ '--f': it.f }"
                 stroke="var(--accent)"
                 stroke-width="3"
                 stroke-linecap="round"

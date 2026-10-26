@@ -769,6 +769,7 @@ const backTo = computed(() =>
           dragOver === i && dragIdx !== i && 'ring-2 ring-signal rounded-md',
         ]"
         :draggable="editing"
+        :style="{ '--i': i }"
         data-testid="widget-slot"
         @dragstart="dragIdx = i"
         @dragover.prevent="dragOver = i"
