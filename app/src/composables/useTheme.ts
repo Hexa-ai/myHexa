@@ -43,7 +43,7 @@ if (typeof window !== 'undefined') {
 export function seriesColors(classic: string[]): string[] {
   if (uiStyle.value !== 'appareil') return classic
   const ink = theme.value === 'dark' ? '#ececea' : '#141414'
-  return [ink, '#ff4f12', '#8b8b86', '#3b6fd8', '#c99400', '#1d9a57', '#a855f7', '#0e7490', '#b45309', '#64748b']
+  return [ink, '#d71921', '#8b8b86', '#3b6fd8', '#c99400', '#1d9a57', '#a855f7', '#0e7490', '#b45309', '#64748b']
 }
 
 export function useTheme() {

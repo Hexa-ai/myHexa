@@ -203,7 +203,7 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
           <div class="text-[9px] sm:text-[10px] uppercase tracking-widest text-muted-foreground">
             Total
           </div>
-          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5">
+          <div class="big-num font-mono text-xl sm:text-2xl tabular mt-0.5">
             {{ devices.length.toString().padStart(2, '0') }}
           </div>
         </div>
@@ -213,7 +213,7 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
           >
             <span class="size-1 rounded-full bg-signal pulse-dot" /> Online
           </div>
-          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5 text-signal">
+          <div class="big-num font-mono text-xl sm:text-2xl tabular mt-0.5 text-signal">
             {{ onlineCount.toString().padStart(2, '0') }}
           </div>
         </div>
@@ -222,7 +222,7 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
             Offline
           </div>
           <div
-            class="font-mono text-xl sm:text-2xl tabular mt-0.5"
+            class="big-num font-mono text-xl sm:text-2xl tabular mt-0.5"
             :class="offlineCount > 0 ? 'text-offline' : ''"
           >
             {{ offlineCount.toString().padStart(2, '0') }}
@@ -233,7 +233,7 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
             Alarmes
           </div>
           <div
-            class="font-mono text-xl sm:text-2xl tabular mt-0.5"
+            class="big-num font-mono text-xl sm:text-2xl tabular mt-0.5"
             :class="totalAlarms > 0 ? 'text-offline' : ''"
           >
             {{ totalAlarms.toString().padStart(2, '0') }}

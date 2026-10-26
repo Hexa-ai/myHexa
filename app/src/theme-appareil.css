@@ -17,12 +17,12 @@
   --secondary-foreground: #141414;
   --muted: #e6e6e3;
   --muted-foreground: #85857f;
-  --accent: #ff4f12;
+  --accent: #d71921;
   --accent-foreground: #ffffff;
   --destructive: #e3342b;
   --border: #d6d6d2;
   --input: #fbfbfa;
-  --ring: #ff4f12;
+  --ring: #d71921;
   --signal: #141414;
   --signal-bright: #141414;
   --signal-deep: #000000;
@@ -31,7 +31,7 @@
   --offline: #e3342b;
   --offline-soft: rgb(227 52 43 / 0.08);
   --warn: #b98200;
-  --amber: #ff4f12;
+  --amber: #d71921;
   --hairline: #d6d6d2;
   --grid-line: transparent;
   --grain-opacity: 0;
@@ -51,12 +51,12 @@
   --secondary-foreground: #ececea;
   --muted: #22262b;
   --muted-foreground: #8d939a;
-  --accent: #ff5a1f;
+  --accent: #ff3b3b;
   --accent-foreground: #ffffff;
   --destructive: #ff5a52;
   --border: #2c3137;
   --input: #1a1d21;
-  --ring: #ff5a1f;
+  --ring: #ff3b3b;
   --signal: #ececea;
   --signal-bright: #ffffff;
   --signal-deep: #c9c9c4;
@@ -65,7 +65,7 @@
   --offline: #ff5a52;
   --offline-soft: rgb(255 90 82 / 0.10);
   --warn: #e9a400;
-  --amber: #ff5a1f;
+  --amber: #ff3b3b;
   --hairline: #2c3137;
   --grid-line: transparent;
   --grain-opacity: 0;
@@ -79,10 +79,9 @@
   background-image: none;
   letter-spacing: -0.005em;
 }
-/* étiquettes techniques : minuscules, mono, discrètes */
+/* étiquettes techniques : petites capitales espacées, mono, discrètes */
 .appareil .uppercase {
-  text-transform: lowercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.12em;
 }
 /* chiffres : fins et tabulaires */
 .appareil .tabular {
@@ -118,4 +117,87 @@
 .appareil ::selection {
   background: var(--accent);
   color: #fff;
+}
+
+/* ===== v2 : Teenage Engineering + Nothing ===== */
+.appareil {
+  --dot-font: 'Doto', 'JetBrains Mono', monospace;
+}
+/* grands chiffres en matrice de points */
+.appareil .big-num {
+  font-family: var(--dot-font);
+  font-weight: 900 !important;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.appareil .big-num.text-3xl {
+  font-size: 3.25rem;
+}
+.appareil .w-unit {
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  letter-spacing: 0;
+}
+/* modules du tableau de bord : touches d'appareil */
+.appareil .w-mod {
+  background: var(--card);
+  border-color: transparent;
+  box-shadow: inset 0 0 0 1px var(--border);
+  border-radius: 16px;
+  padding: 1rem 1.15rem;
+}
+.appareil .w-title {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted-foreground);
+}
+/* voyants : touches */
+.appareil .w-key {
+  background: var(--muted);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+}
+.appareil .w-key span.rounded-full {
+  box-shadow: none !important;
+  border: 0;
+}
+/* bloc statut : module sombre façon widget Nothing */
+.appareil [data-testid='widget-status'].w-mod {
+  background: #111;
+  color: #f2f2f2;
+  box-shadow: none;
+  --muted-foreground: #8a8a8a;
+  --border: #2a2a2a;
+  --muted: #1e1e1e;
+}
+.appareil.dark [data-testid='widget-status'].w-mod {
+  background: #000;
+  box-shadow: inset 0 0 0 1px #2a2a2a;
+}
+/* titres de page : grands et fins (la matrice de points est réservée aux valeurs) */
+.appareil h1 {
+  font-weight: 300 !important;
+  letter-spacing: -0.03em;
+}
+.appareil .big-num.text-xl {
+  font-size: 2.4rem;
+  margin-top: 0.35rem;
+}
+/* voyants : libellé à l'encre, seule la pastille porte la couleur ; défaut = touche rouge pleine */
+.appareil .w-key [data-testid='indicator-label'] {
+  color: var(--foreground) !important;
+  font-weight: 400;
+}
+.appareil .w-key.w-key-hot {
+  background: var(--accent);
+  color: #fff;
+}
+.appareil .w-key.w-key-hot [data-testid='indicator-label'] {
+  color: #fff !important;
+}
+.appareil .w-key.w-key-hot span.rounded-full {
+  background: #fff !important;
 }

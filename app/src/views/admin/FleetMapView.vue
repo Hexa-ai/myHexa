@@ -181,7 +181,7 @@ function onSelect(id: string) {
           >
             Géoloc.
           </div>
-          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5">
+          <div class="big-num font-mono text-xl sm:text-2xl tabular mt-0.5">
             {{ locatedDevices.length.toString().padStart(2, '0') }}
           </div>
         </div>
@@ -191,7 +191,7 @@ function onSelect(id: string) {
           >
             <span class="size-1 rounded-full bg-signal pulse-dot" /> Online
           </div>
-          <div class="font-mono text-xl sm:text-2xl tabular mt-0.5 text-signal">
+          <div class="big-num font-mono text-xl sm:text-2xl tabular mt-0.5 text-signal">
             {{ onlineCount.toString().padStart(2, '0') }}
           </div>
         </div>
@@ -202,7 +202,7 @@ function onSelect(id: string) {
             Offline
           </div>
           <div
-            class="font-mono text-xl sm:text-2xl tabular mt-0.5"
+            class="big-num font-mono text-xl sm:text-2xl tabular mt-0.5"
             :class="offlineCount > 0 ? 'text-offline' : ''"
           >
             {{ offlineCount.toString().padStart(2, '0') }}
