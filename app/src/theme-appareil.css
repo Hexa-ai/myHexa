@@ -201,3 +201,23 @@
 .appareil .w-key.w-key-hot span.rounded-full {
   background: #fff !important;
 }
+
+/* ===== néomorphisme léger (démo) : seulement ce qui imite un objet physique ===== */
+/* bouton rotatif en relief */
+.appareil.light .knob-body {
+  fill: url(#knob-face);
+  filter: url(#knob-neu);
+}
+/* touches des voyants : bombées ; défaut = touche enfoncée */
+.appareil.light .w-key {
+  background: linear-gradient(145deg, #f4f4f2, #e2e2df);
+  box-shadow:
+    3px 3px 7px rgb(0 0 0 / 0.12),
+    -3px -3px 7px rgb(255 255 255 / 0.9);
+}
+.appareil.light .w-key.w-key-hot {
+  background: var(--accent);
+  box-shadow:
+    inset 3px 3px 6px rgb(0 0 0 / 0.35),
+    inset -2px -2px 5px rgb(255 255 255 / 0.18);
+}

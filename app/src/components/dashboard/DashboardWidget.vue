@@ -529,7 +529,18 @@ const tableRows = computed(() =>
                 :stroke="t.i / 40 <= it.f ? 'currentColor' : 'var(--border)'"
                 stroke-width="1.6"
               />
-              <circle cx="60" cy="60" r="36" fill="var(--muted)" />
+              <defs>
+                <!-- néomorphisme : relief du bouton (ombre basse droite, reflet haut gauche) -->
+                <filter id="knob-neu" x="-30%" y="-30%" width="160%" height="160%">
+                  <feDropShadow dx="3" dy="3" stdDeviation="3" flood-color="#000" flood-opacity=".18" />
+                  <feDropShadow dx="-3" dy="-3" stdDeviation="3" flood-color="#fff" flood-opacity=".9" />
+                </filter>
+                <radialGradient id="knob-face" cx="40%" cy="35%" r="75%">
+                  <stop offset="0%" stop-color="var(--card)" />
+                  <stop offset="100%" stop-color="var(--muted)" />
+                </radialGradient>
+              </defs>
+              <circle class="knob-body" cx="60" cy="60" r="36" fill="var(--muted)" />
               <line
                 x1="60"
                 y1="60"
