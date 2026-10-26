@@ -283,3 +283,46 @@
 .appareil.light .bg-primary:hover {
   background-color: #33e0bd !important;
 }
+
+/* ===== listes d'équipements : la ligne survolée (souris) ou centrée (défilement tactile) sort du fond ===== */
+.appareil.light table:has(.device-row) {
+  border-collapse: separate;
+  border-spacing: 0 4px;
+}
+.appareil.light .device-row {
+  border-bottom-color: transparent !important;
+  transition: box-shadow 0.35s var(--neu-ease, ease-out), background-color 0.35s, transform 0.35s var(--neu-ease, ease-out);
+}
+.appareil.light .device-row > td:first-child { border-radius: 12px 0 0 12px; }
+.appareil.light .device-row > td:last-child { border-radius: 0 12px 12px 0; }
+.appareil.light .device-row:hover {
+  background: var(--background) !important;
+  box-shadow: 6px 6px 14px var(--neu-dark), -6px -6px 14px var(--neu-light);
+  border-radius: 12px;
+}
+.appareil.light .device-row:active {
+  box-shadow: inset 3px 3px 7px var(--neu-dark), inset -3px -3px 7px var(--neu-light);
+}
+.appareil.light .device-card {
+  transition: box-shadow 0.35s var(--neu-ease, ease-out), background-color 0.35s, border-color 0.35s, transform 0.35s var(--neu-ease, ease-out);
+}
+@media (hover: hover) {
+  .appareil.light .device-card:hover {
+    background: var(--background) !important;
+    border-color: transparent;
+    box-shadow: 6px 6px 14px var(--neu-dark), -6px -6px 14px var(--neu-light);
+  }
+}
+.appareil.light .device-card.scroll-focus {
+  background: var(--background) !important;
+  border-color: transparent;
+  box-shadow: 6px 6px 14px var(--neu-dark), -6px -6px 14px var(--neu-light);
+  transform: scale(1.01);
+}
+.appareil.light .device-card:active {
+  box-shadow: inset 3px 3px 7px var(--neu-dark), inset -3px -3px 7px var(--neu-light);
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .appareil .device-row, .appareil .device-card { transition: none; transform: none !important; }
+}

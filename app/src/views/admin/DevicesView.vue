@@ -15,8 +15,13 @@ import {
 import { useTailscaleReachable } from '@/composables/useTailscaleReachable'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { useProjects } from '@/composables/useProjects'
+import { useScrollFocus } from '@/composables/useScrollFocus'
 import QRCodeBlock from '@/components/QRCodeBlock.vue'
 import { supabase } from '@/lib/supabase'
+
+/** liste mobile : la carte au centre de l'écran est mise en avant pendant le défilement */
+const mobileList = ref<HTMLElement | null>(null)
+useScrollFocus(mobileList, '.device-card')
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -362,7 +367,7 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
           <tr
             v-for="(r, i) in rows"
             :key="r.id"
-            class="group border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition-colors fade-up"
+            class="device-row group border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition-colors fade-up"
             :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
             @click="openDevice(r.id)"
           >
@@ -563,13 +568,14 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
     <!-- Mobile cards -->
     <div
       v-if="!loading && !error"
+      ref="mobileList"
       class="md:hidden space-y-2 fade-up"
       style="animation-delay: 120ms"
     >
       <button
         v-for="(r, i) in rows"
         :key="r.id"
-        class="w-full text-left border border-border rounded-md bg-card/40 px-4 py-3.5 hover:bg-secondary/40 transition-colors fade-up"
+        class="device-card w-full text-left border border-border rounded-md bg-card/40 px-4 py-3.5 hover:bg-secondary/40 transition-colors fade-up"
         :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
         @click="openDevice(r.id)"
       >
