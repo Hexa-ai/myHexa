@@ -269,14 +269,14 @@ function save() {
           <select
             v-if="multi"
             v-model="newDev"
-            class="bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+            class="min-w-0 sm:max-w-[40%] bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
             data-testid="src-device"
           >
             <option v-for="d in devices" :key="d.id" :value="d.id">{{ d.name }}</option>
           </select>
           <select
             v-model="newVar"
-            class="flex-1 bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+            class="flex-1 min-w-0 bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
             data-testid="src-var"
           >
             <option value="">— variable —</option>
@@ -286,7 +286,7 @@ function save() {
             </option>
           </select>
           <button
-            class="text-xs px-3 py-1.5 rounded border border-signal/50 text-signal disabled:opacity-40"
+            class="shrink-0 text-xs px-3 py-1.5 rounded border border-signal/50 text-signal disabled:opacity-40"
             :disabled="!newVar"
             data-testid="src-add"
             @click="addSource"
