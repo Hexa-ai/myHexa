@@ -272,3 +272,14 @@
 @media (prefers-reduced-motion: reduce) {
   .appareil .knob-hand { animation: none !important; }
 }
+/* charte Hexa-AI : aplats d'action en turquoise vif + texte nuit (comme les boutons des sites) ;
+   le turquoise foncé (--signal) reste pour le texte et les liens, lisibles sur fond clair */
+.appareil.light .bg-signal,
+.appareil.light .bg-primary {
+  background-color: #00d4aa !important;
+  color: #0a0f14 !important;
+}
+.appareil.light .bg-signal:hover,
+.appareil.light .bg-primary:hover {
+  background-color: #33e0bd !important;
+}
