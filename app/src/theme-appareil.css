@@ -1,0 +1,330 @@
+/* Style « appareil » (PROTO test) — inspiré de Teenage Engineering.
+   Fond gris chaud, modules comme des touches, chiffres fins, étiquettes en minuscules.
+   Couleur réservée aux états : orange = alarme / action, vert / jaune / rouge = états des box.
+   Activé par la classe .appareil sur <html> (useTheme, VITE_UI_STYLE=appareil sur le test). */
+
+:root.appareil.light,
+:root.appareil:not(.dark) {
+  --background: #efefed;
+  --foreground: #141414;
+  --card: #f8f8f6;
+  --card-foreground: #141414;
+  --popover: #fbfbfa;
+  --popover-foreground: #141414;
+  --primary: #00d4aa;
+  --primary-foreground: #0a0f14;
+  --secondary: #e6e6e3;
+  --secondary-foreground: #141414;
+  --muted: #e6e6e3;
+  --muted-foreground: #85857f;
+  --accent: #00d4aa;
+  --accent-foreground: #0a0f14;
+  --destructive: #e3342b;
+  --border: #d6d6d2;
+  --input: #fbfbfa;
+  --ring: #00d4aa;
+  --signal: #00876f;
+  --signal-bright: #00a887;
+  --signal-deep: #006b58;
+  --signal-soft: rgb(0 212 170 / 0.12);
+  --signal-glow: transparent;
+  --offline: #e3342b;
+  --offline-soft: rgb(227 52 43 / 0.08);
+  --warn: #b98200;
+  --amber: #e9a400;
+  --hairline: #d6d6d2;
+  --grid-line: transparent;
+  --grain-opacity: 0;
+}
+
+/* variante sombre mate */
+:root.appareil.dark {
+  --background: #121417;
+  --foreground: #ececea;
+  --card: #1a1d21;
+  --card-foreground: #ececea;
+  --popover: #22262b;
+  --popover-foreground: #ececea;
+  --primary: #00d4aa;
+  --primary-foreground: #0a0f14;
+  --secondary: #22262b;
+  --secondary-foreground: #ececea;
+  --muted: #22262b;
+  --muted-foreground: #8d939a;
+  --accent: #00d4aa;
+  --accent-foreground: #0a0f14;
+  --destructive: #ff5a52;
+  --border: #2c3137;
+  --input: #1a1d21;
+  --ring: #00d4aa;
+  --signal: #00d4aa;
+  --signal-bright: #33e0bd;
+  --signal-deep: #00a887;
+  --signal-soft: rgb(0 212 170 / 0.12);
+  --signal-glow: transparent;
+  --offline: #ff5a52;
+  --offline-soft: rgb(255 90 82 / 0.10);
+  --warn: #e9a400;
+  --amber: #f0b429;
+  --hairline: #2c3137;
+  --grid-line: transparent;
+  --grain-opacity: 0;
+}
+
+.appareil {
+  --radius: 0.625rem;
+  --font-sans: 'Inter Tight', 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+.appareil body {
+  background-image: none;
+  letter-spacing: -0.005em;
+}
+/* étiquettes techniques : petites capitales espacées, mono, discrètes */
+.appareil .uppercase {
+  letter-spacing: 0.12em;
+}
+/* chiffres : fins et tabulaires */
+.appareil .tabular {
+  font-weight: 300;
+}
+.appareil .tabular.font-semibold,
+.appareil .tabular.font-bold,
+.appareil .tabular.font-medium {
+  font-weight: 400;
+}
+.appareil h1,
+.appareil h2 {
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+/* boutons : pilules seulement pour les vrais boutons d'une ligne (pas les cartes ni les lignes de liste,
+   qui sont aussi des <a>/<button> rounded-md : en pilule elles deviennent des gélules, surtout sur mobile) */
+.appareil [data-slot='button'] {
+  border-radius: 999px;
+}
+/* modules : pas d'ombre ni de lueur, filet fin */
+.appareil .glow-signal,
+.appareil .shadow,
+.appareil .shadow-sm,
+.appareil .shadow-md,
+.appareil .shadow-lg {
+  box-shadow: none !important;
+}
+.appareil .pulse-dot {
+  animation: none;
+}
+/* sélection : turquoise */
+.appareil ::selection {
+  background: var(--accent);
+  color: #0a0f14;
+}
+
+/* ===== v2 : Teenage Engineering + Nothing ===== */
+.appareil {
+  --dot-font: 'Doto', 'JetBrains Mono', monospace;
+}
+/* grands chiffres en matrice de points */
+.appareil .big-num {
+  font-family: var(--dot-font);
+  font-weight: 900 !important;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.appareil .big-num.text-3xl {
+  font-size: 3.25rem;
+}
+.appareil .w-unit {
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  letter-spacing: 0;
+}
+/* modules du tableau de bord : touches d'appareil */
+.appareil .w-mod {
+  background: var(--card);
+  border-color: transparent;
+  box-shadow: inset 0 0 0 1px var(--border);
+  border-radius: 16px;
+  padding: 1rem 1.15rem;
+}
+.appareil .w-title {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted-foreground);
+}
+/* voyants : touches */
+.appareil .w-key {
+  background: var(--muted);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+}
+.appareil .w-key span.rounded-full {
+  box-shadow: none !important;
+  border: 0;
+}
+/* bloc statut : module sombre façon widget Nothing */
+.appareil [data-testid='widget-status'].w-mod {
+  background: #111;
+  color: #f2f2f2;
+  box-shadow: none;
+  --muted-foreground: #8a8a8a;
+  --border: #2a2a2a;
+  --muted: #1e1e1e;
+}
+.appareil.dark [data-testid='widget-status'].w-mod {
+  background: #000;
+  box-shadow: inset 0 0 0 1px #2a2a2a;
+}
+/* titres de page : grands et fins (la matrice de points est réservée aux valeurs) */
+.appareil h1 {
+  font-weight: 300 !important;
+  letter-spacing: -0.03em;
+}
+.appareil .big-num.text-xl {
+  font-size: 2.4rem;
+  margin-top: 0.35rem;
+}
+/* voyants : libellé à l'encre, seule la pastille porte la couleur ; défaut = touche rouge pleine */
+.appareil .w-key [data-testid='indicator-label'] {
+  color: var(--foreground) !important;
+  font-weight: 400;
+}
+.appareil .w-key.w-key-hot {
+  background: var(--destructive);
+  color: #fff;
+}
+.appareil .w-key.w-key-hot [data-testid='indicator-label'] {
+  color: #fff !important;
+}
+.appareil .w-key.w-key-hot span.rounded-full {
+  background: #fff !important;
+}
+
+/* ===== néomorphisme (soft UI) : relief marqué + apparition animée ===== */
+/* en clair seulement ; les éléments « sortent » du fond une fois affichés (0,7 s), sans bouger de place */
+.appareil.light {
+  --neu-dark: rgb(0 0 0 / 0.13);
+  --neu-light: rgb(255 255 255 / 0.95);
+}
+/* apparition : chaque bloc monte doucement en se dégageant du fond, l'un après l'autre (≈ 1,6 s au total) */
+@keyframes neu-rise {
+  0% { opacity: 0; transform: translateY(8px); }
+  45% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes neu-key {
+  0% { box-shadow: 0 0 0 var(--neu-dark), 0 0 0 var(--neu-light); }
+}
+@keyframes neu-press {
+  0% { box-shadow: 0 0 0 rgb(0 0 0 / 0), 0 0 0 rgb(255 255 255 / 0); }
+  50% { box-shadow: 4px 4px 8px var(--neu-dark), -4px -4px 8px var(--neu-light); }
+}
+@keyframes neu-knob {
+  0% { transform: scale(0.96); }
+}
+.appareil {
+  --neu-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* modules du tableau de bord : plats ; ils apparaissent en fondu, l'un après l'autre */
+.appareil .w-mod {
+  animation: neu-rise 0.9s var(--neu-ease, ease-out) calc(0.05s + var(--i, 0) * 0.08s) both;
+}
+/* bouton rotatif en relief */
+.appareil.light .knob-body {
+  fill: url(#knob-face);
+  filter: drop-shadow(3px 3px 3px rgb(0 0 0 / 0.22)) drop-shadow(-3px -3px 3px rgb(255 255 255 / 0.95));
+  transform-origin: 60px 60px;
+  animation: neu-knob 1.2s var(--neu-ease) calc(0.35s + var(--i, 0) * 0.09s) both;
+}
+/* touches des voyants : bombées ; défaut = touche enfoncée */
+.appareil.light .w-key {
+  background: linear-gradient(145deg, #f6f6f4, #e0e0dc);
+  box-shadow: 5px 5px 10px var(--neu-dark), -5px -5px 10px var(--neu-light);
+  animation: neu-key 0.9s var(--neu-ease) calc(0.5s + var(--i, 0) * 0.09s) both;
+}
+.appareil.light .w-key.w-key-hot {
+  background: var(--destructive);
+  box-shadow: inset 4px 4px 8px rgb(0 0 0 / 0.4), inset -3px -3px 6px rgb(255 255 255 / 0.2);
+  animation: neu-press 1.1s var(--neu-ease) calc(0.7s + var(--i, 0) * 0.09s) both;
+}
+/* compteurs de la liste des box : sortis du fond aussi */
+
+@media (prefers-reduced-motion: reduce) {
+  .appareil .w-mod,
+  .appareil .w-key,
+  .appareil .knob-body {
+    animation: none !important;
+  }
+}
+.appareil [data-testid='dash-grid'].opacity-60 {
+  opacity: 1;
+}
+/* l'aiguille balaie de zéro jusqu'à la valeur */
+@keyframes knob-sweep {
+  0% { transform: rotate(calc(var(--f, 0) * -270deg)); }
+}
+.appareil .knob-hand {
+  transform-origin: 60px 60px;
+  animation: knob-sweep 1.3s var(--neu-ease, ease-out) calc(0.45s + var(--i, 0) * 0.09s) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .appareil .knob-hand { animation: none !important; }
+}
+/* charte Hexa-AI : aplats d'action en turquoise vif + texte nuit (comme les boutons des sites) ;
+   le turquoise foncé (--signal) reste pour le texte et les liens, lisibles sur fond clair */
+.appareil.light .bg-signal,
+.appareil.light .bg-primary {
+  background-color: #00d4aa !important;
+  color: #0a0f14 !important;
+}
+.appareil.light .bg-signal:hover,
+.appareil.light .bg-primary:hover {
+  background-color: #33e0bd !important;
+}
+
+/* ===== listes d'équipements : la ligne survolée (souris) ou centrée (défilement tactile) sort du fond ===== */
+.appareil.light table:has(.neu-row) {
+  border-collapse: separate;
+  border-spacing: 0 4px;
+}
+.appareil.light .neu-row {
+  border-bottom-color: transparent !important;
+  transition: box-shadow 0.35s var(--neu-ease, ease-out), background-color 0.35s, transform 0.35s var(--neu-ease, ease-out);
+}
+.appareil.light .neu-row > td:first-child { border-radius: 12px 0 0 12px; }
+.appareil.light .neu-row > td:last-child { border-radius: 0 12px 12px 0; }
+.appareil.light .neu-row:hover {
+  background: var(--background) !important;
+  box-shadow: 6px 6px 14px var(--neu-dark), -6px -6px 14px var(--neu-light);
+  border-radius: 12px;
+}
+.appareil.light .neu-row:active {
+  box-shadow: inset 3px 3px 7px var(--neu-dark), inset -3px -3px 7px var(--neu-light);
+}
+.appareil.light .neu-card {
+  transition: box-shadow 0.35s var(--neu-ease, ease-out), background-color 0.35s, border-color 0.35s, transform 0.35s var(--neu-ease, ease-out);
+}
+@media (hover: hover) {
+  .appareil.light .neu-card:hover {
+    background: var(--background) !important;
+    border-color: transparent;
+    box-shadow: 6px 6px 14px var(--neu-dark), -6px -6px 14px var(--neu-light);
+  }
+}
+.appareil.light .neu-card.scroll-focus {
+  background: var(--background) !important;
+  border-color: transparent;
+  box-shadow: 6px 6px 14px var(--neu-dark), -6px -6px 14px var(--neu-light);
+  transform: scale(1.01);
+}
+.appareil.light .neu-card:active {
+  box-shadow: inset 3px 3px 7px var(--neu-dark), inset -3px -3px 7px var(--neu-light);
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .appareil .neu-row, .appareil .neu-card { transition: none; transform: none !important; }
+}
+
+.appareil.light .neu-card { border-radius: 12px; }

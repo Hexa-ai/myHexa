@@ -1,9 +1,22 @@
 <script setup lang="ts">
 import DocumentsBlock from '@/components/dashboard/DocumentsBlock.vue'
+import { seriesColors, useTheme } from '@/composables/useTheme'
 import AlarmBlock from '@/components/dashboard/AlarmBlock.vue'
 import DeviceMap, { type MarkerInput } from '@/components/DeviceMap.vue'
 // PROTOTYPE — rendu d'un bloc de tableau de bord (commun aux futurs rapports).
 import { computed } from 'vue'
+const { uiStyle } = useTheme()
+const appareil = computed(() => uiStyle.value === 'appareil')
+/** graduations du bouton rotatif (style appareil) : 41 traits sur 270° */
+const KNOB_TICKS = Array.from({ length: 41 }, (_, i) => {
+  const a = ((-225 + (i * 270) / 40) * Math.PI) / 180
+  const r2 = i % 10 ? 50 : 45
+  return { i, x1: 60 + 54 * Math.cos(a), y1: 60 + 54 * Math.sin(a), x2: 60 + r2 * Math.cos(a), y2: 60 + r2 * Math.sin(a) }
+})
+const knobHand = (f: number, r = 30) => {
+  const a = ((-225 + f * 270) * Math.PI) / 180
+  return { x: 60 + r * Math.cos(a), y: 60 + r * Math.sin(a) }
+}
 import HistoryChart from '@/components/HistoryChart.vue'
 import type { DeviceWithStatus } from '@/composables/useDevices'
 import type { HistPoint, HistVar } from '@/composables/useHistory'
@@ -36,7 +49,7 @@ const props = defineProps<{
   multiDevice: boolean
 }>()
 
-const COLORS = ['#00d4aa', '#5b8cff', '#f5a524', '#e05dd0', '#ff7a7a', '#8bd450']
+const COLORS = seriesColors(['#00d4aa', '#5b8cff', '#f5a524', '#e05dd0', '#ff7a7a', '#8bd450'])
 const w = computed(() => props.widget)
 const meta = (dev: string, v: string) => props.catalogs[dev]?.find((x) => x.var === v) ?? null
 const devName = (id: string) => props.devices.get(id)?.name ?? '—'
@@ -171,6 +184,7 @@ interface Item {
   hi: number
   x: number
   y: number
+  f: number
 }
 const items = computed<Item[]>(() => {
   const srcs = w.value.sources.filter((s) => s.var)
@@ -200,6 +214,7 @@ const items = computed<Item[]>(() => {
       delta,
       lo,
       hi,
+      f,
       x: 60 + 48 * Math.cos(ang),
       y: 60 - 48 * Math.sin(ang),
     }
@@ -271,6 +286,14 @@ function lamp(v: number | null) {
       image: '',
     }
   )
+}
+
+/** couleur « chaude » (rouge) : en style appareil, la touche du voyant est remplie */
+function isHot(color: string) {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(color || '')
+  if (!m) return false
+  const [r, g, b] = [m[1], m[2], m[3]].map((x) => parseInt(x, 16))
+  return r > 170 && g < 110 && b < 110
 }
 
 function barMs(points: HistPoint[]) {
@@ -364,11 +387,11 @@ const tableRows = computed(() =>
 
 <template>
   <div
-    class="h-full border border-border rounded-md bg-card/40 p-3 sm:p-4 flex flex-col min-w-0"
+    class="w-mod h-full border border-border rounded-md bg-card/40 p-3 sm:p-4 flex flex-col min-w-0"
     :data-testid="`widget-${w.type}`"
   >
     <div v-if="title && w.type !== 'image'" class="flex items-baseline gap-2 mb-2 min-w-0">
-      <h3 class="text-sm font-medium tracking-tight truncate shrink-0 max-w-full">{{ title }}</h3>
+      <h3 class="w-title text-sm font-medium tracking-tight truncate shrink-0 max-w-full">{{ title }}</h3>
       <span
         v-if="series[0]?.unit && !overlay && ['curve', 'bars'].includes(w.type)"
         class="font-mono text-[10px] text-muted-foreground"
@@ -463,11 +486,11 @@ const tableRows = computed(() =>
           <div v-if="many" class="text-xs truncate" :title="it.desc">{{ it.label }}</div>
           <div :class="many ? 'text-right' : 'mt-1'">
             <span
-              :class="[many ? 'text-lg' : 'text-3xl', 'font-semibold tabular tracking-tight']"
+              :class="[many ? 'text-lg' : 'text-3xl big-num', 'font-semibold tabular tracking-tight']"
               data-testid="tile-value"
               >{{ fmtValue(it.value, w.options.decimals) }}</span
             >
-            <span class="font-mono text-sm text-muted-foreground ml-1">{{ it.unit }}</span>
+            <span class="w-unit font-mono text-sm text-muted-foreground ml-1">{{ it.unit }}</span>
             <div
               v-if="it.delta !== null"
               class="font-mono text-[11px]"
@@ -494,7 +517,55 @@ const tableRows = computed(() =>
         "
       >
         <div v-for="it in items" :key="it.label" class="min-w-0" data-testid="gauge-item">
+          <div v-if="appareil" :class="['flex items-center gap-3', many ? 'flex-col' : '']">
+            <svg viewBox="0 0 120 120" :class="['shrink-0', many ? 'w-[96px]' : 'w-[118px]']">
+              <line
+                v-for="t in KNOB_TICKS"
+                :key="t.i"
+                :x1="t.x1"
+                :y1="t.y1"
+                :x2="t.x2"
+                :y2="t.y2"
+                :stroke="t.i / 40 <= it.f ? 'currentColor' : 'var(--border)'"
+                stroke-width="1.6"
+              />
+              <defs>
+                <!-- néomorphisme : relief du bouton (ombre basse droite, reflet haut gauche) -->
+                <filter id="knob-neu" x="-30%" y="-30%" width="160%" height="160%">
+                  <feDropShadow dx="3" dy="3" stdDeviation="3" flood-color="#000" flood-opacity=".18" />
+                  <feDropShadow dx="-3" dy="-3" stdDeviation="3" flood-color="#fff" flood-opacity=".9" />
+                </filter>
+                <radialGradient id="knob-face" cx="40%" cy="35%" r="75%">
+                  <stop offset="0%" stop-color="var(--card)" />
+                  <stop offset="100%" stop-color="var(--muted)" />
+                </radialGradient>
+              </defs>
+              <circle class="knob-body" cx="60" cy="60" r="36" fill="var(--muted)" />
+              <line
+                x1="60"
+                y1="60"
+                :x2="knobHand(it.f).x"
+                :y2="knobHand(it.f).y"
+                class="knob-hand"
+                :style="{ '--f': it.f }"
+                stroke="var(--accent)"
+                stroke-width="3"
+                stroke-linecap="round"
+              />
+              <circle cx="60" cy="60" r="3" fill="currentColor" />
+            </svg>
+            <div class="min-w-0" :class="many ? 'text-center' : ''">
+              <span class="big-num tabular" :class="many ? 'text-2xl' : 'text-4xl'">{{
+                fmtValue(it.value, w.options.decimals)
+              }}</span>
+              <span class="w-unit font-mono text-xs text-muted-foreground ml-1">{{ it.unit }}</span>
+              <div class="font-mono text-[10px] text-muted-foreground mt-1 uppercase tracking-widest">
+                {{ fmtValue(it.lo) }} — {{ fmtValue(it.hi) }}
+              </div>
+            </div>
+          </div>
           <svg
+            v-else
             viewBox="0 0 120 70"
             :class="['w-full mx-auto', many ? 'max-w-[150px]' : 'max-w-[220px]']"
           >
@@ -509,7 +580,7 @@ const tableRows = computed(() =>
             <path
               :d="`M12 60 A48 48 0 0 1 ${it.x.toFixed(2)} ${it.y.toFixed(2)}`"
               fill="none"
-              stroke="#00d4aa"
+              :stroke="COLORS[0]"
               stroke-width="10"
               stroke-linecap="round"
             />
@@ -641,7 +712,7 @@ const tableRows = computed(() =>
         <div
           v-for="it in items"
           :key="it.label"
-          class="flex items-center gap-2.5 min-w-0"
+          :class="['w-key flex items-center gap-2.5 min-w-0', isHot(lamp(it.value).color) && 'w-key-hot']"
           data-testid="indicator-item"
         >
           <img

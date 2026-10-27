@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { seriesColors } from '@/composables/useTheme'
 import {
   Chart,
   LineController,
@@ -46,7 +47,7 @@ const props = withDefaults(
     type?: 'line' | 'bar'
     height?: string
   }>(),
-  { unit: '', color: '#00d4aa', type: 'line', height: '260px' },
+  { unit: '', color: () => seriesColors(['#00d4aa'])[0], type: 'line', height: '260px' },
 )
 
 const wrapper = ref<HTMLDivElement | null>(null)

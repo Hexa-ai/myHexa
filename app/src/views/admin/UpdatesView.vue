@@ -308,7 +308,7 @@ onBeforeUnmount(() => clearInterval(timer))
       <li
         v-for="{ b, s } in rows"
         :key="b.id"
-        class="flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-x-3 gap-y-1.5 px-3 sm:px-4 py-3"
+        class="neu-card flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-x-3 gap-y-1.5 px-3 sm:px-4 py-3"
         data-testid="update-row"
       >
         <input

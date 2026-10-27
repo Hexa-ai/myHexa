@@ -1,12 +1,18 @@
 <script setup lang="ts">
+import PwaInstallHint from '@/components/PwaInstallHint.vue'
+import PwaInstallButton from '@/components/PwaInstallButton.vue'
+import { useScrollFocus } from '@/composables/useScrollFocus'
+/** listes : sur écran tactile, l'élément au centre de l'écran est mis en avant pendant le défilement */
+const mainEl = ref<HTMLElement | null>(null)
+useScrollFocus(mainEl, '.neu-card')
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { useTheme } from '@/composables/useTheme'
+import { useTheme, styleSwitchAvailable } from '@/composables/useTheme'
 import { useAlarmCounts, ALARM_COUNTS_KEY } from '@/composables/useAlarmCounts'
 import StaffBar from '@/components/staff/StaffBar.vue'
 
-const { theme, toggle: toggleTheme } = useTheme()
+const { theme, toggle: toggleTheme, uiStyle, toggleStyle } = useTheme()
 const alarms = useAlarmCounts()
 provide(ALARM_COUNTS_KEY, alarms)
 
@@ -647,6 +653,7 @@ function goFleet() {
           </button>
         </div>
       </div>
+      <div class="px-3 pb-2"><PwaInstallButton :collapsed="collapsed" /></div>
       <button
         class="hidden md:flex items-center justify-center gap-2 border-t border-border py-2 text-[10px] font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground transition"
         :title="collapsed ? 'Déplier le menu' : 'Réduire le menu'"
@@ -739,6 +746,15 @@ function goFleet() {
           </span>
           <span class="tabular text-[10px] sm:text-[11px]">{{ clock }}</span>
           <button
+            v-if="styleSwitchAvailable"
+            data-testid="style-switch"
+            :title="uiStyle === 'appareil' ? 'Revenir au style classique' : 'Essayer le style appareil'"
+            class="ml-1 h-7 px-2.5 inline-flex items-center rounded-md border border-border hover:text-foreground transition font-mono text-[10px]"
+            @click="toggleStyle"
+          >
+            {{ uiStyle === 'appareil' ? 'classique' : 'appareil' }}
+          </button>
+          <button
             :title="theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'"
             class="ml-1 size-7 inline-flex items-center justify-center rounded-md border border-border hover:border-signal/60 hover:text-foreground transition"
             @click="toggleTheme"
@@ -774,7 +790,7 @@ function goFleet() {
         </div>
       </header>
 
-      <main class="flex-1 hex-grid overflow-auto">
+      <main ref="mainEl" class="flex-1 hex-grid overflow-auto">
         <RouterView v-slot="{ Component }">
           <transition name="page" mode="out-in">
             <component :is="Component" />
@@ -792,6 +808,7 @@ function goFleet() {
         </span>
       </footer>
     </div>
+    <PwaInstallHint />
   </div>
 </template>
 

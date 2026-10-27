@@ -1,0 +1,56 @@
+/* ===== Application installée (PWA) et finitions mobiles, iPhone en particulier ===== */
+
+/* pas de flash gris au toucher, pas de rebond de toute la page */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  overscroll-behavior-y: none;
+}
+
+/* iOS zoome sur un champ dont le texte fait moins de 16 px : on passe à 16 px sur téléphone */
+@media (max-width: 767px) and (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* encoche et barre du bas (viewport-fit=cover) : la mise en page de l'admin occupe la zone sûre */
+.h-screen:has(> aside[data-testid='sidebar']) {
+  height: 100dvh;
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  box-sizing: border-box;
+}
+aside[data-testid='sidebar'] {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@media (min-width: 768px) {
+  aside[data-testid='sidebar'] {
+    padding-top: 0;
+  }
+}
+main {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* bandeau d'aide à l'installation (iPhone) */
+.pwa-hint {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  z-index: 60;
+  animation: pwa-hint-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes pwa-hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}

@@ -132,7 +132,7 @@ const title = computed(() => props.device.serial_number || props.device.name)
         <li
           v-for="e in events"
           :key="e.id"
-          class="border border-border rounded-md p-3 text-sm"
+          class="neu-card border border-border rounded-md p-3 text-sm"
           data-testid="journal-event"
         >
           <div class="flex items-center justify-between gap-2">

@@ -48,7 +48,7 @@ function accessLabel(r: Recipient): string {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="r in filtered" :key="r.id" class="border-t border-border">
+        <tr v-for="r in filtered" :key="r.id" class="neu-row border-t border-border">
           <td class="px-3 py-2">
             <span class="inline-flex items-center gap-2">
               {{ r.name }}
@@ -80,7 +80,7 @@ function accessLabel(r: Recipient): string {
     <div
       v-for="(r, i) in filtered"
       :key="`mr-${r.id}`"
-      class="border border-border rounded-md bg-card/40 px-4 py-3 fade-up"
+      class="neu-card border border-border rounded-md bg-card/40 px-4 py-3 fade-up"
       :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
     >
       <div class="flex items-center justify-between gap-2 mb-1.5">

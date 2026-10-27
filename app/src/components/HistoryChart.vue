@@ -3,6 +3,7 @@
 // Le zoom (molette, pincement, glisser-sélection) remonte la nouvelle plage au parent qui recharge
 // une résolution plus fine : c'est ce qui donne l'effet « base de séries temporelles ».
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { seriesColors } from '@/composables/useTheme'
 import {
   Chart,
   LineController,
@@ -53,7 +54,7 @@ const props = withDefaults(
   }>(),
   {
     unit: '',
-    color: '#00d4aa',
+    color: () => seriesColors(['#00d4aa'])[0],
     step: false,
     band: true,
     cursor: null,

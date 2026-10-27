@@ -209,7 +209,7 @@ useAutoRefresh(load, { intervalMs: 60_000 })
           <tr
             v-for="row in filtered"
             :key="row.id"
-            class="border-b border-border/50 last:border-0 hover:bg-secondary/40 transition cursor-pointer"
+            class="neu-row border-b border-border/50 last:border-0 hover:bg-secondary/40 transition cursor-pointer"
             @click="openDetail(row)"
           >
             <td class="px-4 py-3 font-mono text-xs text-muted-foreground tabular whitespace-nowrap">
@@ -286,7 +286,7 @@ useAutoRefresh(load, { intervalMs: 60_000 })
       <button
         v-for="(row, i) in filtered"
         :key="`mi-${row.id}`"
-        class="w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
+        class="neu-card w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
         :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
         @click="openDetail(row)"
       >

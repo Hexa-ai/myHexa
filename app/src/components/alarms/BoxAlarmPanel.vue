@@ -118,7 +118,7 @@ const direct = (r: ReturnType<AlarmConfig['receives']>, filters: Record<string, 
           <li
             v-for="{ s, p, r } in rows"
             :key="s.recipient_id"
-            class="flex items-center gap-3 px-3 py-2"
+            class="neu-card flex items-center gap-3 px-3 py-2"
             data-testid="box-recipient"
           >
             <div class="flex-1 min-w-0">

@@ -7,6 +7,7 @@ import { useDevices } from '@/composables/useDevices'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { injectAlarmCounts } from '@/composables/useAlarmCounts'
 import { fetchAlarms, fmtDur as fmtDuration } from '@/composables/useAlarmHistory'
+import PushAlarmsToggle from '@/components/PushAlarmsToggle.vue'
 
 const alarmCounts = injectAlarmCounts()
 const auth = useAuthStore()
@@ -368,6 +369,8 @@ function openDevice(id: string) {
       </div>
     </header>
 
+    <PushAlarmsToggle class="mb-6 fade-up" />
+
     <!-- Filters -->
     <div class="flex flex-col sm:flex-row gap-3 mb-5 fade-up" style="animation-delay: 40ms">
       <select
@@ -470,7 +473,7 @@ function openDevice(id: string) {
             <tr
               v-for="row in filteredLive"
               :key="row.kind === 'alarm' ? `a-${row.device_id}-${row.title}` : `i-${row.intervention.id}`"
-              class="border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition"
+              class="neu-row border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition"
               @click="row.kind === 'alarm' ? openDevice(row.device_id) : openDetail(row.intervention)"
             >
               <td class="px-4 py-3 font-mono text-xs text-muted-foreground tabular whitespace-nowrap">
@@ -531,7 +534,7 @@ function openDevice(id: string) {
         <button
           v-for="(row, i) in filteredLive"
           :key="row.kind === 'alarm' ? `ma-${row.device_id}-${row.title}` : `mi-${row.intervention.id}`"
-          class="w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
+          class="neu-card w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
           :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
           @click="row.kind === 'alarm' ? openDevice(row.device_id) : openDetail(row.intervention)"
         >

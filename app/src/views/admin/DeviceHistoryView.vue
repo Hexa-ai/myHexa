@@ -3,6 +3,7 @@
 // Données : ts_query (niveau choisi selon la plage : 5 min ≤ 4 j, 1 h ≤ 2 mois, 1 jour au-delà).
 // Zoomer (molette / glisser / pincer) recharge automatiquement une résolution plus fine.
 import { computed, onMounted, ref, watch } from 'vue'
+import { seriesColors } from '@/composables/useTheme'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import HistoryChart from '@/components/HistoryChart.vue'
@@ -22,7 +23,7 @@ const route = useRoute()
 const router = useRouter()
 const deviceId = computed(() => String(route.params.id))
 
-const COLORS = [
+const COLORS = seriesColors([
   '#00d4aa',
   '#4f8cff',
   '#f5a524',
@@ -33,7 +34,7 @@ const COLORS = [
   '#84cc16',
   '#f97316',
   '#06b6d4',
-]
+])
 const MAX_VARS = 40
 const DAY = 86400e3
 // coupure de courbe : 1 h en 5 min (les statuts arrivent toutes les 30 min), 6 h en horaire, 3 j en journalier
