@@ -1,5 +1,10 @@
 <script setup lang="ts">
 import PwaInstallHint from '@/components/PwaInstallHint.vue'
+import PwaInstallButton from '@/components/PwaInstallButton.vue'
+import { useScrollFocus } from '@/composables/useScrollFocus'
+/** listes : sur écran tactile, l'élément au centre de l'écran est mis en avant pendant le défilement */
+const mainEl = ref<HTMLElement | null>(null)
+useScrollFocus(mainEl, '.neu-card')
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -648,6 +653,7 @@ function goFleet() {
           </button>
         </div>
       </div>
+      <div class="px-3 pb-2"><PwaInstallButton :collapsed="collapsed" /></div>
       <button
         class="hidden md:flex items-center justify-center gap-2 border-t border-border py-2 text-[10px] font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground transition"
         :title="collapsed ? 'Déplier le menu' : 'Réduire le menu'"
@@ -784,7 +790,7 @@ function goFleet() {
         </div>
       </header>
 
-      <main class="flex-1 hex-grid overflow-auto">
+      <main ref="mainEl" class="flex-1 hex-grid overflow-auto">
         <RouterView v-slot="{ Component }">
           <transition name="page" mode="out-in">
             <component :is="Component" />

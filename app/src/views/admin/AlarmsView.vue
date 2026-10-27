@@ -473,7 +473,7 @@ function openDevice(id: string) {
             <tr
               v-for="row in filteredLive"
               :key="row.kind === 'alarm' ? `a-${row.device_id}-${row.title}` : `i-${row.intervention.id}`"
-              class="border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition"
+              class="neu-row border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition"
               @click="row.kind === 'alarm' ? openDevice(row.device_id) : openDetail(row.intervention)"
             >
               <td class="px-4 py-3 font-mono text-xs text-muted-foreground tabular whitespace-nowrap">
@@ -534,7 +534,7 @@ function openDevice(id: string) {
         <button
           v-for="(row, i) in filteredLive"
           :key="row.kind === 'alarm' ? `ma-${row.device_id}-${row.title}` : `mi-${row.intervention.id}`"
-          class="w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
+          class="neu-card w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
           :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
           @click="row.kind === 'alarm' ? openDevice(row.device_id) : openDetail(row.intervention)"
         >

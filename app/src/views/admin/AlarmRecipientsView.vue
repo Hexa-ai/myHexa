@@ -251,7 +251,7 @@ async function sendRow(d: Device) {
       <li
         v-for="d in visibleDevices"
         :key="d.id"
-        class="flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-x-4 gap-y-2 px-3 sm:px-4 py-3 hover:bg-secondary/10 cursor-pointer"
+        class="neu-card flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-x-4 gap-y-2 px-3 sm:px-4 py-3 hover:bg-secondary/10 cursor-pointer"
         @click="openBoxId = d.id"
       >
         <div class="min-w-0 flex-1 sm:flex-none sm:w-64 sm:shrink-0">

@@ -15,6 +15,10 @@
     <meta name="theme-color" content="#0a0f14" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#efefed" media="(prefers-color-scheme: light)" />
     <meta name="format-detection" content="telephone=no" />
+    <!-- PC / Android : l'invitation à installer arrive parfois avant le démarrage de Vue, on la garde -->
+    <script>
+      window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__myhexaInstall = e })
+    </script>
     <!-- diagnostic écran blanc : si l'application n'a pas démarré au bout de 10 s, affiche l'erreur et un bouton Recharger -->
     <script>
       ;(function () {

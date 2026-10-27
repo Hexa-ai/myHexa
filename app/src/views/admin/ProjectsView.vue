@@ -132,7 +132,7 @@ const toAdd = ref<string[]>([])
           v-for="p in cards"
           :key="p.id"
           :class="[
-            'border rounded-md bg-card/40 p-4 cursor-pointer transition hover:border-signal/50',
+            'neu-card border rounded-md bg-card/40 p-4 cursor-pointer transition hover:border-signal/50',
             openId === p.id ? 'border-signal/70' : 'border-border',
           ]"
           data-testid="project-card"

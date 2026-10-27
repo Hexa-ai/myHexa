@@ -454,7 +454,7 @@ onMounted(() => {
             v-for="d in filtered"
             :key="d.id"
             :class="[
-              'border-b border-border/50 last:border-0 hover:bg-secondary/30',
+              'neu-row border-b border-border/50 last:border-0 hover:bg-secondary/30',
               selected.has(d.id) ? 'bg-signal/5' : '',
             ]"
             data-testid="fleet-row"
