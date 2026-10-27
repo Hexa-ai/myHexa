@@ -643,7 +643,7 @@ function openDevice(id: string) {
               v-for="a in filteredHistory"
               :key="`${a.device_id}-${a.ts}-${a.variable_name}`"
               data-testid="alarm-occ"
-              class="border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition"
+              class="neu-row border-b border-border/50 last:border-0 hover:bg-secondary/40 cursor-pointer transition"
               @click="openDevice(a.device_id)"
             >
               <td class="px-4 py-3 font-mono text-xs text-muted-foreground tabular whitespace-nowrap">
@@ -681,7 +681,7 @@ function openDevice(id: string) {
         <button
           v-for="(a, i) in filteredHistory"
           :key="`mh-${a.device_id}-${a.ts}-${a.variable_name}`"
-          class="w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
+          class="neu-card w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
           :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
           @click="openDevice(a.device_id)"
         >
@@ -771,7 +771,7 @@ function openDevice(id: string) {
             <tr
               v-for="row in filteredInterventions"
               :key="row.id"
-              class="border-b border-border/50 last:border-0 hover:bg-secondary/40 transition cursor-pointer"
+              class="neu-row border-b border-border/50 last:border-0 hover:bg-secondary/40 transition cursor-pointer"
               @click="openDetail(row)"
             >
               <td class="px-4 py-3 font-mono text-xs text-muted-foreground tabular whitespace-nowrap">
@@ -850,7 +850,7 @@ function openDevice(id: string) {
         <button
           v-for="(row, i) in filteredInterventions"
           :key="`ms-${row.id}`"
-          class="w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
+          class="neu-card w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
           :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
           @click="openDetail(row)"
         >

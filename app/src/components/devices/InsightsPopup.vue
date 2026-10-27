@@ -295,7 +295,7 @@ const synthesisLead = computed(() => {
             <li
               v-for="ins in sortedInsights"
               :key="ins.id"
-              class="border border-border rounded-md bg-card/40 p-3 space-y-1.5"
+              class="neu-card border border-border rounded-md bg-card/40 p-3 space-y-1.5"
             >
               <div class="flex items-start justify-between gap-2">
                 <div class="flex items-center gap-2 flex-wrap">

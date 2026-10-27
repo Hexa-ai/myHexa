@@ -425,7 +425,7 @@ const depth = (v: HistVar) => (v.fine ? 'courbe 5 min' : v.days > 1 ? 'tendance'
         <article
           v-for="s in shown"
           :key="s.var"
-          class="border border-border rounded-md bg-card/40 px-3 pt-2 pb-1"
+          class="neu-card border border-border rounded-md bg-card/40 px-3 pt-2 pb-1"
           data-testid="hist-card"
         >
           <div class="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 mb-1">

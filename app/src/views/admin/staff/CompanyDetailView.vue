@@ -255,7 +255,7 @@ watch(id, load)
             </tr>
           </thead>
           <tbody>
-            <tr v-for="d in devices" :key="d.id" class="border-b border-border/50 last:border-0">
+            <tr v-for="d in devices" :key="d.id" class="neu-row border-b border-border/50 last:border-0">
               <td class="px-4 py-2 font-medium">{{ d.name }}</td>
               <td class="px-4 py-2 font-mono text-xs text-muted-foreground">{{ d.mac_eth0 ?? '—' }}</td>
               <td class="px-4 py-2 font-mono text-xs text-muted-foreground">{{ fmtDate(d.last_connection_at) }}</td>
@@ -281,7 +281,7 @@ watch(id, load)
         <div
           v-for="(d, i) in devices"
           :key="`mcd-${d.id}`"
-          class="border border-border rounded-md bg-card/40 px-4 py-3 fade-up"
+          class="neu-card border border-border rounded-md bg-card/40 px-4 py-3 fade-up"
           :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
         >
           <div class="flex items-center justify-between gap-2 mb-1.5">
@@ -319,7 +319,7 @@ watch(id, load)
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in recipients" :key="r.id" class="border-b border-border/50 last:border-0">
+            <tr v-for="r in recipients" :key="r.id" class="neu-row border-b border-border/50 last:border-0">
               <td class="px-4 py-2 font-medium">{{ r.name }}</td>
               <td class="px-4 py-2 text-muted-foreground">{{ r.contact_email ?? '—' }}</td>
               <td class="px-4 py-2 font-mono text-xs text-muted-foreground">{{ r.role }}</td>
@@ -336,7 +336,7 @@ watch(id, load)
         <div
           v-for="(r, i) in recipients"
           :key="`mcr-${r.id}`"
-          class="border border-border rounded-md bg-card/40 px-4 py-3 fade-up"
+          class="neu-card border border-border rounded-md bg-card/40 px-4 py-3 fade-up"
           :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
         >
           <div class="flex items-center justify-between gap-2 mb-1.5">
