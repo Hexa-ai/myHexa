@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useTheme } from '@/composables/useTheme'
 
 const { theme } = useTheme()
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
+const first = route.query.premier === '1'
 
 const password = ref('')
 const confirm = ref('')
@@ -36,7 +38,7 @@ async function handleSubmit() {
     return
   }
   const ok = await auth.updatePassword(password.value)
-  if (ok) router.replace('/admin')
+  if (ok) router.replace(auth.isHexaStaff ? '/admin/staff/companies' : '/admin/devices')
 }
 </script>
 
@@ -52,9 +54,15 @@ async function handleSubmit() {
           class="h-14 w-[200px] object-contain mb-7 select-none"
           draggable="false"
         />
-        <h1 class="text-2xl font-semibold tracking-tight">Nouveau mot de passe</h1>
+        <h1 class="text-2xl font-semibold tracking-tight" data-testid="password-title">
+          {{ first ? 'Choisissez votre mot de passe' : 'Nouveau mot de passe' }}
+        </h1>
         <p class="mt-3 text-sm text-muted-foreground text-center max-w-sm">
-          Choisissez un mot de passe d'au moins 8 caractères.
+          {{
+            first
+              ? 'Dernière étape : il vous servira à vous reconnecter (au moins 8 caractères).'
+              : 'Choisissez un mot de passe d\'au moins 8 caractères.'
+          }}
         </p>
       </div>
 

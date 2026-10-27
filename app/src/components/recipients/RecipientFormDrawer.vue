@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import DeviceMultiSelect from './DeviceMultiSelect.vue'
+import { supabase } from '@/lib/supabase'
 import type { Recipient, InvitePayload } from '@/composables/useRecipients'
 
 const props = defineProps<{
@@ -31,6 +32,17 @@ const restrictToDevices = ref<string[] | null>(null)
 const sharedDevicesSelection = ref<string[]>([])
 const submitting = ref(false)
 const error = ref<string | null>(null)
+const resendState = ref<'idle' | 'sending' | 'sent' | 'error'>('idle')
+
+/** Compte déjà créé : renvoie un mail pour (re)choisir son mot de passe — sert aussi de « renvoyer l'invitation ». */
+async function resendAccess() {
+  if (!props.recipient?.contact_email) return
+  resendState.value = 'sending'
+  const { error: err } = await supabase.auth.resetPasswordForEmail(props.recipient.contact_email, {
+    redirectTo: `${window.location.origin}/auth/reset-password`,
+  })
+  resendState.value = err ? 'error' : 'sent'
+}
 
 const sharedDevicesCount = computed(() => props.recipient?.shared_devices?.length ?? 0)
 
@@ -222,7 +234,26 @@ function submit() {
 
       <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
 
-      <footer class="flex justify-end gap-2 pt-2">
+      <footer class="flex flex-wrap justify-end gap-2 pt-2">
+        <button
+          v-if="isEdit && recipient?.contact_email && recipient?.auth_user_id"
+          type="button"
+          data-testid="resend-access"
+          :disabled="resendState === 'sending' || resendState === 'sent'"
+          class="mr-auto px-3 py-2 text-sm border border-border rounded-md disabled:opacity-60"
+          :title="'Envoie à ' + recipient.contact_email + ' un mail pour choisir son mot de passe'"
+          @click="resendAccess"
+        >
+          {{
+            resendState === 'sent'
+              ? 'Mail d\'accès envoyé'
+              : resendState === 'sending'
+                ? 'Envoi…'
+                : resendState === 'error'
+                  ? 'Échec, réessayer'
+                  : 'Renvoyer le mail d\'accès'
+          }}
+        </button>
         <button class="px-3 py-2 text-sm border border-border rounded-md" @click="close">Annuler</button>
         <button
           :disabled="submitting"
