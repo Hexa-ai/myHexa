@@ -6,7 +6,7 @@ import { computed, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { isIOS, isStandalone, swRegistration } from '@/lib/pwa'
 
-const VAPID = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined
+import { VAPID_PUBLIC_KEY as VAPID } from '@/lib/vapid'
 const subscribed = ref(false)
 const busy = ref(false)
 const lastError = ref('')
@@ -64,17 +64,15 @@ export function usePushAlarms() {
           applicationServerKey: keyBytes(VAPID!),
         }))
       const j = sub.toJSON()
-      const { error } = await supabase
-        .from('push_subscriptions')
-        .upsert(
-          {
-            endpoint: j.endpoint!,
-            p256dh: j.keys!.p256dh,
-            auth: j.keys!.auth,
-            user_agent: navigator.userAgent.slice(0, 200),
-          },
-          { onConflict: 'endpoint' },
-        )
+      const { error } = await supabase.from('push_subscriptions').upsert(
+        {
+          endpoint: j.endpoint!,
+          p256dh: j.keys!.p256dh,
+          auth: j.keys!.auth,
+          user_agent: navigator.userAgent.slice(0, 200),
+        },
+        { onConflict: 'endpoint' },
+      )
       if (error) throw error
       subscribed.value = true
     } catch (e) {

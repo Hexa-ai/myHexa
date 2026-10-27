@@ -13,8 +13,8 @@ function detectInitial(): Theme {
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
 }
 
-// style par défaut : VITE_UI_STYLE (réglé sur le test seulement) ; sinon classique
-const DEFAULT_STYLE: UiStyle = import.meta.env.VITE_UI_STYLE === 'appareil' ? 'appareil' : 'classique'
+// style par défaut : « appareil » pour tous (décision de Julien, 27/10/2026) ; VITE_UI_STYLE=classique pour revenir à l'ancien
+const DEFAULT_STYLE: UiStyle = import.meta.env.VITE_UI_STYLE === 'classique' ? 'classique' : 'appareil'
 function detectStyle(): UiStyle {
   if (typeof window === 'undefined') return DEFAULT_STYLE
   const s = window.localStorage.getItem(STYLE_KEY)
