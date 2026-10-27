@@ -77,6 +77,19 @@ const breadcrumb = computed(() => {
   return map[String(route.name ?? '')] ?? String(route.name ?? '')
 })
 
+/** 5 touchers sur le titre : active / coupe le diagnostic de hauteur (iPhone) puis recharge */
+let diagTaps = 0
+let diagTimer: ReturnType<typeof setTimeout> | undefined
+function diagTap() {
+  diagTaps++
+  clearTimeout(diagTimer)
+  diagTimer = setTimeout(() => (diagTaps = 0), 1500)
+  if (diagTaps < 5) return
+  if (localStorage.getItem('hexa.diag')) localStorage.removeItem('hexa.diag')
+  else localStorage.setItem('hexa.diag', '1')
+  location.reload()
+}
+
 const isAdmin = computed(() => auth.recipient?.role === 'admin')
 
 // Couleur du chip "à traiter" en fonction de la gravité max (alarmes + signalements).
@@ -704,7 +717,7 @@ function goFleet() {
           <span class="text-muted-foreground/50 hidden sm:inline">/</span>
           <span class="hidden sm:inline">admin</span>
           <span class="text-muted-foreground/50 hidden sm:inline">/</span>
-          <span class="text-foreground truncate">{{ breadcrumb }}</span>
+          <span class="text-foreground truncate" @click="diagTap">{{ breadcrumb }}</span>
         </div>
         <div class="flex items-center gap-2 sm:gap-5 text-[11px] font-mono text-muted-foreground">
           <button

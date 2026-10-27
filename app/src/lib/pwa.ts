@@ -19,20 +19,49 @@ export const isStandalone =
     (navigator as unknown as { standalone?: boolean }).standalone === true)
 
 /** Hauteur réelle de l'écran en mode installé (iOS se trompe sur 100dvh au premier affichage). */
+/** ?diag=1 : affiche les hauteurs mesurées (diagnostic iPhone), remesurées au toucher */
+function showDiag() {
+  const box = document.createElement('pre')
+  box.style.cssText =
+    'position:fixed;left:8px;right:8px;top:40%;z-index:9999;background:#000c;color:#0f0;font:11px monospace;padding:8px;border-radius:6px;white-space:pre-wrap'
+  document.body.appendChild(box)
+  const lines: string[] = []
+  const t0 = performance.now()
+  const log = (why: string) => {
+    const cs = getComputedStyle(document.documentElement)
+    lines.push(
+      `${why} t=${Math.round(performance.now() - t0)} inner=${innerHeight} vv=${Math.round(visualViewport?.height ?? 0)} client=${document.documentElement.clientHeight} screen=${screen.height} app-h=${cs.getPropertyValue('--app-h')} sat=${cs.getPropertyValue('--sat')}`,
+    )
+    box.textContent = lines.slice(-8).join('\n')
+  }
+  document.documentElement.style.setProperty('--sat', 'env(safe-area-inset-top)')
+  for (const t of [0, 500, 1500, 3000]) setTimeout(() => log('auto'), t)
+  addEventListener('touchend', () => setTimeout(() => log('toucher'), 300))
+}
+
 function fixAppHeight() {
   const set = () => {
-    // iPhone installé, barre d'état translucide : innerHeight oublie la barre d'état (≈ 59 px) tant
-    // qu'on n'a pas touché l'écran -> bande vide en bas. Sans barre de navigateur, la hauteur de
-    // l'écran est la bonne : on prend la plus grande des deux.
-    const portrait = window.matchMedia('(orientation: portrait)').matches
-    const screenH = isIOS ? (portrait ? window.screen.height : window.screen.width) : 0
-    const h = Math.max(window.innerHeight, document.documentElement.clientHeight, screenH)
+    // Hauteur visible réelle. NE PAS utiliser screen.height : au lancement iOS ne peint que la zone
+    // annoncée par innerHeight, le pied de page passait hors écran.
+    const vv = window.visualViewport?.height ?? 0
+    const h = Math.round(Math.max(window.innerHeight, vv, document.documentElement.clientHeight))
     document.documentElement.style.setProperty('--app-h', `${h}px`)
     if (window.scrollY !== 0) window.scrollTo(0, 0)
   }
   set()
   for (const t of [50, 250, 600, 1200]) setTimeout(set, t)
   window.addEventListener('resize', set)
+  window.visualViewport?.addEventListener('resize', set)
+  // iOS ne recalcule la zone visible qu'au premier toucher : on force un nouveau calcul de mise en page
+  setTimeout(() => {
+    const el = document.documentElement
+    el.style.display = 'none'
+    void el.offsetHeight
+    el.style.display = ''
+    set()
+  }, 400)
+  if (new URLSearchParams(location.search).has('diag') || localStorage.getItem('hexa.diag'))
+    showDiag()
   window.addEventListener('orientationchange', () => setTimeout(set, 300))
   window.addEventListener('pageshow', set)
   document.addEventListener('visibilitychange', () => {
