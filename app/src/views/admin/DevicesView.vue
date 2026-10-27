@@ -18,7 +18,6 @@ import { useProjects } from '@/composables/useProjects'
 import QRCodeBlock from '@/components/QRCodeBlock.vue'
 import { supabase } from '@/lib/supabase'
 
-
 const router = useRouter()
 const auth = useAuthStore()
 const { devices, loading, error, load } = useDevices()
@@ -185,10 +184,10 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
         <div
           class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-3 flex items-center gap-2"
         >
-          <span class="text-signal">⬢</span> Fleet · read-only
+          <span class="text-signal">⬢</span> Parc · temps réel
         </div>
         <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">
-          Devices<span class="text-signal">.</span>
+          Mes box<span class="text-signal">.</span>
         </h1>
         <p class="mt-3 text-sm text-muted-foreground max-w-md">
           Inventaire en direct des capteurs déployés. Statut basé sur la dernière télémétrie (seuil
@@ -253,7 +252,7 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
         <input
           v-model="query"
           type="search"
-          placeholder="filter devices…"
+          placeholder="filtrer les box…"
           class="w-full pl-8 pr-3 py-2 bg-card border border-border rounded-sm text-sm font-mono placeholder:text-muted-foreground/60 focus:outline-none focus:border-signal/60 focus:ring-1 focus:ring-signal/40 transition"
         />
       </div>
@@ -330,12 +329,12 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
             <th
               class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[140px]"
             >
-              Status
+              État
             </th>
             <th
               class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3"
             >
-              Name
+              Nom
             </th>
             <th
               class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]"
@@ -355,7 +354,7 @@ const IFC_SHORT: Record<InterfaceKey, string> = {
             <th
               class="text-right font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[180px]"
             >
-              Last seen
+              Dernier contact
             </th>
           </tr>
         </thead>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+/** date de construction (injectée par vite), au lieu d'une date figée */
+const buildDate = __BUILD_DATE__
 import PwaInstallHint from '@/components/PwaInstallHint.vue'
 import PwaInstallButton from '@/components/PwaInstallButton.vue'
 import { useScrollFocus } from '@/composables/useScrollFocus'
@@ -223,7 +225,7 @@ function goFleet() {
       <!-- Nav -->
       <nav class="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-0.5">
         <button
-          :title="collapsed ? 'Devices' : undefined"
+          :title="collapsed ? 'Mes box' : undefined"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isDevices
@@ -248,7 +250,7 @@ function goFleet() {
             <path d="M12 2 3 7v10l9 5 9-5V7l-9-5Z" />
             <path d="M3 7l9 5 9-5M12 12v10" stroke-opacity="0.5" />
           </svg>
-          <span class="tracking-tight">Devices</span>
+          <span class="tracking-tight">Mes box</span>
           <span
             v-if="isDevices"
             class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal"
@@ -649,7 +651,7 @@ function goFleet() {
             class="font-mono text-[11px] uppercase tracking-wider text-muted-foreground hover:text-signal transition"
             @click="handleLogout"
           >
-            sign out ↗
+            déconnexion ↗
           </button>
         </div>
       </div>
@@ -748,7 +750,9 @@ function goFleet() {
           <button
             v-if="styleSwitchAvailable"
             data-testid="style-switch"
-            :title="uiStyle === 'appareil' ? 'Revenir au style classique' : 'Essayer le style appareil'"
+            :title="
+              uiStyle === 'appareil' ? 'Revenir au style classique' : 'Essayer le style appareil'
+            "
             class="ml-1 h-7 px-2.5 inline-flex items-center rounded-md border border-border hover:text-foreground transition font-mono text-[10px]"
             @click="toggleStyle"
           >
@@ -803,7 +807,7 @@ function goFleet() {
       >
         <span>Hexa.ai · myHexa edge ops</span>
         <span class="flex items-center gap-3">
-          <span>build 2026.05.15</span>
+          <span>version {{ buildDate }}</span>
           <span class="text-signal">●</span>
         </span>
       </footer>

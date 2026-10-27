@@ -2,12 +2,14 @@
 <html lang="fr" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/favicon.ico?v=3" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/pwa/favicon-32.png?v=3" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/pwa/favicon-16.png?v=3" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>myHexa</title>
     <!-- application installable (PWA) : manifeste, icônes, plein écran sur iPhone -->
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="/pwa/icon-180.png?v=2" />
+    <link rel="apple-touch-icon" href="/pwa/icon-180.png?v=3" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="myHexa" />
@@ -17,39 +19,60 @@
     <meta name="format-detection" content="telephone=no" />
     <!-- PC / Android : l'invitation à installer arrive parfois avant le démarrage de Vue, on la garde -->
     <script>
-      window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__myhexaInstall = e })
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault()
+        window.__myhexaInstall = e
+      })
     </script>
     <!-- diagnostic écran blanc : si l'application n'a pas démarré au bout de 10 s, affiche l'erreur et un bouton Recharger -->
     <script>
       ;(function () {
         var errs = []
-        window.addEventListener('error', function (e) { errs.push(String(e.message || (e.target && (e.target.src || e.target.href)) || e)) }, true)
-        window.addEventListener('unhandledrejection', function (e) { errs.push(String((e.reason && e.reason.message) || e.reason)) })
+        window.addEventListener(
+          'error',
+          function (e) {
+            errs.push(String(e.message || (e.target && (e.target.src || e.target.href)) || e))
+          },
+          true,
+        )
+        window.addEventListener('unhandledrejection', function (e) {
+          errs.push(String((e.reason && e.reason.message) || e.reason))
+        })
         setTimeout(function () {
           var el = document.getElementById('app')
           if (!el) return
           if (window.__myhexaMounted && el.innerText.trim() !== '') return
           el.innerHTML =
             '<div style="font:15px/1.5 system-ui,sans-serif;padding:calc(40px + env(safe-area-inset-top)) 24px;color:#141414">' +
-            '<b>myHexa ne démarre pas.</b><br><span style="color:#666">' + (errs.map(function (s) { return s.replace(/[<>&]/g, function (c) { return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c] }) }).join('<br>') || 'aucune erreur remontée (chargement trop long)') +
+            '<b>myHexa ne démarre pas.</b><br><span style="color:#666">' +
+            (errs
+              .map(function (s) {
+                return s.replace(/[<>&]/g, function (c) {
+                  return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]
+                })
+              })
+              .join('<br>') || 'aucune erreur remontée (chargement trop long)') +
             '</span><br><br><button onclick="location.reload()" style="padding:10px 18px;border-radius:999px;border:0;background:#00d4aa;color:#0a0f14;font-weight:600">Recharger</button></div>'
         }, 10000)
       })()
     </script>
     <script>
       // Apply theme before paint to avoid FOUC
-      (function () {
+      ;(function () {
         try {
-          var stored = localStorage.getItem('myhexa.theme');
-          var theme = stored === 'light' || stored === 'dark'
-            ? stored
-            : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-          var root = document.documentElement;
-          root.classList.remove('dark', 'light');
-          root.classList.add(theme);
-          root.style.colorScheme = theme;
+          var stored = localStorage.getItem('myhexa.theme')
+          var theme =
+            stored === 'light' || stored === 'dark'
+              ? stored
+              : window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'dark'
+          var root = document.documentElement
+          root.classList.remove('dark', 'light')
+          root.classList.add(theme)
+          root.style.colorScheme = theme
         } catch (e) {}
-      })();
+      })()
     </script>
   </head>
   <body>
