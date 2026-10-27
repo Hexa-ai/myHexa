@@ -39,6 +39,21 @@ main {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* application installée : le document est figé, seul le contenu (<main>) défile (pages de connexion exclues : elles doivent pouvoir défiler avec le clavier) */
+/* (classe posée par lib/pwa.ts : couvre aussi les iOS anciens sans display-mode) */
+@media all {
+  html.pwa-standalone:has(aside[data-testid='sidebar']),
+  html.pwa-standalone:has(aside[data-testid='sidebar']) body {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    height: 100%;
+  }
+  html.pwa-standalone .h-screen:has(> aside[data-testid='sidebar']) {
+    height: var(--app-h, 100dvh);
+  }
+}
+
 /* bandeau d'aide à l'installation (iPhone) */
 .pwa-hint {
   position: fixed;

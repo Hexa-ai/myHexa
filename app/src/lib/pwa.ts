@@ -18,6 +18,26 @@ export const isStandalone =
   (window.matchMedia('(display-mode: standalone)').matches ||
     (navigator as unknown as { standalone?: boolean }).standalone === true)
 
+/** Hauteur réelle de l'écran en mode installé (iOS se trompe sur 100dvh au premier affichage). */
+function fixAppHeight() {
+  const set = () => {
+    document.documentElement.style.setProperty('--app-h', `${window.innerHeight}px`)
+    if (window.scrollY !== 0) window.scrollTo(0, 0)
+  }
+  set()
+  for (const t of [50, 250, 600, 1200]) setTimeout(set, t)
+  window.addEventListener('resize', set)
+  window.addEventListener('orientationchange', () => setTimeout(set, 300))
+  window.addEventListener('pageshow', set)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') setTimeout(set, 50)
+  })
+}
+if (isStandalone) {
+  document.documentElement.classList.add('pwa-standalone')
+  fixAppHeight()
+}
+
 export async function registerServiceWorker() {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !window.isSecureContext)
     return

@@ -377,7 +377,7 @@ function openDevice(id: string) {
         v-model="selectedDevice"
         class="bg-card border border-border rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-signal/60 transition"
       >
-        <option value="all">Tous les devices</option>
+        <option value="all">Toutes les box</option>
         <option v-for="d in deviceOptions" :key="d.id" :value="d.id">{{ d.name }}</option>
       </select>
 
