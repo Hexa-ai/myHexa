@@ -96,6 +96,39 @@ export type Database = {
           },
         ]
       }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          auth_user_id: string
+          created_at: string
+          endpoint: string
+          id: string
+          last_ok_at: string | null
+          p256dh: string
+          user_agent: string | null
+        }
+        Insert: {
+          auth: string
+          auth_user_id?: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          last_ok_at?: string | null
+          p256dh: string
+          user_agent?: string | null
+        }
+        Update: {
+          auth?: string
+          auth_user_id?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          last_ok_at?: string | null
+          p256dh?: string
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
       alarm_subscriptions: {
         Row: {
           box_recipient_id: string

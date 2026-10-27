@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PwaInstallHint from '@/components/PwaInstallHint.vue'
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -792,6 +793,7 @@ function goFleet() {
         </span>
       </footer>
     </div>
+    <PwaInstallHint />
   </div>
 </template>
 
