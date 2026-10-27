@@ -22,7 +22,9 @@ const auth = useAuthStore()
 const tokenHash = computed(() => String(route.query.token_hash ?? ''))
 const type = computed<LinkType | null>(() => {
   const t = String(route.query.type ?? '')
-  return (['invite', 'recovery', 'magiclink', 'email'] as const).includes(t as LinkType) ? (t as LinkType) : null
+  return (['invite', 'recovery', 'magiclink', 'email'] as const).includes(t as LinkType)
+    ? (t as LinkType)
+    : null
 })
 const texts = computed(() => {
   switch (type.value) {
@@ -39,7 +41,11 @@ const texts = computed(() => {
         button: 'Choisir mon mot de passe',
       }
     default:
-      return { title: 'Connexion à myHexa', lead: 'Continuez pour ouvrir votre session.', button: 'Me connecter' }
+      return {
+        title: 'Connexion à myHexa',
+        lead: 'Continuez pour ouvrir votre session.',
+        button: 'Me connecter',
+      }
   }
 })
 const busy = ref(false)
@@ -49,7 +55,10 @@ async function accept() {
   if (!tokenHash.value || !type.value) return
   busy.value = true
   error.value = null
-  const { error: err } = await supabase.auth.verifyOtp({ token_hash: tokenHash.value, type: type.value })
+  const { error: err } = await supabase.auth.verifyOtp({
+    token_hash: tokenHash.value,
+    type: type.value,
+  })
   if (err) {
     busy.value = false
     error.value =
@@ -58,7 +67,10 @@ async function accept() {
   }
   await auth.ensureRecipient()
   if (type.value === 'invite' || type.value === 'recovery') {
-    router.replace({ name: 'reset-password', query: type.value === 'invite' ? { premier: '1' } : {} })
+    router.replace({
+      name: 'reset-password',
+      query: type.value === 'invite' ? { premier: '1' } : {},
+    })
   } else {
     router.replace(auth.isHexaStaff ? '/admin/staff/companies' : '/admin/devices')
   }
@@ -76,11 +88,15 @@ async function accept() {
           class="h-14 w-[200px] object-contain mb-7 select-none"
           draggable="false"
         />
-        <h1 class="text-2xl font-semibold tracking-tight text-center" data-testid="accept-title">{{ texts.title }}</h1>
+        <h1 class="text-2xl font-semibold tracking-tight text-center" data-testid="accept-title">
+          {{ texts.title }}
+        </h1>
         <p class="mt-3 text-sm text-muted-foreground text-center max-w-sm">{{ texts.lead }}</p>
       </div>
 
-      <div class="border border-border rounded-lg bg-card/70 backdrop-blur-sm p-7 space-y-4 text-center">
+      <div
+        class="border border-border rounded-lg bg-card/70 backdrop-blur-sm p-7 space-y-4 text-center"
+      >
         <template v-if="tokenHash && type">
           <button
             type="button"
@@ -89,11 +105,17 @@ async function accept() {
             class="w-full bg-signal text-primary-foreground font-semibold py-3 rounded-md disabled:opacity-60 hover:brightness-110"
             @click="accept"
           >
-            <span class="font-mono text-[11px] uppercase tracking-[0.22em]">{{ busy ? 'Vérification…' : texts.button }}</span>
+            <span class="font-mono text-[11px] uppercase tracking-[0.22em]">{{
+              busy ? 'Vérification…' : texts.button
+            }}</span>
           </button>
-          <p v-if="error" class="font-mono text-xs text-offline" data-testid="accept-error">{{ error }}</p>
+          <p v-if="error" class="font-mono text-xs text-offline" data-testid="accept-error">
+            {{ error }}
+          </p>
         </template>
-        <p v-else class="font-mono text-xs text-offline">Lien incomplet : ouvrez-le directement depuis le mail.</p>
+        <p v-else class="font-mono text-xs text-offline">
+          Lien incomplet : ouvrez-le directement depuis le mail.
+        </p>
         <div class="flex justify-center gap-5 pt-1">
           <router-link
             to="/auth/forgot-password"

@@ -61,7 +61,7 @@ async function handleSubmit() {
           {{
             first
               ? 'Dernière étape : il vous servira à vous reconnecter (au moins 8 caractères).'
-              : 'Choisissez un mot de passe d\'au moins 8 caractères.'
+              : "Choisissez un mot de passe d'au moins 8 caractères."
           }}
         </p>
       </div>
@@ -72,7 +72,9 @@ async function handleSubmit() {
         @submit.prevent="handleSubmit"
       >
         <div class="space-y-1.5">
-          <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Nouveau mot de passe</label>
+          <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+            >Nouveau mot de passe</label
+          >
           <input
             v-model="password"
             type="password"
@@ -85,7 +87,9 @@ async function handleSubmit() {
         </div>
 
         <div class="space-y-1.5">
-          <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Confirmation</label>
+          <label class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+            >Confirmation</label
+          >
           <input
             v-model="confirm"
             type="password"
