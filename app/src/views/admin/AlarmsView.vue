@@ -7,6 +7,7 @@ import { useDevices } from '@/composables/useDevices'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { injectAlarmCounts } from '@/composables/useAlarmCounts'
 import { fetchAlarms, fmtDur as fmtDuration } from '@/composables/useAlarmHistory'
+import PushAlarmsToggle from '@/components/PushAlarmsToggle.vue'
 
 const alarmCounts = injectAlarmCounts()
 const auth = useAuthStore()
@@ -367,6 +368,8 @@ function openDevice(id: string) {
         </div>
       </div>
     </header>
+
+    <PushAlarmsToggle class="mb-6 fade-up" />
 
     <!-- Filters -->
     <div class="flex flex-col sm:flex-row gap-3 mb-5 fade-up" style="animation-delay: 40ms">
