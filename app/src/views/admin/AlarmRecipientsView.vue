@@ -365,7 +365,7 @@ async function sendRow(d: Device) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="d in visibleDevices" :key="d.id" class="border-t border-border/60">
+          <tr v-for="d in visibleDevices" :key="d.id" class="neu-row border-t border-border/60">
             <td
               class="px-2 sm:px-3 py-2 sticky left-0 z-10 bg-card text-left w-28 min-w-28 max-w-28 sm:w-auto sm:min-w-[220px] sm:max-w-none shadow-[1px_0_0_var(--border)]"
             >

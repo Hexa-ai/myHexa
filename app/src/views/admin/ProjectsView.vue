@@ -201,7 +201,7 @@ const toAdd = ref<string[]>([])
         </div>
         <table class="w-full text-sm">
           <tbody>
-            <tr v-for="d in p.ds" :key="d.id" class="border-b border-border/50 last:border-0">
+            <tr v-for="d in p.ds" :key="d.id" class="neu-row border-b border-border/50 last:border-0">
               <td class="py-2 pr-3 w-24">
                 <span
                   :class="[

@@ -432,7 +432,7 @@ async function copyTailscaleIp(ip: string) {
               <tr
                 v-for="(a, i) in activeAlarms"
                 :key="i"
-                class="border-b border-border/50 last:border-0"
+                class="neu-row border-b border-border/50 last:border-0"
               >
                 <td class="px-4 py-3 font-medium">{{ a.name }}</td>
                 <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">
@@ -457,7 +457,7 @@ async function copyTailscaleIp(ip: string) {
               <tr
                 v-for="(m, i) in measures"
                 :key="i"
-                class="border-b border-border/50 last:border-0"
+                class="neu-row border-b border-border/50 last:border-0"
               >
                 <td class="px-4 py-3 font-medium">{{ m.name }}</td>
                 <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">
@@ -482,7 +482,7 @@ async function copyTailscaleIp(ip: string) {
               <tr
                 v-for="(c, i) in counters"
                 :key="i"
-                class="border-b border-border/50 last:border-0"
+                class="neu-row border-b border-border/50 last:border-0"
               >
                 <td class="px-4 py-3 font-medium">{{ c.name }}</td>
                 <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">
@@ -504,7 +504,7 @@ async function copyTailscaleIp(ip: string) {
         <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
           <table class="w-full text-sm">
             <tbody>
-              <tr v-for="(s, i) in states" :key="i" class="border-b border-border/50 last:border-0">
+              <tr v-for="(s, i) in states" :key="i" class="neu-row border-b border-border/50 last:border-0">
                 <td class="px-4 py-3 font-medium">{{ s.name }}</td>
                 <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">
                   {{ s.description }}
@@ -554,7 +554,7 @@ async function copyTailscaleIp(ip: string) {
           <div
             v-for="{ key, label, ifc } in networkInterfaces"
             :key="key"
-            class="border border-border rounded-md bg-card/40 p-4 flex flex-col"
+            class="neu-card border border-border rounded-md bg-card/40 p-4 flex flex-col"
           >
             <div class="flex items-center gap-2 flex-wrap">
               <span
@@ -678,7 +678,7 @@ async function copyTailscaleIp(ip: string) {
               <tr
                 v-for="(svc, name) in payload.services"
                 :key="name"
-                class="border-b border-border/50 last:border-0"
+                class="neu-row border-b border-border/50 last:border-0"
               >
                 <td class="px-4 py-2.5 font-mono text-xs">{{ name }}</td>
                 <td class="px-4 py-2.5 text-right">
