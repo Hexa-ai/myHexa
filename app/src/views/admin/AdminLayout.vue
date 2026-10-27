@@ -58,21 +58,21 @@ const role = computed(() => auth.recipient?.role ?? 'member')
 
 const breadcrumb = computed(() => {
   const map: Record<string, string> = {
-    'admin-devices': 'devices',
-    'admin-device-detail': 'devices / detail',
+    'admin-devices': 'mes box',
+    'admin-device-detail': 'mes box / fiche',
     'admin-dashboards': 'tableaux de bord',
-    'admin-map': 'map',
+    'admin-map': 'carte',
     'admin-projects': 'projets',
     'admin-dashboard': 'tableau de bord',
-    'admin-alarms': 'alarms',
+    'admin-alarms': 'alarmes',
     'admin-interventions': 'interventions',
     'admin-recipients': 'destinataires',
     'admin-alarm-recipients': "destinataires d'alarme",
-    'staff-companies': 'staff / companies',
-    'staff-company-detail': 'staff / company',
+    'staff-companies': 'staff / entreprises',
+    'staff-company-detail': 'staff / entreprise',
     'staff-devices': 'parc des box',
     'admin-updates': 'mises à jour',
-    'staff-device-new': 'staff / new device',
+    'staff-device-new': 'staff / nouvelle box',
   }
   return map[String(route.name ?? '')] ?? String(route.name ?? '')
 })

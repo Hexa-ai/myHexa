@@ -21,7 +21,13 @@ export const isStandalone =
 /** Hauteur réelle de l'écran en mode installé (iOS se trompe sur 100dvh au premier affichage). */
 function fixAppHeight() {
   const set = () => {
-    document.documentElement.style.setProperty('--app-h', `${window.innerHeight}px`)
+    // iPhone installé, barre d'état translucide : innerHeight oublie la barre d'état (≈ 59 px) tant
+    // qu'on n'a pas touché l'écran -> bande vide en bas. Sans barre de navigateur, la hauteur de
+    // l'écran est la bonne : on prend la plus grande des deux.
+    const portrait = window.matchMedia('(orientation: portrait)').matches
+    const screenH = isIOS ? (portrait ? window.screen.height : window.screen.width) : 0
+    const h = Math.max(window.innerHeight, document.documentElement.clientHeight, screenH)
+    document.documentElement.style.setProperty('--app-h', `${h}px`)
     if (window.scrollY !== 0) window.scrollTo(0, 0)
   }
   set()
