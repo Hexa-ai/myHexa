@@ -7,6 +7,36 @@
   NODE_VERSION = "20"
   NPM_FLAGS = "--version"
 
+# ── API des box sous notre domaine : https://api.hexa-ai.fr (alias du site Netlify, CNAME vers myhexa.netlify.app)
+# Netlify relaie vers l'Edge Function device-ingress (jeton Bearer et corps transmis tels quels, réponse
+# renvoyée à la box). Adresse à saisir dans la box : https://api.hexa-ai.fr
+# Les règles doivent rester AVANT la règle « /* » de l'application.
+[[redirects]]
+  from = "https://api.hexa-ai.fr/ingress/*"
+  to = "https://mlbezfyjbnjyogogqmem.supabase.co/functions/v1/device-ingress/ingress/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "https://api.hexa-ai.fr/provision/*"
+  to = "https://mlbezfyjbnjyogogqmem.supabase.co/functions/v1/device-ingress/provision/:splat"
+  status = 200
+  force = true
+
+# tout le reste sur api.hexa-ai.fr : pas l'application
+[[redirects]]
+  from = "https://api.hexa-ai.fr/*"
+  to = "/404.html"
+  status = 404
+  force = true
+
+# même relais sous my.hexa-ai.fr/api/device-ingress : essais avant la mise en place du DNS
+[[redirects]]
+  from = "/api/device-ingress/*"
+  to = "https://mlbezfyjbnjyogogqmem.supabase.co/functions/v1/device-ingress/:splat"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
