@@ -72,6 +72,7 @@ const breadcrumb = computed(() => {
     'staff-companies': 'staff / entreprises',
     'staff-company-detail': 'staff / entreprise',
     'staff-devices': 'parc des box',
+    'staff-usage': 'staff / consommation',
     'admin-updates': 'mises à jour',
     'staff-device-new': 'staff / nouvelle box',
   }
@@ -181,9 +182,16 @@ const isDashboards = computed(
 const isAlarms = computed(() => route.name === 'admin-alarms')
 const isUpdates = computed(() => route.name === 'admin-updates')
 const isFleet = computed(() => String(route.name ?? '').startsWith('staff-device'))
-const isStaff = computed(() => String(route.name ?? '').startsWith('staff-') && !isFleet.value)
+const isUsage = computed(() => route.name === 'staff-usage')
+const isStaff = computed(
+  () => String(route.name ?? '').startsWith('staff-') && !isFleet.value && !isUsage.value,
+)
 function goFleet() {
   router.push({ name: 'staff-devices' })
+  closeSidebar()
+}
+function goUsage() {
+  router.push({ name: 'staff-usage' })
   closeSidebar()
 }
 </script>
@@ -629,6 +637,37 @@ function goFleet() {
             <path d="M12 11v10" />
           </svg>
           <span class="tracking-tight">Parc des box</span>
+        </button>
+        <button
+          :title="collapsed ? 'Consommation' : undefined"
+          v-if="auth.isHexaStaff"
+          data-testid="nav-usage"
+          :class="[
+            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
+            isUsage
+              ? 'text-foreground bg-secondary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+          ]"
+          @click="goUsage"
+        >
+          <span
+            :class="[
+              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
+              isUsage ? 'bg-signal' : 'bg-transparent',
+            ]"
+          />
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+          >
+            <ellipse cx="12" cy="5.5" rx="7.5" ry="2.5" />
+            <path d="M4.5 5.5v6.5c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5V5.5" />
+            <path d="M4.5 12v6.5c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5V12" />
+          </svg>
+          <span class="tracking-tight">Consommation</span>
         </button>
       </nav>
 
