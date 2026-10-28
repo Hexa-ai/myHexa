@@ -45,6 +45,16 @@ main:has(+ footer) {
 main + footer {
   padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
 }
+/* iPhone, vue amputée de la barre d'état (lib/appHeight.ts) : iOS ne peint pas le bas de l'écran ;
+   le pied de page reste au bas de la zone peinte, sans marge, et la bande dessous prend sa couleur */
+html.ios-short-viewport main + footer {
+  padding-bottom: 0.5rem;
+  background-color: var(--card);
+}
+html.ios-short-viewport,
+html.ios-short-viewport body {
+  background: var(--card);
+}
 
 /* application installée : le document est figé, seul le contenu (<main>) défile (pages de connexion exclues : elles doivent pouvoir défiler avec le clavier) */
 /* (classe posée par lib/pwa.ts : couvre aussi les iOS anciens sans display-mode) */
