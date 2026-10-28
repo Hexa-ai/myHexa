@@ -23,11 +23,12 @@
   status = 200
   force = true
 
-# tout le reste sur api.hexa-ai.fr : pas l'application
+# tout le reste sur api.hexa-ai.fr (dont l'ancien chemin /<hostname>/status des box à jeton manuel) :
+# relayé aussi, device-ingress répond 404 / 405 lui-même. Jamais l'application sur ce domaine.
 [[redirects]]
   from = "https://api.hexa-ai.fr/*"
-  to = "/404.html"
-  status = 404
+  to = "https://mlbezfyjbnjyogogqmem.supabase.co/functions/v1/device-ingress/:splat"
+  status = 200
   force = true
 
 # même relais sous my.hexa-ai.fr/api/device-ingress : essais avant la mise en place du DNS
