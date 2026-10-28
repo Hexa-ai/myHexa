@@ -49,6 +49,8 @@ const fleetView = computed(() => auth.isHexaStaff && !scopeCompany.value)
 const { companies, fetch: fetchCompanies } = useStaffCompanies()
 const boxes = ref<Box[]>([])
 const cmds = ref<Cmd[]>([])
+/** version annoncée par la box dans son dernier état (connue même sans pilotage à distance) */
+const reported = ref(new Map<string, string>())
 const loading = ref(false)
 const error = ref<string | null>(null)
 const flash = ref<string | null>(null)
@@ -62,7 +64,7 @@ async function load() {
   loading.value = true
   error.value = null
   const since = new Date(Date.now() - 7 * 86400e3).toISOString()
-  const [b, c] = await Promise.all([
+  const [b, c, r] = await Promise.all([
     supabase
       .from('devices')
       .select(
@@ -75,6 +77,10 @@ async function load() {
       .in('type', ['run_update', 'reboot'])
       .gte('issued_at', since)
       .order('issued_at', { ascending: false }),
+    supabase
+      .from('reports')
+      .select('device_id, version:payload->device->>version')
+      .eq('type', 'status'),
   ])
   loading.value = false
   if (b.error || c.error) {
@@ -83,6 +89,11 @@ async function load() {
   }
   boxes.value = (b.data ?? []) as unknown as Box[]
   cmds.value = (c.data ?? []) as unknown as Cmd[]
+  reported.value = new Map(
+    ((r.data ?? []) as unknown as { device_id: string; version: string | null }[])
+      .filter((x) => x.version)
+      .map((x) => [x.device_id, String(x.version)]),
+  )
   selected.value = selected.value.filter((id) => state(boxById.value.get(id)!)?.key === 'available')
 }
 const boxById = computed(() => new Map(boxes.value.map((b) => [b.id, b])))
@@ -105,15 +116,37 @@ const ago = (iso: string | null) => {
       : `il y a ${Math.round(m / 1440)} j`
 }
 
+/** version en service : bloc de pilotage à distance, sinon dernier état envoyé par la box */
+const versionOf = (b: Box) => b.running_version ?? reported.value.get(b.id) ?? null
+/** compare deux versions « 1.3.11 », « 1.3.10-i1 » (le suffixe est ignoré) */
+function atLeast(v: string, min: string) {
+  const n = (x: string) =>
+    x
+      .split('-')[0]!
+      .split('.')
+      .map((k) => parseInt(k, 10) || 0)
+  const a = n(v)
+  const m = n(min)
+  for (let i = 0; i < Math.max(a.length, m.length); i++) {
+    if ((a[i] ?? 0) !== (m[i] ?? 0)) return (a[i] ?? 0) > (m[i] ?? 0)
+  }
+  return true
+}
+
 function state(b: Box): UState {
   const c = lastCmd(b.id)
-  if (!b.remote_seen_at)
+  if (!b.remote_seen_at) {
+    const v = versionOf(b)
     return {
       key: 'none',
       label: 'mise à jour sur site',
-      detail: 'firmware antérieur à 1.3.7 ou pilotage à distance désactivé sur la box',
+      detail:
+        v && !atLeast(v, '1.3.7')
+          ? `firmware v${v} : le pilotage à distance demande la 1.3.7 ou plus`
+          : "pilotage à distance non reçu : option désactivée sur la box, ou box encore branchée sur l'ancienne adresse d'envoi",
       tone: 'muted',
     }
+  }
   const L =
     c?.type === 'reboot'
       ? { q: 'Redémarrage programmé', s: 'Redémarrage envoyé', p: 'Redémarrage en cours' }
@@ -329,7 +362,7 @@ onBeforeUnmount(() => clearInterval(timer))
         <div
           class="font-mono text-xs w-full sm:w-52 shrink-0 order-last sm:order-none pl-7 sm:pl-0"
         >
-          {{ b.running_version ? `v${b.running_version}` : 'version inconnue' }}
+          {{ versionOf(b) ? `v${versionOf(b)}` : 'version inconnue' }}
           <span
             v-if="b.pkg_version && b.running_version && b.pkg_version !== b.running_version"
             class="text-muted-foreground"
