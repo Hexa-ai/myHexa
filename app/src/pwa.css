@@ -38,6 +38,13 @@ aside[data-testid='sidebar'] {
 main {
   padding-bottom: env(safe-area-inset-bottom);
 }
+/* mise en page admin : c'est le pied de page qui est collé en bas, il porte la marge de la barre d'accueil */
+main:has(+ footer) {
+  padding-bottom: 0;
+}
+main + footer {
+  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+}
 
 /* application installée : le document est figé, seul le contenu (<main>) défile (pages de connexion exclues : elles doivent pouvoir défiler avec le clavier) */
 /* (classe posée par lib/pwa.ts : couvre aussi les iOS anciens sans display-mode) */

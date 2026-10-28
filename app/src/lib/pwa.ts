@@ -3,6 +3,7 @@
  * Le service worker n'est actif qu'en contexte sécurisé (HTTPS ou localhost) : sur l'URL http du LAN, rien n'est fait.
  */
 import { ref } from 'vue'
+import { pickAppHeight } from './appHeight'
 
 export const swRegistration = ref<ServiceWorkerRegistration | null>(null)
 
@@ -39,12 +40,29 @@ function showDiag() {
   addEventListener('touchend', () => setTimeout(() => log('toucher'), 300))
 }
 
+/** hauteur de la zone sûre du haut (encoche / Dynamic Island), mesurée par un élément témoin */
+let satProbe: HTMLDivElement | null = null
+function safeTop() {
+  if (!satProbe) {
+    satProbe = document.createElement('div')
+    satProbe.style.cssText =
+      'position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top)'
+    document.body.appendChild(satProbe)
+  }
+  return parseFloat(getComputedStyle(satProbe).paddingTop) || 0
+}
+
 function fixAppHeight() {
   const set = () => {
-    // Hauteur visible réelle. NE PAS utiliser screen.height : au lancement iOS ne peint que la zone
-    // annoncée par innerHeight, le pied de page passait hors écran.
-    const vv = window.visualViewport?.height ?? 0
-    const h = Math.round(Math.max(window.innerHeight, vv, document.documentElement.clientHeight))
+    const portrait = window.matchMedia('(orientation: portrait)').matches
+    const h = pickAppHeight({
+      inner: window.innerHeight,
+      vv: window.visualViewport?.height ?? 0,
+      client: document.documentElement.clientHeight,
+      screenH: portrait ? window.screen.height : window.screen.width,
+      sat: document.body ? safeTop() : 0,
+      ios: isIOS,
+    })
     document.documentElement.style.setProperty('--app-h', `${h}px`)
     if (window.scrollY !== 0) window.scrollTo(0, 0)
   }
