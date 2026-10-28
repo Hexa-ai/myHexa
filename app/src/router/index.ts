@@ -106,6 +106,12 @@ export const router = createRouter({
           beforeEnter: requireStaff,
         },
         {
+          path: 'staff/usage',
+          name: 'staff-usage',
+          component: () => import('@/views/admin/staff/UsageView.vue'),
+          beforeEnter: requireStaff,
+        },
+        {
           path: 'staff/devices',
           name: 'staff-devices',
           component: StaffDevicesView,

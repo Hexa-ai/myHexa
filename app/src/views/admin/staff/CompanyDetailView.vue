@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
+import UsageDeviceTable from '@/components/staff/UsageDeviceTable.vue'
+import { fmtBytes, loadUsageDevices, totals, type UsageDevice } from '@/composables/useUsage'
 
 interface CompanyDetail {
   id: string
@@ -60,7 +62,14 @@ async function load() {
   devices.value = (ds ?? []) as DeviceLite[]
   recipients.value = (rs ?? []) as RecipientLite[]
   editedName.value = company.value?.name ?? ''
+  loadUsageDevices(id.value)
+    .then((u) => (usage.value = u))
+    .catch((e) => (usageError.value = (e as Error).message))
 }
+
+const usage = ref<UsageDevice[]>([])
+const usageError = ref<string | null>(null)
+const usageTotals = computed(() => totals(usage.value))
 
 async function saveName() {
   if (!company.value) return
@@ -354,6 +363,31 @@ watch(id, load)
       <p class="text-xs text-muted-foreground">
         Pour inviter un recipient dans cette compagnie, utilise "Entrer comme {{ company?.name ?? '…' }}" puis va dans Destinataires.
       </p>
+    </section>
+
+    <section class="space-y-2" data-testid="company-usage">
+      <div class="flex items-baseline justify-between gap-3 flex-wrap">
+        <h2 class="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+          Consommation
+        </h2>
+        <RouterLink
+          :to="{ name: 'staff-usage', query: { c: id } }"
+          class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-signal"
+          >Vue globale →</RouterLink
+        >
+      </div>
+      <p v-if="usageError" class="text-sm text-offline">{{ usageError }}</p>
+      <template v-else>
+        <p class="text-sm">
+          <span class="tabular">{{ usageTotals.boxes }}</span> box ·
+          <span class="tabular">{{ usageTotals.connected }}</span> connectées ·
+          <span class="tabular">{{ usageTotals.vars }}</span> variables ·
+          <span class="tabular">{{ usageTotals.files }}</span> fichiers ·
+          {{ fmtBytes(usageTotals.bytes) }} ·
+          historique {{ fmtBytes(usageTotals.ts_month) }} / mois
+        </p>
+        <UsageDeviceTable :rows="usage" />
+      </template>
     </section>
   </div>
 </template>
