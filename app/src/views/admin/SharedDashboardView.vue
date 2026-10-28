@@ -61,8 +61,8 @@ async function init() {
       b.devices.map((d) => [d.id, { ...d, company_id: null } as unknown as DeviceWithStatus]),
     )
     catalogs.value = b.catalogs
-    // pas de documents dans un partage : ils restent attachés aux box
-    widgets.value = ws.filter((w) => w.type !== 'document')
+    // blocs « document » : seuls les documents cités dans le bloc sont lisibles (règle document_shared_with_me)
+    widgets.value = ws
     if (period.value === before) await refresh() // sinon le watcher de période recharge
   } catch (e) {
     error.value = (e as Error).message
