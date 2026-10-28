@@ -1,6 +1,7 @@
 // Historique des alarmes : événements des rapports journaliers, stockés en Parquet (Edge Function ts-read, mode alarms).
 // Les alarmes EN COURS viennent du dernier statut (30 min), pas d'ici.
 import { supabase } from '@/lib/supabase'
+import { readCtx } from '@/composables/useHistory'
 
 export type Severity = 'error' | 'warning' | 'info'
 export const SEVERITIES: Severity[] = ['error', 'warning', 'info']
@@ -92,6 +93,7 @@ export async function fetchAlarms(
       names: filter.names?.length ? filter.names : null,
       severities: filter.severities?.length ? filter.severities : null,
       limit: filter.limit ?? 500,
+      ...(readCtx.dashboard ? { dashboard: readCtx.dashboard } : {}),
     },
   })
   if (error) {

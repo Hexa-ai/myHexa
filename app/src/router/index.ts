@@ -70,6 +70,11 @@ export const router = createRouter({
           component: () => import('@/views/admin/DashboardView.vue'),
         },
         {
+          path: 'dashboard/partage/:d',
+          name: 'admin-dashboard-shared',
+          component: () => import('@/views/admin/SharedDashboardView.vue'),
+        },
+        {
           path: 'projects',
           name: 'admin-projects',
           component: () => import('@/views/admin/ProjectsView.vue'),

@@ -37,6 +37,12 @@ export async function fetchCatalog(deviceId: string): Promise<HistVar[]> {
   return (data as HistVar[] | null) ?? []
 }
 
+/**
+ * Lecture au titre d'un tableau partagé (destinataire sans accès aux box) : ts-read ne sert alors
+ * que les box et variables des blocs de ce tableau. Positionné par SharedDashboardView, remis à null en sortie.
+ */
+export const readCtx: { dashboard: string | null } = { dashboard: null }
+
 /** Lecture dans les fichiers Parquet (Edge Function ts-read). */
 export async function fetchHistory(
   deviceId: string,
@@ -51,6 +57,7 @@ export async function fetchHistory(
       from: Math.round(from),
       to: Math.round(to),
       tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      ...(readCtx.dashboard ? { dashboard: readCtx.dashboard } : {}),
     },
   })
   if (error) {

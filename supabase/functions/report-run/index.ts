@@ -631,8 +631,10 @@ async function dashScope(dash: any) {
   else if (dash.scope === 'project') {
     const { data: p } = await admin.from('projects').select('name').eq('id', dash.project_id).single()
     scopeName = p?.name ?? ''
+    // box propres du projet + box partagées rattachées par l'organisation du projet
     const { data: ds } = await admin.from('devices').select('id').eq('project_id', dash.project_id)
-    devIds = (ds ?? []).map((d: any) => d.id)
+    const { data: pd } = await admin.from('project_devices').select('device_id').eq('project_id', dash.project_id).eq('company_id', dash.company_id)
+    devIds = [...new Set([...(ds ?? []).map((d: any) => d.id), ...(pd ?? []).map((d: any) => d.device_id)])]
   } else devIds = dash.device_ids ?? []
   const ws = (widgets ?? []) as Widget[]
   for (const w of ws) for (const s of w.sources) if (!devIds.includes(s.device)) devIds.push(s.device)
@@ -813,11 +815,25 @@ async function runTemplate(tpl: any, trigger: 'cron' | 'manual', at = new Date()
     html = r.html
     csv = r.csv
     pdfBytes = await r.pdf()
-    const { data: recs } = await admin.from('recipients').select('contact_email').in('id', tpl.recipient_ids.length ? tpl.recipient_ids : ['00000000-0000-0000-0000-000000000000'])
-    const emails = (recs ?? []).map((x: any) => (x.contact_email ?? '').trim()).filter((e: string) => e)
+    const { data: recs } = await admin.from('recipients').select('id, contact_email').in('id', tpl.recipient_ids.length ? tpl.recipient_ids : ['00000000-0000-0000-0000-000000000000'])
+    // un destinataire ne reçoit le rapport que s'il voit lui-même toutes les box du tableau
+    // (box partagée à une seule personne : ses collègues ne la reçoivent pas par ce biais)
+    const { devIds: scopeIds } = await dashScope(dash)
+    const seeing: any[] = []
+    for (const x of recs ?? []) {
+      const { data: okSee } = await admin.rpc('recipient_sees_devices', { p_recipient: x.id, p_devices: scopeIds })
+      if (okSee === true) seeing.push(x)
+    }
+    const hidden = (recs ?? []).length - seeing.length
+    const emails = seeing.map((x: any) => (x.contact_email ?? '').trim()).filter((e: string) => e)
     const allowed = emails.filter((e: string) => !ALLOW_DOMAIN || e.toLowerCase().endsWith('@' + ALLOW_DOMAIN))
     if (!mailerConfigured()) error = 'envoi impossible : messagerie non configurée sur ce projet (rapport archivé)'
-    else if (!allowed.length) error = emails.length ? `aucun destinataire autorisé (domaine ${ALLOW_DOMAIN})` : 'aucun destinataire'
+    else if (!allowed.length)
+      error = emails.length
+        ? `aucun destinataire autorisé (domaine ${ALLOW_DOMAIN})`
+        : hidden
+          ? `aucun destinataire n'a accès à toutes les box du tableau (${hidden} écarté${hidden > 1 ? 's' : ''})`
+          : 'aucun destinataire'
     else {
       const enc = new TextEncoder()
       const day = new Date(from).toISOString().slice(0, 10)

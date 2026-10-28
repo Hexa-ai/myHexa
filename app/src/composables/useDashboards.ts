@@ -214,6 +214,12 @@ export async function loadDashboards(filter: {
   return (data ?? []) as Dashboard[]
 }
 
+export async function loadDashboard(id: string) {
+  const { data, error } = await sb.from('dashboards').select('*').eq('id', id).maybeSingle()
+  if (error) throw new Error(error.message)
+  return (data ?? null) as Dashboard | null
+}
+
 export async function loadWidgets(dashboardId: string) {
   const { data, error } = await sb
     .from('dashboard_widgets')
@@ -622,4 +628,54 @@ export function downloadText(name: string, text: string, mime = 'text/csv;charse
   a.click()
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 2000)
+}
+
+// ---- partage de tableaux en lecture seule (entre organisations) ----
+export interface DashboardShare {
+  recipient_id: string
+  name: string | null
+  email: string | null
+  company: string | null
+  created_at: string
+}
+export interface SharedDashboard {
+  id: string
+  name: string
+  company: string | null
+  scope: string
+  shared_at: string
+}
+export async function shareDashboard(id: string, email: string) {
+  const { error } = await sb.rpc('share_dashboard', { p_dashboard: id, p_email: email })
+  if (error) throw new Error(error.message)
+}
+export async function unshareDashboard(id: string, recipientId: string) {
+  const { error } = await sb.rpc('unshare_dashboard', { p_dashboard: id, p_recipient: recipientId })
+  if (error) throw new Error(error.message)
+}
+export async function listShares(id: string) {
+  const { data, error } = await sb.rpc('dashboard_shares_list', { p_dashboard: id })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as DashboardShare[]
+}
+export async function sharedWithMe() {
+  const { data, error } = await sb.rpc('shared_dashboards_for_me')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as SharedDashboard[]
+}
+/** tout l'affichage d'un tableau partagé : box (nom, état réduit aux variables des blocs) et catalogues */
+export async function loadSharedBundle(id: string) {
+  const { data, error } = await sb.rpc('shared_dashboard_bundle', { p_dashboard: id })
+  if (error) throw new Error(error.message)
+  return data as {
+    devices: {
+      id: string
+      name: string
+      last_connection_at: string | null
+      latitude: number | null
+      longitude: number | null
+      status_payload: Record<string, unknown>
+    }[]
+    catalogs: Record<string, HistVar[]>
+  }
 }
