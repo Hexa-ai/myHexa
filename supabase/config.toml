@@ -409,5 +409,9 @@ verify_jwt = false
 [functions.ts-build]
 verify_jwt = false
 
+[functions.report-run]
+# cron (pg_net) : authentifié par x-cron-secret ; utilisateurs vérifiés dans la fonction (auth.getUser)
+verify_jwt = false
+
 [functions.ts-read]
 verify_jwt = true

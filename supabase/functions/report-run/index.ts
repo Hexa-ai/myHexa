@@ -935,6 +935,9 @@ Deno.serve(async (req) => {
   const auth = req.headers.get('Authorization') ?? ''
   if (!auth.startsWith('Bearer ')) return fail('UNAUTHORIZED', 'Connexion requise', 401)
   const user = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false }, global: { headers: { Authorization: auth } } })
+  // fonction déployée sans vérification JWT par la passerelle (le cron n'envoie qu'un secret) : on vérifie l'utilisateur ici
+  const { data: who, error: we } = await user.auth.getUser(auth.slice(7))
+  if (we || !who?.user) return fail('UNAUTHORIZED', 'Connexion requise', 401)
   try {
     if (body.action === 'preview') {
       const { data: dash } = await user.from('dashboards').select('*').eq('id', body.dashboard_id).maybeSingle()
