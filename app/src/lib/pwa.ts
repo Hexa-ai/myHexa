@@ -38,11 +38,17 @@ function showDiag() {
   document.documentElement.style.setProperty('--sat', 'env(safe-area-inset-top)')
   for (const t of [0, 500, 1500, 3000]) setTimeout(() => log('auto'), t)
   setTimeout(
-    () => log(`court=${document.documentElement.classList.contains('ios-short-viewport')}`),
+    () =>
+      log(
+        `court=${document.documentElement.classList.contains('ios-short-viewport')} essais[${nudgeLog.join(' | ')}]`,
+      ),
     3200,
   )
   addEventListener('touchend', () => setTimeout(() => log('toucher'), 300))
 }
+
+/** essais de recalcul de la hauteur (affichés par ?diag=1) */
+const nudgeLog: string[] = []
 
 /** hauteur de la zone sûre du haut (encoche / Dynamic Island), mesurée par un élément témoin */
 let satProbe: HTMLDivElement | null = null
@@ -80,21 +86,73 @@ function fixAppHeight() {
   for (const t of [50, 250, 600, 1200]) setTimeout(set, t)
   window.addEventListener('resize', set)
   window.visualViewport?.addEventListener('resize', set)
-  // iOS ne recalcule la zone visible qu'au premier toucher. Changer la balise viewport force
-  // ce recalcul (puis on la remet à l'identique) ; sans effet si la vue est déjà correcte.
-  const nudge = () => {
-    if (!hasShortViewport(measure())) return
-    const meta = document.querySelector<HTMLMetaElement>('meta[name=viewport]')
-    if (!meta) return
-    const orig = meta.content
-    meta.content = `${orig}, minimum-scale=1`
-    setTimeout(() => {
-      meta.content = orig
-      setTimeout(set, 80)
-    }, 80)
+  // iOS ne recalcule la zone visible qu'au premier toucher. On essaie plusieurs astuces, l'une après
+  // l'autre, jusqu'à ce que la hauteur annoncée soit la bonne ; chaque essai est noté pour ?diag=1.
+  const tries: Array<[string, (done: () => void) => void]> = [
+    [
+      'viewport',
+      (done) => {
+        const meta = document.querySelector<HTMLMetaElement>('meta[name=viewport]')
+        if (!meta) return done()
+        const orig = meta.content
+        meta.content = `${orig}, minimum-scale=1`
+        setTimeout(() => {
+          meta.content = orig
+          setTimeout(done, 120)
+        }, 80)
+      },
+    ],
+    [
+      'defilement',
+      (done) => {
+        // un défilement du document (comme un toucher) : on libère le document figé un instant
+        const h = document.documentElement
+        const b = document.body
+        const keep = [h.style.cssText, b.style.cssText]
+        h.style.setProperty('position', 'static', 'important')
+        h.style.setProperty('overflow', 'auto', 'important')
+        h.style.setProperty('height', 'auto', 'important')
+        b.style.setProperty('position', 'static', 'important')
+        b.style.setProperty('overflow', 'visible', 'important')
+        b.style.setProperty('height', 'auto', 'important')
+        b.style.setProperty('min-height', `${screen.height + 2}px`, 'important')
+        requestAnimationFrame(() => {
+          window.scrollTo(0, 1)
+          setTimeout(() => {
+            window.scrollTo(0, 0)
+            h.style.cssText = keep[0]!
+            b.style.cssText = keep[1]!
+            setTimeout(done, 150)
+          }, 120)
+        })
+      },
+    ],
+    [
+      'zoom',
+      (done) => {
+        // changement d'échelle imperceptible, puis retour
+        const meta = document.querySelector<HTMLMetaElement>('meta[name=viewport]')
+        if (!meta) return done()
+        const orig = meta.content
+        meta.content = orig.replace(/initial-scale=[\d.]+/, 'initial-scale=1.0001')
+        setTimeout(() => {
+          meta.content = orig
+          setTimeout(done, 150)
+        }, 100)
+      },
+    ],
+  ]
+  const run = (i: number) => {
+    const before = window.innerHeight
+    if (i >= tries.length || !hasShortViewport(measure())) return set()
+    const [name, fn] = tries[i]!
+    fn(() => {
+      set()
+      nudgeLog.push(`${name}: ${before} -> ${window.innerHeight}`)
+      run(i + 1)
+    })
   }
-  setTimeout(nudge, 300)
-  setTimeout(nudge, 1000)
+  setTimeout(() => run(0), 300)
   if (new URLSearchParams(location.search).has('diag') || localStorage.getItem('hexa.diag'))
     showDiag()
   window.addEventListener('orientationchange', () => setTimeout(set, 300))
