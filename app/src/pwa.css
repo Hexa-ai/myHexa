@@ -86,3 +86,66 @@ html.ios-short-viewport body {
     transform: translateY(16px);
   }
 }
+
+/* ===== Barre d'onglets du bas, téléphone (MobileTabBar.vue) ===== */
+.mobile-tabs {
+  display: none;
+}
+@media (max-width: 767px) {
+  .mobile-tabs {
+    display: grid;
+  }
+}
+.mobile-tabs {
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+  padding: 6px calc(8px + env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom))
+    calc(8px + env(safe-area-inset-left));
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  flex-shrink: 0;
+}
+.mobile-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 50px;
+  min-width: 0;
+  border-radius: 10px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.15;
+}
+.mobile-tab.is-active {
+  color: var(--signal);
+  background: color-mix(in srgb, var(--signal) 12%, transparent);
+}
+.mobile-tab-badge {
+  position: absolute;
+  top: -6px;
+  right: -10px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--offline);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+/* sur téléphone, la barre d'onglets remplace le pied de page (marque + version, restés dans le menu) */
+@media (max-width: 767px) {
+  main + footer {
+    display: none;
+  }
+  main:has(+ footer) {
+    padding-bottom: 0;
+  }
+}

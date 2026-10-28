@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /** date de construction (injectée par vite), au lieu d'une date figée */
 const buildDate = __BUILD_DATE__
+import MobileTabBar from '@/components/layout/MobileTabBar.vue'
 import PwaInstallHint from '@/components/PwaInstallHint.vue'
 import PwaInstallButton from '@/components/PwaInstallButton.vue'
 import { useScrollFocus } from '@/composables/useScrollFocus'
@@ -180,6 +181,20 @@ const isDashboards = computed(
     route.name === 'admin-dashboard-shared',
 )
 const isAlarms = computed(() => route.name === 'admin-alarms')
+const mobileTab = computed(() =>
+  isDevices.value
+    ? 'devices'
+    : isDashboards.value
+      ? 'dashboards'
+      : isProjects.value
+        ? 'projects'
+        : isAlarms.value
+          ? 'alarms'
+          : null,
+)
+function goTab(k: 'devices' | 'dashboards' | 'projects' | 'alarms') {
+  ;({ devices: goDevices, dashboards: goDashboards, projects: goProjects, alarms: goAlarms })[k]()
+}
 const isUpdates = computed(() => route.name === 'admin-updates')
 const isFleet = computed(() => String(route.name ?? '').startsWith('staff-device'))
 const isUsage = computed(() => route.name === 'staff-usage')
@@ -867,6 +882,13 @@ function goUsage() {
           <span class="text-signal">●</span>
         </span>
       </footer>
+      <MobileTabBar
+        :active="mobileTab"
+        :alarms="alarms.urgent.value"
+        :menu-open="sidebarOpen"
+        @go="goTab"
+        @menu="toggleSidebar"
+      />
     </div>
     <PwaInstallHint />
   </div>
