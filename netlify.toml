@@ -6,6 +6,8 @@
 [build.environment]
   NODE_VERSION = "20"
   NPM_FLAGS = "--version"
+  # adresse affichée dans la fiche box (à saisir dans la box) : notre domaine, relais vers device-ingress
+  VITE_DEVICE_API_URL = "https://api.hexa-ai.fr"
 
 # ── API des box sous notre domaine : https://api.hexa-ai.fr (alias du site Netlify, CNAME vers myhexa.netlify.app)
 # Netlify relaie vers l'Edge Function device-ingress (jeton Bearer et corps transmis tels quels, réponse

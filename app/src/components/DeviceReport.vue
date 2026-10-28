@@ -248,8 +248,12 @@ function submitVnc() {
   })
 }
 
-// URL de base à saisir dans la configuration de la box (Edge Function device-ingress).
-const ingressBaseUrl = `${String(import.meta.env.VITE_SUPABASE_URL ?? '').replace(/\/+$/, '')}/functions/v1/device-ingress`
+// URL de base à saisir dans la configuration de la box. En prod : notre domaine (VITE_DEVICE_API_URL,
+// relais Netlify vers device-ingress) ; ailleurs : l'Edge Function device-ingress du projet.
+const ingressBaseUrl = String(
+  import.meta.env.VITE_DEVICE_API_URL ||
+    `${String(import.meta.env.VITE_SUPABASE_URL ?? '').replace(/\/+$/, '')}/functions/v1/device-ingress`,
+).replace(/\/+$/, '')
 const ingressRoutes = computed(() => {
   const host = props.device.name || '<hostname>'
   return [
@@ -504,7 +508,11 @@ async function copyTailscaleIp(ip: string) {
         <div class="border border-border rounded-md bg-card/40 overflow-x-auto">
           <table class="w-full text-sm">
             <tbody>
-              <tr v-for="(s, i) in states" :key="i" class="neu-row border-b border-border/50 last:border-0">
+              <tr
+                v-for="(s, i) in states"
+                :key="i"
+                class="neu-row border-b border-border/50 last:border-0"
+              >
                 <td class="px-4 py-3 font-medium">{{ s.name }}</td>
                 <td class="hidden sm:table-cell px-4 py-3 text-muted-foreground text-xs">
                   {{ s.description }}
@@ -720,7 +728,9 @@ async function copyTailscaleIp(ip: string) {
             </button>
           </div>
           <p class="text-sm text-muted-foreground mb-2">
-            URL de base à saisir dans la configuration de la box.
+            URL de base à saisir dans la configuration de la box (Webhooks). Pour le pilotage à
+            distance avec un firmware 1.3.11 ou antérieur, ajouter aussi cette adresse dans
+            <span class="font-mono">remote.allowed_base_urls</span> de la box.
           </p>
           <p class="font-mono text-xs break-all">{{ ingressBaseUrl }}</p>
           <ul class="mt-3 space-y-1">
