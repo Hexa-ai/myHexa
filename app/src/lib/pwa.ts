@@ -3,7 +3,7 @@
  * Le service worker n'est actif qu'en contexte sécurisé (HTTPS ou localhost) : sur l'URL http du LAN, rien n'est fait.
  */
 import { ref } from 'vue'
-import { pickAppHeight } from './appHeight'
+import { hasShortViewport, pickAppHeight, type ViewportMeasure } from './appHeight'
 
 export const swRegistration = ref<ServiceWorkerRegistration | null>(null)
 
@@ -37,6 +37,10 @@ function showDiag() {
   }
   document.documentElement.style.setProperty('--sat', 'env(safe-area-inset-top)')
   for (const t of [0, 500, 1500, 3000]) setTimeout(() => log('auto'), t)
+  setTimeout(
+    () => log(`court=${document.documentElement.classList.contains('ios-short-viewport')}`),
+    3200,
+  )
   addEventListener('touchend', () => setTimeout(() => log('toucher'), 300))
 }
 
@@ -53,31 +57,44 @@ function safeTop() {
 }
 
 function fixAppHeight() {
-  const set = () => {
+  const measure = (): ViewportMeasure => {
     const portrait = window.matchMedia('(orientation: portrait)').matches
-    const h = pickAppHeight({
+    return {
       inner: window.innerHeight,
       vv: window.visualViewport?.height ?? 0,
       client: document.documentElement.clientHeight,
       screenH: portrait ? window.screen.height : window.screen.width,
       sat: document.body ? safeTop() : 0,
       ios: isIOS,
-    })
-    document.documentElement.style.setProperty('--app-h', `${h}px`)
+    }
+  }
+  const set = () => {
+    const m = measure()
+    const short = hasShortViewport(m)
+    // vue amputée : le pied de page reste en bas de la zone peinte, la bande restante prend sa couleur
+    document.documentElement.classList.toggle('ios-short-viewport', short)
+    document.documentElement.style.setProperty('--app-h', `${pickAppHeight(m)}px`)
     if (window.scrollY !== 0) window.scrollTo(0, 0)
   }
   set()
   for (const t of [50, 250, 600, 1200]) setTimeout(set, t)
   window.addEventListener('resize', set)
   window.visualViewport?.addEventListener('resize', set)
-  // iOS ne recalcule la zone visible qu'au premier toucher : on force un nouveau calcul de mise en page
-  setTimeout(() => {
-    const el = document.documentElement
-    el.style.display = 'none'
-    void el.offsetHeight
-    el.style.display = ''
-    set()
-  }, 400)
+  // iOS ne recalcule la zone visible qu'au premier toucher. Changer la balise viewport force
+  // ce recalcul (puis on la remet à l'identique) ; sans effet si la vue est déjà correcte.
+  const nudge = () => {
+    if (!hasShortViewport(measure())) return
+    const meta = document.querySelector<HTMLMetaElement>('meta[name=viewport]')
+    if (!meta) return
+    const orig = meta.content
+    meta.content = `${orig}, minimum-scale=1`
+    setTimeout(() => {
+      meta.content = orig
+      setTimeout(set, 80)
+    }, 80)
+  }
+  setTimeout(nudge, 300)
+  setTimeout(nudge, 1000)
   if (new URLSearchParams(location.search).has('diag') || localStorage.getItem('hexa.diag'))
     showDiag()
   window.addEventListener('orientationchange', () => setTimeout(set, 300))
