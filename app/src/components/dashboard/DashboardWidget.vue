@@ -11,7 +11,13 @@ const appareil = computed(() => uiStyle.value === 'appareil')
 const KNOB_TICKS = Array.from({ length: 41 }, (_, i) => {
   const a = ((-225 + (i * 270) / 40) * Math.PI) / 180
   const r2 = i % 10 ? 50 : 45
-  return { i, x1: 60 + 54 * Math.cos(a), y1: 60 + 54 * Math.sin(a), x2: 60 + r2 * Math.cos(a), y2: 60 + r2 * Math.sin(a) }
+  return {
+    i,
+    x1: 60 + 54 * Math.cos(a),
+    y1: 60 + 54 * Math.sin(a),
+    x2: 60 + r2 * Math.cos(a),
+    y2: 60 + r2 * Math.sin(a),
+  }
 })
 const knobHand = (f: number, r = 30) => {
   const a = ((-225 + f * 270) * Math.PI) / 180
@@ -47,6 +53,8 @@ const props = defineProps<{
   devices: Map<string, DeviceWithStatus>
   catalogs: Record<string, HistVar[]>
   multiDevice: boolean
+  /** tableau partagé : pas de lien vers la fiche des box (le destinataire n'y a pas accès) */
+  noLinks?: boolean
 }>()
 
 const COLORS = seriesColors(['#00d4aa', '#5b8cff', '#f5a524', '#e05dd0', '#ff7a7a', '#8bd450'])
@@ -391,7 +399,9 @@ const tableRows = computed(() =>
     :data-testid="`widget-${w.type}`"
   >
     <div v-if="title && w.type !== 'image'" class="flex items-baseline gap-2 mb-2 min-w-0">
-      <h3 class="w-title text-sm font-medium tracking-tight truncate shrink-0 max-w-full">{{ title }}</h3>
+      <h3 class="w-title text-sm font-medium tracking-tight truncate shrink-0 max-w-full">
+        {{ title }}
+      </h3>
       <span
         v-if="series[0]?.unit && !overlay && ['curve', 'bars'].includes(w.type)"
         class="font-mono text-[10px] text-muted-foreground"
@@ -486,7 +496,10 @@ const tableRows = computed(() =>
           <div v-if="many" class="text-xs truncate" :title="it.desc">{{ it.label }}</div>
           <div :class="many ? 'text-right' : 'mt-1'">
             <span
-              :class="[many ? 'text-lg' : 'text-3xl big-num', 'font-semibold tabular tracking-tight']"
+              :class="[
+                many ? 'text-lg' : 'text-3xl big-num',
+                'font-semibold tabular tracking-tight',
+              ]"
               data-testid="tile-value"
               >{{ fmtValue(it.value, w.options.decimals) }}</span
             >
@@ -532,8 +545,20 @@ const tableRows = computed(() =>
               <defs>
                 <!-- néomorphisme : relief du bouton (ombre basse droite, reflet haut gauche) -->
                 <filter id="knob-neu" x="-30%" y="-30%" width="160%" height="160%">
-                  <feDropShadow dx="3" dy="3" stdDeviation="3" flood-color="#000" flood-opacity=".18" />
-                  <feDropShadow dx="-3" dy="-3" stdDeviation="3" flood-color="#fff" flood-opacity=".9" />
+                  <feDropShadow
+                    dx="3"
+                    dy="3"
+                    stdDeviation="3"
+                    flood-color="#000"
+                    flood-opacity=".18"
+                  />
+                  <feDropShadow
+                    dx="-3"
+                    dy="-3"
+                    stdDeviation="3"
+                    flood-color="#fff"
+                    flood-opacity=".9"
+                  />
                 </filter>
                 <radialGradient id="knob-face" cx="40%" cy="35%" r="75%">
                   <stop offset="0%" stop-color="var(--card)" />
@@ -559,7 +584,9 @@ const tableRows = computed(() =>
                 fmtValue(it.value, w.options.decimals)
               }}</span>
               <span class="w-unit font-mono text-xs text-muted-foreground ml-1">{{ it.unit }}</span>
-              <div class="font-mono text-[10px] text-muted-foreground mt-1 uppercase tracking-widest">
+              <div
+                class="font-mono text-[10px] text-muted-foreground mt-1 uppercase tracking-widest"
+              >
                 {{ fmtValue(it.lo) }} — {{ fmtValue(it.hi) }}
               </div>
             </div>
@@ -712,7 +739,10 @@ const tableRows = computed(() =>
         <div
           v-for="it in items"
           :key="it.label"
-          :class="['w-key flex items-center gap-2.5 min-w-0', isHot(lamp(it.value).color) && 'w-key-hot']"
+          :class="[
+            'w-key flex items-center gap-2.5 min-w-0',
+            isHot(lamp(it.value).color) && 'w-key-hot',
+          ]"
           data-testid="indicator-item"
         >
           <img
@@ -755,7 +785,9 @@ const tableRows = computed(() =>
                 isOnline(d.last_connection_at) ? 'bg-signal' : 'bg-offline/70',
               ]"
             />
+            <span v-if="noLinks">{{ d.name }}</span>
             <RouterLink
+              v-else
               :to="{ name: 'admin-device-detail', params: { id: d.id } }"
               class="hover:text-signal"
               >{{ d.name }}</RouterLink

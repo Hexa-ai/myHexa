@@ -12,7 +12,17 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const { devices, load: loadDevices } = useDevices()
-const { projects, loading, error, load, create, update, remove, setDevicesProject } = useProjects()
+const {
+  projects,
+  loading,
+  error,
+  load,
+  create,
+  update,
+  remove,
+  setDevicesProject,
+  removeFromProject,
+} = useProjects()
 
 // staff sans « agit comme » : tous les projets (lecture) ; création réservée à une compagnie choisie
 const staffAll = computed(() => auth.isHexaStaff && !auth.actAsCompanyId)
@@ -27,12 +37,19 @@ const canManage = computed(
   () => auth.isHexaStaff || (auth.recipient?.role === 'admin' && !!companyId.value),
 )
 const byId = computed(() => new Map(devices.value.map((d) => [d.id, d])))
-const assigned = computed(() => new Set(projects.value.flatMap((p) => p.device_ids)))
-const unassigned = computed(() =>
-  devices.value.filter(
-    (d) => !assigned.value.has(d.id) && (!companyId.value || d.company_id === companyId.value),
-  ),
+// « déjà dans un projet » : projets de l'entreprise courante uniquement. Une box partagée par une autre
+// organisation peut être rangée dans un de ses projets à elle, indépendamment du projet du propriétaire.
+const assigned = computed(
+  () =>
+    new Set(
+      projects.value
+        .filter((p) => !companyId.value || p.company_id === companyId.value)
+        .flatMap((p) => p.device_ids),
+    ),
 )
+const unassigned = computed(() => devices.value.filter((d) => !assigned.value.has(d.id)))
+const isShared = (d: { company_id: string | null }) =>
+  !!companyId.value && d.company_id !== companyId.value
 
 const cards = computed(() =>
   projects.value.map((p) => {
@@ -201,7 +218,11 @@ const toAdd = ref<string[]>([])
         </div>
         <table class="w-full text-sm">
           <tbody>
-            <tr v-for="d in p.ds" :key="d.id" class="neu-row border-b border-border/50 last:border-0">
+            <tr
+              v-for="d in p.ds"
+              :key="d.id"
+              class="neu-row border-b border-border/50 last:border-0"
+            >
               <td class="py-2 pr-3 w-24">
                 <span
                   :class="[
@@ -228,7 +249,7 @@ const toAdd = ref<string[]>([])
                 <button
                   class="font-mono text-[10px] uppercase text-muted-foreground hover:text-offline"
                   :disabled="busy"
-                  @click="run(() => setDevicesProject([d.id], null))"
+                  @click="run(() => removeFromProject(d.id, p.id))"
                 >
                   Retirer
                 </button>
@@ -252,6 +273,12 @@ const toAdd = ref<string[]>([])
                 class="flex items-center gap-2 text-sm cursor-pointer"
               >
                 <input v-model="toAdd" type="checkbox" :value="d.id" /> {{ d.name }}
+                <span
+                  v-if="isShared(d)"
+                  class="font-mono text-[9px] uppercase tracking-wider text-muted-foreground border border-border rounded px-1"
+                  title="Box d'une autre organisation, partagée avec vous"
+                  >partagée</span
+                >
               </label>
             </div>
             <button

@@ -95,7 +95,25 @@ export function useProjects() {
     if (err) throw new Error(err.message)
   }
 
-  return { projects, loading, error, load, create, update, remove, setDevicesProject }
+  async function removeFromProject(deviceId: string, projectId: string) {
+    const { error: err } = await sb.rpc('remove_device_from_project', {
+      p_device: deviceId,
+      p_project: projectId,
+    })
+    if (err) throw new Error(err.message)
+  }
+
+  return {
+    projects,
+    loading,
+    error,
+    load,
+    create,
+    update,
+    remove,
+    setDevicesProject,
+    removeFromProject,
+  }
 }
 
 /** état de synthèse d'un projet à partir de ses box */

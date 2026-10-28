@@ -26,6 +26,7 @@ import {
 import DashboardWidget from '@/components/dashboard/DashboardWidget.vue'
 import WidgetEditor from '@/components/dashboard/WidgetEditor.vue'
 import ReportsPanel from '@/components/dashboard/ReportsPanel.vue'
+import DashboardSharePanel from '@/components/dashboard/DashboardSharePanel.vue'
 import TimeRangePicker from '@/components/TimeRangePicker.vue'
 import DashboardNavDrawer from '@/components/dashboard/DashboardNavDrawer.vue'
 
@@ -58,19 +59,33 @@ const scopeDevices = computed<DeviceWithStatus[]>(() => {
   return allDevices.value.filter((d) => ids.has(d.id))
 })
 const devMap = computed(() => new Map(allDevices.value.map((d) => [d.id, d])))
-const companyId = computed(
-  () =>
-    (scope.value === 'device' ? scopeDevices.value[0]?.company_id : project.value?.company_id) ??
-    null,
-)
+// entreprise d'un NOUVEAU tableau : celle de l'utilisateur (un client à qui une box est partagée
+// construit ses propres tableaux, dans sa propre organisation) ; le staff garde celle de la cible
+const newCompanyId = computed<string | null>(() => {
+  if (scope.value === 'project') return project.value?.company_id ?? null
+  if (auth.isHexaStaff) return scopeDevices.value[0]?.company_id ?? null
+  return scopeDevices.value.length ? (auth.recipient?.company_id ?? null) : null
+})
+// entreprise du tableau affiché (rapports, droits d'édition)
+const companyId = computed<string | null>(() => current.value?.company_id || newCompanyId.value)
 const heading = computed(
   () => (scope.value === 'device' ? scopeDevices.value[0]?.name : project.value?.name) ?? '…',
 )
-const canManage = computed(
+const isAdminOf = (c: string | null) =>
+  auth.isHexaStaff || (!!c && auth.recipient?.role === 'admin' && auth.recipient?.company_id === c)
+/** modifier le tableau affiché */
+const canManage = computed(() => isAdminOf(companyId.value))
+/** créer un tableau sur cette box / ce projet */
+const canCreate = computed(() => isAdminOf(newCompanyId.value))
+/** partage en lecture seule : tableaux portant sur les box de sa propre organisation uniquement */
+const canShare = computed(
   () =>
-    auth.isHexaStaff ||
-    (auth.recipient?.role === 'admin' && auth.recipient?.company_id === companyId.value),
+    !!current.value?.id &&
+    canManage.value &&
+    !editing.value &&
+    scopeDevices.value.every((d) => d.company_id === current.value?.company_id),
 )
+const shareOpen = ref(false)
 
 const period = ref<string>((route.query.period as string) || '24h')
 // plage précise (horloge) : prioritaire sur la période tant qu'elle est choisie, partagée par l'URL
@@ -86,7 +101,8 @@ function applyCustom(r: { from: number; to: number }) {
 function pickPeriod(k: string) {
   const was = custom.value
   custom.value = null
-  if (period.value !== k) period.value = k // le watcher met à jour l'URL (sans from / to) et recharge
+  if (period.value !== k)
+    period.value = k // le watcher met à jour l'URL (sans from / to) et recharge
   else if (was) {
     router.replace({ query: { ...route.query, from: undefined, to: undefined } })
     refresh()
@@ -153,7 +169,7 @@ async function init() {
     dashboards.value = await loadDashboards(
       scope.value === 'device' ? { device: targetId.value } : { project: targetId.value },
     )
-    if (route.query.new && canManage.value) newDashboard(route.query.new === 'proposal')
+    if (route.query.new && canCreate.value) newDashboard(route.query.new === 'proposal')
     else await select((route.query.d as string) || dashboards.value[0]?.id || null)
   } catch (e) {
     error.value = (e as Error).message
@@ -186,7 +202,7 @@ async function select(id: string | null) {
 function newDashboard(fromProposal: boolean) {
   {
     current.value = {
-      company_id: companyId.value ?? '',
+      company_id: newCompanyId.value ?? '',
       name: fromProposal ? 'Vue d\u2019ensemble' : 'Nouveau tableau',
       scope: scope.value,
       device_id: scope.value === 'device' ? targetId.value : null,
@@ -234,7 +250,9 @@ function compareFor(w: Widget): SeriesMap | null {
   return m
 }
 watch(period, () => {
-  router.replace({ query: { ...route.query, period: period.value, from: undefined, to: undefined } })
+  router.replace({
+    query: { ...route.query, period: period.value, from: undefined, to: undefined },
+  })
   refresh()
 })
 // clé texte : un tableau neuf déclencherait le watcher à chaque changement de query (période)
@@ -551,12 +569,20 @@ const backTo = computed(() =>
           Modifier
         </button>
         <button
-          v-if="canManage && !editing && current"
+          v-if="canCreate && !editing && current"
           class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60"
           data-testid="dash-new"
           @click="newDashboard(false)"
         >
           + Nouveau
+        </button>
+        <button
+          v-if="canShare"
+          class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60"
+          data-testid="dash-share"
+          @click="shareOpen = !shareOpen"
+        >
+          Partager
         </button>
       </div>
     </header>
@@ -577,7 +603,7 @@ const backTo = computed(() =>
       <p class="text-sm">
         Aucun tableau de bord pour {{ scope === 'device' ? 'cette box' : 'ce projet' }}.
       </p>
-      <div v-if="canManage" class="flex flex-wrap justify-center gap-2">
+      <div v-if="canCreate" class="flex flex-wrap justify-center gap-2">
         <button
           class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-signal bg-signal text-primary-foreground"
           data-testid="dash-new-empty"
@@ -676,6 +702,11 @@ const backTo = computed(() =>
         Annuler
       </button>
     </div>
+    <DashboardSharePanel
+      v-if="shareOpen && canShare && current?.id"
+      :dashboard-id="current.id"
+      @close="shareOpen = false"
+    />
     <template v-if="reportsOpen">
       <ReportsPanel
         v-if="current?.id && companyId"

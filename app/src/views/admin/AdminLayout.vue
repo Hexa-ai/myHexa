@@ -64,6 +64,7 @@ const breadcrumb = computed(() => {
     'admin-map': 'carte',
     'admin-projects': 'projets',
     'admin-dashboard': 'tableau de bord',
+    'admin-dashboard-shared': 'tableau partagé',
     'admin-alarms': 'alarmes',
     'admin-interventions': 'interventions',
     'admin-recipients': 'destinataires',
@@ -172,7 +173,10 @@ const isDevices = computed(
 const isMap = computed(() => route.name === 'admin-map')
 const isProjects = computed(() => route.name === 'admin-projects')
 const isDashboards = computed(
-  () => route.name === 'admin-dashboards' || route.name === 'admin-dashboard',
+  () =>
+    route.name === 'admin-dashboards' ||
+    route.name === 'admin-dashboard' ||
+    route.name === 'admin-dashboard-shared',
 )
 const isAlarms = computed(() => route.name === 'admin-alarms')
 const isUpdates = computed(() => route.name === 'admin-updates')

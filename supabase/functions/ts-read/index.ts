@@ -6,6 +6,8 @@
 //   ≤ 21 j   -> agrégat 1 min (1 fichier par semaine)
 //   ≤ 186 j  -> agrégat 1 h   (1 fichier par mois)
 //   au-delà  -> agrégat 1 jour (1 fichier par an)
+//   + dashboard?: uuid  -> lecture au titre d'un TABLEAU PARTAGÉ (destinataire sans accès à la box) :
+//     droits = dashboard_read_grant (box du tableau, variables / alarmes de ses blocs uniquement)
 //   POST { mode: 'alarms', devices: string[], from, to, names?, severities?, limit? }
 //     -> historique des alarmes (événements des rapports journaliers, fichiers events/) :
 //        occurrences (début, fin, durée dans la plage, en cours), statistiques par alarme, totaux par gravité,
@@ -44,13 +46,33 @@ Deno.serve(async (req) => {
     to?: number
     level?: string
     tz?: string
+    dashboard?: string
   }
   const { device } = body
   const from = Number(body.from)
   const to = Number(body.to)
-  if (body.mode === 'alarms') return alarms(user, body, from, to, t0)
-  const vars = Array.isArray(body.vars) ? body.vars.filter((v) => typeof v === 'string').slice(0, 200) : []
+  const dash = typeof body.dashboard === 'string' && UUID.test(body.dashboard) ? body.dashboard : null
+  if (body.dashboard != null && !dash) return fail('BAD_REQUEST', 'Paramètres invalides', 400)
+  if (body.mode === 'alarms') return alarms(user, body, from, to, t0, dash)
+  let vars = Array.isArray(body.vars) ? body.vars.filter((v) => typeof v === 'string').slice(0, 200) : []
   if (!device || !vars.length || !(to > from) || to - from > 5 * 366 * DAY) return fail('BAD_REQUEST', 'Paramètres invalides', 400)
+
+  if (dash) {
+    // tableau partagé : seules les variables des blocs du tableau, pour une box du tableau
+    const g = await grant(user, dash, device)
+    if (g instanceof Response) return g
+    const allowed = new Set(g.vars)
+    vars = vars.filter((v) => allowed.has(v))
+    if (!vars.length) return fail('FORBIDDEN', 'Variable non partagée', 403)
+    const meta = new Map(g.catalog.map((c) => [c.var, c]))
+    try {
+      // droits vérifiés ci-dessus : lecture des fichiers avec le rôle service, limitée à `vars`
+      const r = await readSeries(admin, admin, device, vars, from, to, meta, { level: body.level, tz: body.tz })
+      return ok({ ...r, ms: Date.now() - t0 })
+    } catch (e) {
+      return fail('ERROR', (e as Error).message, 500)
+    }
+  }
 
   // droits : le catalogue renvoie null si la box n'est pas visible pour cet utilisateur
   const { data: catalog, error: ce } = await user.rpc('ts_catalog', { p_device: device })
@@ -68,8 +90,24 @@ Deno.serve(async (req) => {
   }
 })
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+interface Grant {
+  vars: string[]
+  catalog: { var: string; unit: string | null; category: string | null; description: string | null }[]
+  alarms: boolean
+  alarm_names: string[] | null
+}
+/** droits d'un destinataire de tableau partagé sur une box (null côté base = aucun droit -> 403) */
+async function grant(user: any, dash: string, device: string): Promise<Grant | Response> {
+  if (!UUID.test(device)) return fail('BAD_REQUEST', 'Paramètres invalides', 400)
+  const { data, error } = await user.rpc('dashboard_read_grant', { p_dashboard: dash, p_device: device })
+  if (error) return fail('UNAUTHORIZED', error.message, 401)
+  if (!data) return fail('FORBIDDEN', 'Tableau non partagé', 403)
+  return data as Grant
+}
+
 const SEVS: Severity[] = ['error', 'warning', 'info']
-async function alarms(user: any, body: any, from: number, to: number, t0: number) {
+async function alarms(user: any, body: any, from: number, to: number, t0: number, dash: string | null) {
   const devices = Array.isArray(body.devices) ? [...new Set(body.devices.filter((d: unknown) => typeof d === 'string'))].slice(0, 100) as string[] : []
   if (!devices.length || !(to > from) || to - from > 5 * 366 * DAY) return fail('BAD_REQUEST', 'Paramètres invalides', 400)
   const f: Filter = {
@@ -81,16 +119,30 @@ async function alarms(user: any, body: any, from: number, to: number, t0: number
     const occ: Occurrence[] = []
     const names = new Map<string, { name: string; severity: Severity; description: string; devices: string[] }>()
     for (const d of devices) {
-      // droits : même contrôle que les courbes (null = box non visible pour cet utilisateur)
-      const { data: cat, error: ce } = await user.rpc('ts_catalog', { p_device: d })
-      if (ce) return fail('UNAUTHORIZED', ce.message, 401)
-      if (cat === null) return fail('FORBIDDEN', 'Box non accessible', 403)
-      const evs = await loadEvents(user, admin, d, from, to)
+      let evs: Awaited<ReturnType<typeof loadEvents>>
+      let df: Filter = f
+      if (dash) {
+        // tableau partagé : la box doit porter un bloc alarmes du tableau ; noms limités à ceux du bloc
+        const g = await grant(user, dash, d)
+        if (g instanceof Response) return g
+        if (!g.alarms) return fail('FORBIDDEN', 'Alarmes non partagées', 403)
+        if (g.alarm_names) {
+          const allowed = new Set(g.alarm_names)
+          df = { ...f, names: (f.names ?? g.alarm_names).filter((n) => allowed.has(n)) }
+        }
+        evs = (await loadEvents(admin, admin, d, from, to)).filter((e) => !g.alarm_names || g.alarm_names.includes(e.name))
+      } else {
+        // droits : même contrôle que les courbes (null = box non visible pour cet utilisateur)
+        const { data: cat, error: ce } = await user.rpc('ts_catalog', { p_device: d })
+        if (ce) return fail('UNAUTHORIZED', ce.message, 401)
+        if (cat === null) return fail('FORBIDDEN', 'Box non accessible', 403)
+        evs = await loadEvents(user, admin, d, from, to)
+      }
       for (const e of evs) {
         const n = names.get(e.name) ?? names.set(e.name, { name: e.name, severity: e.severity, description: e.description, devices: [] }).get(e.name)!
         if (!n.devices.includes(d)) n.devices.push(d)
       }
-      occ.push(...occurrences(d, evs, from, to, f))
+      occ.push(...occurrences(d, evs, from, to, df))
     }
     occ.sort((a, b) => b.start - a.start)
     const st = stats(occ, from, to)
