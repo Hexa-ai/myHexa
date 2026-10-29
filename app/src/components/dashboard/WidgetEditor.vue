@@ -785,6 +785,31 @@ function save() {
           </div>
         </template>
       </div>
+      <div v-if="w.type === 'document'" class="mb-3" data-testid="docs-layout">
+        <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
+          Présentation
+        </div>
+        <div class="inline-flex gap-1 p-1 border border-border rounded-md bg-card/40">
+          <button
+            v-for="o in [
+              { v: 'cards', l: 'Fiches' },
+              { v: 'list', l: 'Liste' },
+            ] as const"
+            :key="o.v"
+            type="button"
+            :data-testid="`docs-layout-${o.v}`"
+            :class="[
+              'px-3 py-1 rounded text-xs transition',
+              (w.options.docLayout ?? 'cards') === o.v
+                ? 'bg-signal/15 text-signal'
+                : 'text-muted-foreground hover:text-foreground',
+            ]"
+            @click="w.options.docLayout = o.v"
+          >
+            {{ o.l }}
+          </button>
+        </div>
+      </div>
       <div v-if="w.type === 'document'" class="mb-3" data-testid="docs-editor">
         <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
           Documents à afficher
