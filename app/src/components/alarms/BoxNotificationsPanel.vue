@@ -3,7 +3,8 @@
 //  - perte / retour de liaison d'une box (la box ne peut pas le signaler elle-même),
 //    destinataires choisis box par box, délai, mode maintenance ;
 //  - récapitulatif d'état : fréquence, jour, résumé IA, destinataires.
-// Les alarmes restent envoyées par les box (page « Alertes · destinataires »).
+// Onglet « Alarmes box » de la page « Alertes · destinataires » ; les alarmes procédé restent
+// envoyées par les box (onglet « Alarmes procédé »).
 import { computed, onMounted, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
@@ -204,20 +205,14 @@ async function setPause(b: Box, hours: number | null) {
 </script>
 
 <template>
-  <div class="p-3 sm:p-6 space-y-5 max-w-6xl" data-testid="notifications-view">
-    <header class="space-y-1">
-      <h1 class="text-xl font-semibold">Notifications</h1>
-      <p class="text-sm text-muted-foreground max-w-3xl">
-        Les mails envoyés par le portail pour votre entreprise. Les alarmes, elles, sont envoyées
-        par les box : voir
-        <RouterLink to="/admin/alarm-recipients" class="text-signal hover:underline"
-          >Alertes · destinataires</RouterLink
-        >.
-      </p>
-      <p v-if="!canEdit" class="text-xs text-amber-400">
-        Consultation seule : seuls les administrateurs modifient ces réglages.
-      </p>
-    </header>
+  <div class="space-y-5 max-w-6xl" data-testid="notifications-view">
+    <p class="text-sm text-muted-foreground max-w-3xl">
+      Ces mails sont envoyés par le portail et non par les box : perte de liaison et
+      récapitulatif d'état, pour votre entreprise.
+    </p>
+    <p v-if="!canEdit" class="text-xs text-amber-400">
+      Consultation seule : seuls les administrateurs modifient ces réglages.
+    </p>
 
     <p v-if="loading" class="text-sm text-muted-foreground">Chargement…</p>
     <p v-if="error" class="text-sm text-offline">{{ error }}</p>

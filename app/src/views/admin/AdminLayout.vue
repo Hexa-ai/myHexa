@@ -75,7 +75,6 @@ const breadcrumb = computed(() => {
     'staff-devices': 'parc des box',
     'staff-usage': 'staff / consommation',
     'admin-updates': 'mises à jour',
-    'admin-notifications': 'notifications',
     'staff-device-new': 'staff / nouvelle box',
   }
   return map[String(route.name ?? '')] ?? String(route.name ?? '')
@@ -170,11 +169,6 @@ function goUpdates() {
   router.push({ name: 'admin-updates' })
   closeSidebar()
 }
-function goNotifications() {
-  router.push({ name: 'admin-notifications' })
-  closeSidebar()
-}
-const isNotifications = computed(() => route.name === 'admin-notifications')
 const isDevices = computed(
   () => route.name === 'admin-devices' || route.name === 'admin-device-detail',
 )
@@ -562,35 +556,6 @@ function goUsage() {
             class="ml-auto font-mono text-[9px] uppercase tracking-widest text-signal"
             >●</span
           >
-        </button>
-        <button
-          :title="collapsed ? 'Notifications' : undefined"
-          :class="[
-            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
-            isNotifications
-              ? 'text-foreground bg-secondary'
-              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
-          ]"
-          data-testid="nav-notifications"
-          @click="goNotifications"
-        >
-          <span
-            :class="[
-              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
-              isNotifications ? 'bg-signal' : 'bg-transparent',
-            ]"
-          />
-          <svg
-            viewBox="0 0 24 24"
-            class="size-4 shrink-0"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.7"
-          >
-            <rect x="3" y="5" width="18" height="14" rx="2" />
-            <path d="m3 7 9 6 9-6" />
-          </svg>
-          <span class="tracking-tight">Notifications</span>
         </button>
         <button
           :title="collapsed ? 'Mises à jour' : undefined"

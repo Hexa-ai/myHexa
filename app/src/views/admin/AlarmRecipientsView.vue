@@ -4,7 +4,7 @@
 // Vue « Par box » : une ligne par box ; clic -> panneau box (destinataires + escalade).
 // Vue « Tableau » : box × personnes, pratique quand l'entreprise est petite.
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import {
   CHANNELS,
@@ -17,9 +17,15 @@ import {
   type Person,
 } from '@/composables/useAlarmConfig'
 import BoxAlarmPanel from '@/components/alarms/BoxAlarmPanel.vue'
+import BoxNotificationsPanel from '@/components/alarms/BoxNotificationsPanel.vue'
 
 const auth = useAuthStore()
 const route = useRoute()
+const router = useRouter()
+// Deux onglets : alarmes procédé (envoyées par les box) / alarmes box (envoyées par le portail)
+const tab = computed<'process' | 'box'>(() => (route.query.tab === 'box' ? 'box' : 'process'))
+const setTab = (t: 'process' | 'box') =>
+  router.replace({ query: { ...route.query, tab: t === 'box' ? 'box' : undefined } })
 const cfg = useAlarmConfig()
 const { loading, flash, people, subs, devices } = cfg
 const companyId = computed(() => auth.effectiveCompanyId)
@@ -182,14 +188,14 @@ async function sendRow(d: Device) {
             >prototype</span
           >
         </h1>
-        <p class="text-sm text-muted-foreground max-w-3xl">
+        <p v-if="tab === 'process'" class="text-sm text-muted-foreground max-w-3xl">
           Qui reçoit les alarmes de quelles box, pour {{ cfg.companyLabel.value ?? '—' }}. Les
           personnes sont les mêmes que dans « Destinataires » : avec ou sans accès au portail.
           Ouvrir une box pour régler ses destinataires et son escalade, puis « envoyer » : la box
           applique au prochain push (~30 min).
         </p>
       </div>
-      <div v-if="canEdit" class="flex gap-2 flex-wrap">
+      <div v-if="canEdit && tab === 'process'" class="flex gap-2 flex-wrap">
         <button
           class="px-3 py-2 text-sm border border-border rounded-md hover:border-signal"
           @click="importFromBoxes"
@@ -205,219 +211,246 @@ async function sendRow(d: Device) {
       </div>
     </header>
 
-    <div class="flex items-center gap-4 text-sm flex-wrap">
-      <div
-        class="inline-flex border border-border rounded-md overflow-hidden"
-        data-testid="view-switch"
+    <nav class="flex gap-1 border-b border-border" data-testid="alarm-tabs">
+      <button
+        v-for="[t, label, sub] in [
+          ['process', 'Alarmes procédé', 'envoyées par les box'],
+          ['box', 'Alarmes box', 'perte de liaison, récapitulatif'],
+        ] as const"
+        :key="t"
+        :data-testid="`tab-${t}`"
+        :class="[
+          '-mb-px px-3 sm:px-4 py-2 text-left border-b-2 transition',
+          tab === t
+            ? 'border-signal text-foreground'
+            : 'border-transparent text-muted-foreground hover:text-foreground',
+        ]"
+        @click="setTab(t)"
       >
-        <button
-          :class="['px-3 py-1.5', view === 'list' ? 'bg-secondary' : 'text-muted-foreground']"
-          @click="view = 'list'"
-        >
-          Par box
-        </button>
-        <button
-          :class="['px-3 py-1.5', view === 'table' ? 'bg-secondary' : 'text-muted-foreground']"
-          @click="view = 'table'"
-        >
-          Tableau
-        </button>
-      </div>
-      <input
-        v-model="filter"
-        type="search"
-        placeholder="Filtrer (box ou personne)"
-        autocomplete="off"
-        data-1p-ignore="true"
-        data-lpignore="true"
-        class="border border-border bg-secondary/30 rounded-md px-3 py-1.5 w-full sm:w-56"
-      />
-      <label class="flex items-center gap-2 text-muted-foreground cursor-pointer">
-        <input v-model="showAll" type="checkbox" /> toutes les box ({{ devices.length }})
-      </label>
-      <span class="text-muted-foreground" data-testid="people-count"
-        >{{ people.length }} personnes · {{ portalCount }} avec accès portail</span
-      >
-      <span v-if="loading" class="text-muted-foreground">Chargement…</span>
-      <span v-if="flash" class="text-primary">{{ flash }}</span>
-    </div>
+        <span class="block text-sm font-medium">{{ label }}</span>
+        <span class="block text-[10px] text-muted-foreground">{{ sub }}</span>
+      </button>
+    </nav>
 
-    <!-- Vue par box -->
-    <ul
-      v-if="view === 'list'"
-      class="border border-border rounded-md divide-y divide-border/60"
-      data-testid="alarm-list"
-    >
-      <li
-        v-for="d in visibleDevices"
-        :key="d.id"
-        class="neu-card flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-x-4 gap-y-2 px-3 sm:px-4 py-3 hover:bg-secondary/10 cursor-pointer"
-        @click="openBoxId = d.id"
-      >
-        <div class="min-w-0 flex-1 sm:flex-none sm:w-64 sm:shrink-0">
-          <div class="text-sm font-medium">{{ d.name }}</div>
-          <div class="font-mono text-[10px] text-muted-foreground">
-            {{ d.running_version ? `v${d.running_version}` : '' }}
-            <span
-              v-if="cfg.capability(d).level !== 'full'"
-              :title="cfg.capability(d).hint"
-              data-testid="fw-badge"
-              :class="[
-                'ml-1 px-1 rounded border',
-                cfg.capability(d).level === 'none'
-                  ? 'border-offline/50 text-offline'
-                  : 'border-amber-400/50 text-amber-400',
-              ]"
-              >{{ cfg.capability(d).label }}</span
-            >
-          </div>
-        </div>
+    <BoxNotificationsPanel v-if="tab === 'box'" />
+
+    <template v-else>
+      <div class="flex items-center gap-4 text-sm flex-wrap">
         <div
-          class="order-last sm:order-none basis-full sm:basis-auto flex-1 flex flex-wrap gap-1.5 min-w-0"
+          class="inline-flex border border-border rounded-md overflow-hidden"
+          data-testid="view-switch"
         >
-          <span
-            v-for="s in cfg.subsOf(d.id)"
-            :key="s.recipient_id"
-            class="inline-flex items-center gap-1 text-xs border border-border rounded-full pl-2 pr-1 py-0.5"
-          >
-            {{ cfg.personById.value.get(s.recipient_id)?.name }}
-            <span class="inline-flex gap-px">
-              <span
-                v-for="l in LEVELS.filter((x) => s.filters[x.key])"
-                :key="l.key"
-                :class="[
-                  'w-3.5 h-3.5 rounded-sm text-[8px] leading-[14px] text-center font-mono',
-                  l.cls,
-                ]"
-                >{{ l.label }}</span
-              >
-            </span>
-          </span>
-          <span v-if="!cfg.subsOf(d.id).length" class="text-xs text-muted-foreground"
-            >aucun destinataire</span
-          >
-          <span
-            v-if="cfg.escOf(d.id)"
-            class="text-xs text-signal border border-signal/40 rounded-full px-2 py-0.5"
-            title="escalade configurée"
-          >
-            ⇢ escalade {{ cfg.escOf(d.id)!.config.levels.length }} niv.
-            {{ cfg.escOf(d.id)!.config.mode === 'immediate' ? '(désactivée)' : '' }}
-          </span>
-        </div>
-        <div class="shrink-0 sm:w-56 flex items-center justify-end gap-2" @click.stop>
-          <span
-            :class="[
-              'font-mono text-[10px] uppercase tracking-wider text-right',
-              cfg.syncState(d).cls,
-            ]"
-            :title="cfg.syncState(d).hint"
-          >
-            {{ cfg.syncState(d).label }}
-          </span>
           <button
-            v-if="
-              canEdit &&
-              cfg.pilotable(d) &&
-              (cfg.diffCount(d) || cfg.escalationDirty(d.id)) &&
-              !d.pending
-            "
-            class="font-mono text-[9px] uppercase tracking-wider border border-border px-2 py-0.5 rounded hover:border-signal"
-            @click="sendRow(d)"
+            :class="['px-3 py-1.5', view === 'list' ? 'bg-secondary' : 'text-muted-foreground']"
+            @click="view = 'list'"
           >
-            envoyer
+            Par box
+          </button>
+          <button
+            :class="['px-3 py-1.5', view === 'table' ? 'bg-secondary' : 'text-muted-foreground']"
+            @click="view = 'table'"
+          >
+            Tableau
           </button>
         </div>
-      </li>
-      <li v-if="!visibleDevices.length" class="px-4 py-3 text-sm text-muted-foreground">
-        Aucune box.
-      </li>
-    </ul>
+        <input
+          v-model="filter"
+          type="search"
+          placeholder="Filtrer (box ou personne)"
+          autocomplete="off"
+          data-1p-ignore="true"
+          data-lpignore="true"
+          class="border border-border bg-secondary/30 rounded-md px-3 py-1.5 w-full sm:w-56"
+        />
+        <label class="flex items-center gap-2 text-muted-foreground cursor-pointer">
+          <input v-model="showAll" type="checkbox" /> toutes les box ({{ devices.length }})
+        </label>
+        <span class="text-muted-foreground" data-testid="people-count"
+          >{{ people.length }} personnes · {{ portalCount }} avec accès portail</span
+        >
+        <span v-if="loading" class="text-muted-foreground">Chargement…</span>
+        <span v-if="flash" class="text-primary">{{ flash }}</span>
+      </div>
 
-    <!-- Vue tableau (petites entreprises) -->
-    <div v-else class="border border-border rounded-md overflow-x-auto">
-      <p class="sm:hidden px-2 py-1.5 text-[11px] text-muted-foreground border-b border-border/60">
-        ← glisser pour voir toutes les personnes →
-      </p>
-      <p v-if="people.length > 12" class="px-3 py-2 text-xs text-amber-400">
-        {{ people.length }} personnes : la vue « Par box » est plus lisible.
-      </p>
-      <table class="text-sm w-full border-collapse" data-testid="alarm-matrix">
-        <thead>
-          <tr class="bg-secondary/30">
-            <th
-              class="text-left font-normal px-2 sm:px-3 py-2 sticky left-0 z-10 bg-card w-28 min-w-28 max-w-28 sm:w-auto sm:min-w-[220px] sm:max-w-none"
-            >
-              Box
-            </th>
-            <th
-              v-for="c in people"
-              :key="c.id"
-              class="px-1.5 sm:px-2 py-2 font-normal align-bottom min-w-[70px] sm:min-w-[90px]"
-            >
-              <button
-                class="text-left w-full hover:text-signal text-xs font-medium"
-                @click="openPerson(c)"
-              >
-                {{ c.name }}
-              </button>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="d in visibleDevices" :key="d.id" class="neu-row border-t border-border/60">
-            <td
-              class="px-2 sm:px-3 py-2 sticky left-0 z-10 bg-card text-left w-28 min-w-28 max-w-28 sm:w-auto sm:min-w-[220px] sm:max-w-none shadow-[1px_0_0_var(--border)]"
-            >
-              <button
-                class="text-xs font-medium hover:text-signal text-left break-words [overflow-wrap:anywhere]"
-                @click="openBoxId = d.id"
-              >
-                {{ d.name }}
-              </button>
-              <div :class="['font-mono text-[9px] uppercase', cfg.syncState(d).cls]">
-                {{ cfg.syncState(d).label }}
-              </div>
-              <div
+      <!-- Vue par box -->
+      <ul
+        v-if="view === 'list'"
+        class="border border-border rounded-md divide-y divide-border/60"
+        data-testid="alarm-list"
+      >
+        <li
+          v-for="d in visibleDevices"
+          :key="d.id"
+          class="neu-card flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-x-4 gap-y-2 px-3 sm:px-4 py-3 hover:bg-secondary/10 cursor-pointer"
+          @click="openBoxId = d.id"
+        >
+          <div class="min-w-0 flex-1 sm:flex-none sm:w-64 sm:shrink-0">
+            <div class="text-sm font-medium">{{ d.name }}</div>
+            <div class="font-mono text-[10px] text-muted-foreground">
+              {{ d.running_version ? `v${d.running_version}` : '' }}
+              <span
                 v-if="cfg.capability(d).level !== 'full'"
                 :title="cfg.capability(d).hint"
+                data-testid="fw-badge"
                 :class="[
-                  'font-mono text-[9px]',
-                  cfg.capability(d).level === 'none' ? 'text-offline' : 'text-amber-400',
+                  'ml-1 px-1 rounded border',
+                  cfg.capability(d).level === 'none'
+                    ? 'border-offline/50 text-offline'
+                    : 'border-amber-400/50 text-amber-400',
                 ]"
+                >{{ cfg.capability(d).label }}</span
               >
-                {{ cfg.capability(d).label }}
-              </div>
-            </td>
-            <td v-for="c in people" :key="c.id" class="px-1 sm:px-2 py-2 text-center">
-              <div v-if="cfg.subOf(c.id, d.id)" class="inline-flex gap-0.5">
-                <button
-                  v-for="l in LEVELS"
+            </div>
+          </div>
+          <div
+            class="order-last sm:order-none basis-full sm:basis-auto flex-1 flex flex-wrap gap-1.5 min-w-0"
+          >
+            <span
+              v-for="s in cfg.subsOf(d.id)"
+              :key="s.recipient_id"
+              class="inline-flex items-center gap-1 text-xs border border-border rounded-full pl-2 pr-1 py-0.5"
+            >
+              {{ cfg.personById.value.get(s.recipient_id)?.name }}
+              <span class="inline-flex gap-px">
+                <span
+                  v-for="l in LEVELS.filter((x) => s.filters[x.key])"
                   :key="l.key"
-                  :disabled="!canEdit || !cfg.pilotable(d)"
                   :class="[
-                    'w-5 h-5 rounded text-[10px] font-mono',
-                    cfg.subOf(c.id, d.id)!.filters[l.key]
-                      ? l.cls
-                      : 'bg-secondary/40 text-muted-foreground/40',
+                    'w-3.5 h-3.5 rounded-sm text-[8px] leading-[14px] text-center font-mono',
+                    l.cls,
                   ]"
-                  @click="cfg.toggleFilter(cfg.subOf(c.id, d.id)!, l.key)"
+                  >{{ l.label }}</span
                 >
-                  {{ l.label }}
-                </button>
-              </div>
-              <button
-                v-else-if="canEdit && cfg.pilotable(d)"
-                class="w-5 h-5 rounded text-xs text-muted-foreground/40 hover:text-signal"
-                @click="cfg.addSubs([{ recipient_id: c.id, device_id: d.id }])"
+              </span>
+            </span>
+            <span v-if="!cfg.subsOf(d.id).length" class="text-xs text-muted-foreground"
+              >aucun destinataire</span
+            >
+            <span
+              v-if="cfg.escOf(d.id)"
+              class="text-xs text-signal border border-signal/40 rounded-full px-2 py-0.5"
+              title="escalade configurée"
+            >
+              ⇢ escalade {{ cfg.escOf(d.id)!.config.levels.length }} niv.
+              {{ cfg.escOf(d.id)!.config.mode === 'immediate' ? '(désactivée)' : '' }}
+            </span>
+          </div>
+          <div class="shrink-0 sm:w-56 flex items-center justify-end gap-2" @click.stop>
+            <span
+              :class="[
+                'font-mono text-[10px] uppercase tracking-wider text-right',
+                cfg.syncState(d).cls,
+              ]"
+              :title="cfg.syncState(d).hint"
+            >
+              {{ cfg.syncState(d).label }}
+            </span>
+            <button
+              v-if="
+                canEdit &&
+                cfg.pilotable(d) &&
+                (cfg.diffCount(d) || cfg.escalationDirty(d.id)) &&
+                !d.pending
+              "
+              class="font-mono text-[9px] uppercase tracking-wider border border-border px-2 py-0.5 rounded hover:border-signal"
+              @click="sendRow(d)"
+            >
+              envoyer
+            </button>
+          </div>
+        </li>
+        <li v-if="!visibleDevices.length" class="px-4 py-3 text-sm text-muted-foreground">
+          Aucune box.
+        </li>
+      </ul>
+
+      <!-- Vue tableau (petites entreprises) -->
+      <div v-else class="border border-border rounded-md overflow-x-auto">
+        <p
+          class="sm:hidden px-2 py-1.5 text-[11px] text-muted-foreground border-b border-border/60"
+        >
+          ← glisser pour voir toutes les personnes →
+        </p>
+        <p v-if="people.length > 12" class="px-3 py-2 text-xs text-amber-400">
+          {{ people.length }} personnes : la vue « Par box » est plus lisible.
+        </p>
+        <table class="text-sm w-full border-collapse" data-testid="alarm-matrix">
+          <thead>
+            <tr class="bg-secondary/30">
+              <th
+                class="text-left font-normal px-2 sm:px-3 py-2 sticky left-0 z-10 bg-card w-28 min-w-28 max-w-28 sm:w-auto sm:min-w-[220px] sm:max-w-none"
               >
-                +
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+                Box
+              </th>
+              <th
+                v-for="c in people"
+                :key="c.id"
+                class="px-1.5 sm:px-2 py-2 font-normal align-bottom min-w-[70px] sm:min-w-[90px]"
+              >
+                <button
+                  class="text-left w-full hover:text-signal text-xs font-medium"
+                  @click="openPerson(c)"
+                >
+                  {{ c.name }}
+                </button>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="d in visibleDevices" :key="d.id" class="neu-row border-t border-border/60">
+              <td
+                class="px-2 sm:px-3 py-2 sticky left-0 z-10 bg-card text-left w-28 min-w-28 max-w-28 sm:w-auto sm:min-w-[220px] sm:max-w-none shadow-[1px_0_0_var(--border)]"
+              >
+                <button
+                  class="text-xs font-medium hover:text-signal text-left break-words [overflow-wrap:anywhere]"
+                  @click="openBoxId = d.id"
+                >
+                  {{ d.name }}
+                </button>
+                <div :class="['font-mono text-[9px] uppercase', cfg.syncState(d).cls]">
+                  {{ cfg.syncState(d).label }}
+                </div>
+                <div
+                  v-if="cfg.capability(d).level !== 'full'"
+                  :title="cfg.capability(d).hint"
+                  :class="[
+                    'font-mono text-[9px]',
+                    cfg.capability(d).level === 'none' ? 'text-offline' : 'text-amber-400',
+                  ]"
+                >
+                  {{ cfg.capability(d).label }}
+                </div>
+              </td>
+              <td v-for="c in people" :key="c.id" class="px-1 sm:px-2 py-2 text-center">
+                <div v-if="cfg.subOf(c.id, d.id)" class="inline-flex gap-0.5">
+                  <button
+                    v-for="l in LEVELS"
+                    :key="l.key"
+                    :disabled="!canEdit || !cfg.pilotable(d)"
+                    :class="[
+                      'w-5 h-5 rounded text-[10px] font-mono',
+                      cfg.subOf(c.id, d.id)!.filters[l.key]
+                        ? l.cls
+                        : 'bg-secondary/40 text-muted-foreground/40',
+                    ]"
+                    @click="cfg.toggleFilter(cfg.subOf(c.id, d.id)!, l.key)"
+                  >
+                    {{ l.label }}
+                  </button>
+                </div>
+                <button
+                  v-else-if="canEdit && cfg.pilotable(d)"
+                  class="w-5 h-5 rounded text-xs text-muted-foreground/40 hover:text-signal"
+                  @click="cfg.addSubs([{ recipient_id: c.id, device_id: d.id }])"
+                >
+                  +
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
 
     <BoxAlarmPanel
       v-if="openBox"
@@ -518,7 +551,8 @@ async function sendRow(d: Device) {
                 draft.restrict_to_devices?.length
                   ? `${draft.restrict_to_devices.length} box visibles`
                   : 'toutes les box'
-              }}. Mails du portail (perte de liaison, récapitulatif) : selon la page Notifications.
+              }}. Mails du portail (perte de liaison, récapitulatif) : voir l'onglet « Alarmes box
+              ».
             </div>
             <p v-if="invisible.length" class="text-xs text-amber-400">
               Reçoit les alarmes de {{ invisible.length }} box qu'il ne voit pas dans le portail :
