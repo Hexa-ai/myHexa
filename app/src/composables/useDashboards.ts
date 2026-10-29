@@ -112,6 +112,10 @@ export interface WidgetOptions {
   chart?: boolean
   /** météo : relevé actuel, prochaines 24 h ou 5 jours */
   weatherView?: 'now' | 'hours' | 'days'
+  /** météo : contenus affichés (défaut selon la vue) */
+  weatherFields?: import('@/composables/useWeather').WeatherField[]
+  /** météo : pictogrammes animés, fixes ou masqués */
+  weatherIcons?: import('@/composables/useWeather').WeatherIcons
 }
 export interface Widget {
   id?: string

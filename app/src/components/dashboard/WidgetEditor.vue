@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import {
+  WEATHER_DEFAULT_FIELDS,
+  WEATHER_FIELDS,
+  type WeatherField,
+  type WeatherView,
+} from '@/composables/useWeather'
 import { uploadImage } from '@/composables/useBranding'
 import AlarmWidgetEditor from '@/components/dashboard/AlarmWidgetEditor.vue'
 import { supabase } from '@/lib/supabase'
@@ -55,8 +61,7 @@ const needsVars = computed(
   () =>
     !['status', 'image', 'text', 'map', 'document', 'interventions', 'weather'].includes(
       w.value.type,
-    ) &&
-    !isAlarmWidget(w.value.type),
+    ) && !isAlarmWidget(w.value.type),
 )
 const multi = computed(() => props.devices.length > 1)
 
@@ -65,6 +70,19 @@ const newVar = ref('')
 const vars = computed(() => props.catalogs[newDev.value] ?? [])
 const boxVars = computed(() => vars.value.filter((v) => v.category !== 'weather'))
 const weatherVars = computed(() => vars.value.filter((v) => v.category === 'weather'))
+const weatherFields = computed(
+  () =>
+    w.value.options.weatherFields ?? WEATHER_DEFAULT_FIELDS[w.value.options.weatherView ?? 'now'],
+)
+function setWeatherView(v: WeatherView) {
+  // les contenus dépendent de la vue : on repart des contenus par défaut de la nouvelle vue
+  if ((w.value.options.weatherView ?? 'now') !== v) w.value.options.weatherFields = undefined
+  w.value.options.weatherView = v
+}
+function toggleWeatherField(f: WeatherField) {
+  const cur = weatherFields.value
+  w.value.options.weatherFields = cur.includes(f) ? cur.filter((x) => x !== f) : [...cur, f]
+}
 function addSource() {
   if (!newDev.value || !newVar.value) return
   if (!w.value.sources.some((s) => s.device === newDev.value && s.var === newVar.value))
@@ -324,7 +342,8 @@ function save() {
             <!-- météo relevée par le portail à l'adresse de la box -->
             <optgroup v-if="weatherVars.length" label="Météo (adresse de la box)">
               <option v-for="v in weatherVars" :key="v.var" :value="v.var">
-                {{ v.description?.replace(/^Météo : /, '') ?? v.var }}{{ v.unit ? ` (${v.unit})` : '' }}
+                {{ v.description?.replace(/^Météo : /, '') ?? v.var
+                }}{{ v.unit ? ` (${v.unit})` : '' }}
               </option>
             </optgroup>
           </select>
@@ -821,7 +840,56 @@ function save() {
                   ? 'bg-signal/15 text-signal'
                   : 'text-muted-foreground hover:text-foreground',
               ]"
-              @click="w.options.weatherView = o.v"
+              @click="setWeatherView(o.v)"
+            >
+              {{ o.l }}
+            </button>
+          </div>
+        </div>
+        <div>
+          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
+            Contenu
+          </div>
+          <div class="flex flex-wrap gap-1.5" data-testid="weather-fields">
+            <button
+              v-for="f in WEATHER_FIELDS[w.options.weatherView ?? 'now']"
+              :key="f.k"
+              type="button"
+              :data-testid="`weather-field-${f.k}`"
+              :aria-pressed="weatherFields.includes(f.k)"
+              :class="[
+                'px-2.5 py-1 rounded-full border text-xs transition',
+                weatherFields.includes(f.k)
+                  ? 'border-signal text-signal bg-signal/10'
+                  : 'border-border text-muted-foreground hover:text-foreground',
+              ]"
+              @click="toggleWeatherField(f.k)"
+            >
+              {{ f.l }}
+            </button>
+          </div>
+        </div>
+        <div>
+          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
+            Pictogrammes
+          </div>
+          <div class="inline-flex gap-1 p-1 border border-border rounded-md bg-card/40">
+            <button
+              v-for="o in [
+                { v: 'animated', l: 'Animés' },
+                { v: 'static', l: 'Fixes' },
+                { v: 'none', l: 'Chiffres seuls' },
+              ] as const"
+              :key="o.v"
+              type="button"
+              :data-testid="`weather-icons-${o.v}`"
+              :class="[
+                'px-3 py-1 rounded text-xs transition',
+                (w.options.weatherIcons ?? 'animated') === o.v
+                  ? 'bg-signal/15 text-signal'
+                  : 'text-muted-foreground hover:text-foreground',
+              ]"
+              @click="w.options.weatherIcons = o.v"
             >
               {{ o.l }}
             </button>
@@ -835,9 +903,7 @@ function save() {
             :value="w.sources[0]?.device ?? ''"
             class="bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
             data-testid="weather-device"
-            @change="
-              w.sources = [{ device: ($event.target as HTMLSelectElement).value, var: '' }]
-            "
+            @change="w.sources = [{ device: ($event.target as HTMLSelectElement).value, var: '' }]"
           >
             <option v-for="d in devices" :key="d.id" :value="d.id">{{ d.name }}</option>
           </select>

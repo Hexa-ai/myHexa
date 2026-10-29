@@ -831,6 +831,8 @@ const tableRows = computed(() =>
       v-else-if="w.type === 'weather'"
       :device-ids="w.sources.map((s) => s.device)"
       :view="w.options.weatherView ?? 'now'"
+      :fields="w.options.weatherFields"
+      :icons="w.options.weatherIcons"
       :devices="devices"
     />
 
