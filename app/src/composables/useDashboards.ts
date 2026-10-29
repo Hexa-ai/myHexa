@@ -24,6 +24,7 @@ export type WidgetType =
   | 'alarm_history'
   | 'alarm_stats'
   | 'interventions'
+  | 'weather'
 export type WidgetWidth = '1/4' | '1/3' | '1/2' | '2/3' | 'full'
 export type Op = 'sum' | 'mean' | 'min' | 'max'
 export type Stat = 'last' | 'mean' | 'min' | 'max' | 'total'
@@ -109,6 +110,8 @@ export interface WidgetOptions {
   severities?: ('error' | 'warning' | 'info')[]
   limit?: number
   chart?: boolean
+  /** météo : relevé actuel, prochaines 24 h ou 5 jours */
+  weatherView?: 'now' | 'hours' | 'days'
 }
 export interface Widget {
   id?: string
@@ -147,6 +150,7 @@ export const WIDGET_LABEL: Record<WidgetType, string> = {
   alarm_history: 'Historique d\u2019alarmes',
   alarm_stats: 'Statistiques d\u2019alarmes',
   interventions: 'Signalements',
+  weather: 'Météo',
 }
 /** blocs d'alarmes : les sources ne portent que les box (var vide), le filtre est dans les options */
 export const isAlarmWidget = (t: WidgetType) => t === 'alarm_history' || t === 'alarm_stats'
