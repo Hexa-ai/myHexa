@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DocumentsBlock from '@/components/dashboard/DocumentsBlock.vue'
+import WeatherBlock from '@/components/dashboard/WeatherBlock.vue'
 import { seriesColors, useTheme } from '@/composables/useTheme'
 import AlarmBlock from '@/components/dashboard/AlarmBlock.vue'
 import InterventionsBlock from '@/components/dashboard/InterventionsBlock.vue'
@@ -823,6 +824,16 @@ const tableRows = computed(() =>
       v-else-if="w.type === 'document'"
       :ids="w.options.docs ?? []"
       :layout="w.options.docLayout ?? 'cards'"
+    />
+
+    <!-- météo à l'adresse de la box (relevé du portail) -->
+    <WeatherBlock
+      v-else-if="w.type === 'weather'"
+      :device-ids="w.sources.map((s) => s.device)"
+      :view="w.options.weatherView ?? 'now'"
+      :fields="w.options.weatherFields"
+      :icons="w.options.weatherIcons"
+      :devices="devices"
     />
 
     <!-- alarmes : historique / statistiques (rapports journaliers) -->
