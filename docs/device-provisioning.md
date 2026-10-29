@@ -146,6 +146,19 @@ Content-Type: application/json
 - Le champ `devices.last_connection_at` est mis à jour automatiquement.
 - Le champ `devices.name` est synchronisé sur `body.device.hostname` à chaque appel (si fourni).
 
+### Position 4G (clé `location`, status ET rapport `daily`)
+
+Au premier niveau du JSON, la box peut envoyer sa position approximative (géolocalisation par antenne) :
+
+```json
+"location": { "latitude": 45.76, "longitude": 4.83, "accuracy_m": 1250, "source": "cell", "approximate": true, "resolved_at": "2026-10-31T10:05:00Z" }
+```
+
+- Clé absente (anciennes box) ou `null` (géoloc 4G désactivée / sans position) : rien ne change côté portail.
+- Objet valide : `devices.latitude/longitude` sont REMPLACÉS (y compris une adresse géocodée saisie à la main), avec `location_source = 'box'`, `location_accuracy_m`, `location_at` (= `resolved_at`, sinon l'heure de réception). Une position plus ancienne que celle déjà reçue est ignorée. Un déplacement de plus de 50 m (ou plus de 24 h) ajoute une ligne à `device_locations` (trace sur la carte).
+- Une saisie manuelle dans la fiche repasse la source à `manual` ; elle est écrasée au prochain envoi de la box.
+- La météo suit : le site est recalculé depuis les coordonnées de la box au prochain passage de `cron-weather`.
+
 ### Catégories de variables
 
 | Catégorie | Sens                                       | Affichage                                      |

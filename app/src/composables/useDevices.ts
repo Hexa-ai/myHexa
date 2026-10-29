@@ -15,6 +15,10 @@ export interface DeviceWithStatus {
   address: string | null
   latitude: number | null
   longitude: number | null
+  /** 'box' = position 4G transmise par la box ; 'manual' / null = saisie à la main */
+  location_source: string | null
+  location_accuracy_m: number | null
+  location_at: string | null
   last_connection_at: string | null
   vnc_host: string | null
   vnc_port: number | null
@@ -67,6 +71,9 @@ export function useDevices() {
         address: d.address,
         latitude: d.latitude,
         longitude: d.longitude,
+        location_source: d.location_source ?? null,
+        location_accuracy_m: d.location_accuracy_m ?? null,
+        location_at: d.location_at ?? null,
         last_connection_at: d.last_connection_at,
         vnc_host: d.vnc_host,
         vnc_port: d.vnc_port,

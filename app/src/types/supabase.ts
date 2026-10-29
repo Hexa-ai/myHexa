@@ -382,6 +382,9 @@ export type Database = {
           last_connection_at: string | null
           latitude: number | null
           longitude: number | null
+          location_accuracy_m: number | null
+          location_at: string | null
+          location_source: string | null
           mac_eth0: string | null
           name: string
           os_install_date: string | null
@@ -414,6 +417,9 @@ export type Database = {
           last_connection_at?: string | null
           latitude?: number | null
           longitude?: number | null
+          location_accuracy_m?: number | null
+          location_at?: string | null
+          location_source?: string | null
           mac_eth0?: string | null
           name: string
           os_install_date?: string | null
@@ -446,6 +452,9 @@ export type Database = {
           last_connection_at?: string | null
           latitude?: number | null
           longitude?: number | null
+          location_accuracy_m?: number | null
+          location_at?: string | null
+          location_source?: string | null
           mac_eth0?: string | null
           name?: string
           os_install_date?: string | null
@@ -818,6 +827,9 @@ export type Database = {
           id: string
           last_connection_at: string
           latitude: number
+          location_accuracy_m: number | null
+          location_at: string | null
+          location_source: string | null
           longitude: number
           mac_eth0: string
           name: string

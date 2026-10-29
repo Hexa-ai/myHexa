@@ -17,6 +17,9 @@ export interface MarkerInput {
   stateText?: string
   /** repère de projet : un carré avec le nombre de box et la synthèse d'état */
   project?: { total: number; online: number; names?: string[] }
+  /** position transmise par la box (4G) : précision en mètres -> cercle + mention dans l'infobulle */
+  fromBox?: boolean
+  accuracyM?: number | null
 }
 
 const props = withDefaults(
@@ -25,8 +28,10 @@ const props = withDefaults(
     height?: string
     zoom?: number
     interactive?: boolean
+    /** trace des positions successives de la box (historique 4G), du plus ancien au plus récent */
+    track?: Array<[number, number]>
   }>(),
-  { height: '260px', zoom: 13, interactive: true },
+  { height: '260px', zoom: 13, interactive: true, track: () => [] },
 )
 
 const emit = defineEmits<{
@@ -61,6 +66,13 @@ function markerStateClass(m: MarkerInput): string {
   if (m.severity === 'error') return 'hai-marker-error'
   if (m.severity === 'warning') return 'hai-marker-warning'
   return 'hai-marker-ok'
+}
+
+/** 1250 -> « 1,3 km », 480 -> « 480 m » */
+function formatAccuracy(m: number): string {
+  return m >= 1000
+    ? `${(m / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km`
+    : `${Math.round(m)} m`
 }
 
 function escapeHtml(s: string): string {
@@ -123,12 +135,18 @@ function tooltipHtml(m: MarkerInput): string {
   }
   if (m.stateText) stateLabel = m.stateText + (m.online === false ? ' (offline)' : '')
   const name = escapeHtml(m.label ?? '—')
+  const approx = m.fromBox
+    ? `<div class="hai-tip-approx" data-testid="map-approx">Position 4G approximative${
+        m.accuracyM != null ? ` ±${formatAccuracy(m.accuracyM)}` : ''
+      }</div>`
+    : ''
   return `
     <div class="hai-tip ${stateClass}"${m.color ? ` style="--tip-accent:${escapeHtml(m.color)}"` : ''}>
       <img src="/hai-p-gateway.png" class="hai-tip-img" alt="" />
       <div class="hai-tip-text">
         <div class="hai-tip-name">${name}</div>
         <div class="hai-tip-state">${stateLabel}</div>
+        ${approx}
       </div>
     </div>
   `
@@ -168,12 +186,48 @@ function buildMarkers() {
       opacity: 1,
     })
     c.on('click', () => emit('select', m.id))
+    if (m.fromBox && m.accuracyM != null && m.accuracyM > 0) {
+      // cercle de précision (turquoise, discret) sous le repère
+      L.circle([m.lat, m.lng], {
+        radius: m.accuracyM,
+        color: '#00d4aa',
+        weight: 1,
+        opacity: 0.7,
+        fillColor: '#00d4aa',
+        fillOpacity: 0.12,
+        interactive: false,
+        className: 'hai-accuracy-circle',
+      }).addTo(layer!)
+    }
     c.addTo(layer!)
     circles.push(c)
     circlesById.set(m.id, c)
   }
 
-  if (valid.length === 1) {
+  if (props.track.length > 1) {
+    L.polyline(props.track, {
+      color: '#00d4aa',
+      weight: 2,
+      opacity: 0.8,
+      dashArray: '4 6',
+      interactive: false,
+      className: 'hai-track',
+    }).addTo(layer!)
+  }
+
+  // une seule box : cadrer sur son cercle de précision et sa trace (sans dépasser le zoom prévu).
+  // Bornes calculées à la main : Circle.getBounds() exige une carte déjà positionnée.
+  const one = valid.length === 1 ? valid[0] : null
+  if (one && (one.accuracyM || props.track.length > 1)) {
+    const bounds = L.latLngBounds([[one.lat, one.lng]])
+    if (one.fromBox && one.accuracyM) {
+      const dLat = one.accuracyM / 111320
+      const dLng = one.accuracyM / (111320 * Math.max(0.05, Math.cos((one.lat * Math.PI) / 180)))
+      bounds.extend([one.lat - dLat, one.lng - dLng]).extend([one.lat + dLat, one.lng + dLng])
+    }
+    if (props.track.length > 1) bounds.extend(L.latLngBounds(props.track))
+    map.fitBounds(bounds.pad(0.15), { maxZoom: props.zoom })
+  } else if (valid.length === 1) {
     map.setView([valid[0].lat, valid[0].lng], props.zoom)
   } else {
     const group = L.featureGroup(circles)
@@ -208,7 +262,7 @@ onMounted(() => {
   buildMarkers()
 })
 
-watch(() => props.markers, buildMarkers, { deep: true })
+watch(() => [props.markers, props.track], buildMarkers, { deep: true })
 watch(theme, applyTiles)
 
 onBeforeUnmount(() => {
@@ -352,6 +406,15 @@ defineExpose({
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
+}
+.hai-tip-approx {
+  margin-top: 3px;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+  white-space: normal;
+  max-width: 130px;
+  text-align: center;
 }
 .hai-tip.is-online .hai-tip-state {
   color: var(--signal);

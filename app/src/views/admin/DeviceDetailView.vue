@@ -24,6 +24,9 @@ interface Device {
   address: string | null
   latitude: number | null
   longitude: number | null
+  location_source: string | null
+  location_accuracy_m: number | null
+  location_at: string | null
   vnc_host: string | null
   vnc_port: number | null
 }
@@ -35,6 +38,8 @@ interface Status {
 
 const device = ref<Device | null>(null)
 const status = ref<Status | null>(null)
+// trace des positions 4G de la box (device_locations), du plus ancien au plus récent
+const track = ref<Array<[number, number]>>([])
 const reportRef = ref<InstanceType<typeof DeviceReport> | null>(null)
 
 const role = computed(() => auth.recipient?.role ?? 'viewer')
@@ -84,7 +89,9 @@ async function onSaveLocation(address: string) {
     .from('devices')
     .update({ address: geo.displayName, latitude: geo.lat, longitude: geo.lng })
     .eq('id', device.value.id)
-    .select('id, company_id, name, address, latitude, longitude, vnc_host, vnc_port')
+    .select(
+      'id, company_id, name, address, latitude, longitude, location_source, location_accuracy_m, location_at, vnc_host, vnc_port',
+    )
     .single()
   if (updErr) {
     reportRef.value?.setLocationFeedback('error', updErr.message)
@@ -100,7 +107,9 @@ async function onSaveVnc({ host, port }: { host: string | null; port: number }) 
     .from('devices')
     .update({ vnc_host: host, vnc_port: port })
     .eq('id', device.value.id)
-    .select('id, company_id, name, address, latitude, longitude, vnc_host, vnc_port')
+    .select(
+      'id, company_id, name, address, latitude, longitude, location_source, location_accuracy_m, location_at, vnc_host, vnc_port',
+    )
     .single()
   if (updErr) {
     reportRef.value?.setVncFeedback('error', updErr.message)
@@ -122,7 +131,9 @@ async function loadDetail() {
   try {
     const { data: d, error: dErr } = await supabase
       .from('devices')
-      .select('id, company_id, name, address, latitude, longitude, vnc_host, vnc_port')
+      .select(
+        'id, company_id, name, address, latitude, longitude, location_source, location_accuracy_m, location_at, vnc_host, vnc_port',
+      )
       .eq('id', deviceId)
       .maybeSingle()
 
@@ -135,6 +146,17 @@ async function loadDetail() {
       return
     }
     device.value = d
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- table absente des types générés
+    const { data: locs } = await (supabase as any)
+      .from('device_locations')
+      .select('latitude, longitude')
+      .eq('device_id', d.id)
+      .order('at', { ascending: false })
+      .limit(100)
+    track.value = ((locs ?? []) as Array<{ latitude: number; longitude: number }>)
+      .reverse()
+      .map((p) => [Number(p.latitude), Number(p.longitude)] as [number, number])
 
     const { data: s, error: sErr } = await supabase
       .from('reports')
@@ -427,6 +449,7 @@ async function submitShare() {
       :status="status"
       :role="role"
       :can-edit-location="canEdit"
+      :track="track"
       :can-edit-vnc="canEdit"
       :vnc-host="device.vnc_host"
       :vnc-port="device.vnc_port"
