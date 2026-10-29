@@ -111,7 +111,9 @@ export async function issueRealtimeToken(req: Request, admin: Admin): Promise<Re
     // paramètres pilotés par le serveur (modifiables sans mise à jour du firmware)
     params: {
       heartbeat_s: 30,
-      publish_interval_ms: 1000,
+      fast_interval_ms: 1000, // mode rapide (spectateur « fast »), limité à max_direct_s
+      slow_interval_ms: 10000, // mode lent (affichage permanent)
+      slow_deadband_pct: 0.5, // bande morte du mode lent
       max_msgs_per_s: 2,
       max_direct_s: 900,
     },

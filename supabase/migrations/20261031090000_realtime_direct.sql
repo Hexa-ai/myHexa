@@ -104,6 +104,7 @@ create policy "rt utilisateur lit les canaux de ses box" on realtime.messages
     realtime.messages.extension in ('broadcast', 'presence')
     and public.rt_topic_device((select realtime.topic())) is not null
     and public.is_device_visible(public.rt_topic_device((select realtime.topic())))
+    and exists (select 1 from public.devices d where d.id = public.rt_topic_device((select realtime.topic())))  -- le staff Hexa voit tout, mais pas une box inexistante
   );
 -- utilisateur : présence seulement (jamais de broadcast : il ne peut pas se faire passer pour la box)
 create policy "rt utilisateur annonce sa presence" on realtime.messages
@@ -112,4 +113,5 @@ create policy "rt utilisateur annonce sa presence" on realtime.messages
     realtime.messages.extension = 'presence'
     and public.rt_topic_device((select realtime.topic())) is not null
     and public.is_device_visible(public.rt_topic_device((select realtime.topic())))
+    and exists (select 1 from public.devices d where d.id = public.rt_topic_device((select realtime.topic())))  -- le staff Hexa voit tout, mais pas une box inexistante
   );
