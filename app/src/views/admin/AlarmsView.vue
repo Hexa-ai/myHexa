@@ -21,6 +21,42 @@ import {
 } from '@/lib/utils'
 
 const router = useRouter()
+
+// Retrait d'une alarme restée active (box perdue, démontée…) : admins de l'entreprise de la box
+const canDismiss = (deviceId: string) => {
+  if (auth.isHexaStaffAdmin) return true
+  const d = devices.value.find((x) => x.id === deviceId)
+  return auth.recipient?.role === 'admin' && !!d && d.company_id === auth.recipient?.company_id
+}
+const confirmKey = ref<string | null>(null)
+const dismissMsg = ref<{ ok: boolean; text: string } | null>(null)
+let confirmTimer: ReturnType<typeof setTimeout> | undefined
+async function dismiss(deviceId: string, variable: string) {
+  const key = `${deviceId}|${variable}`
+  if (confirmKey.value !== key) {
+    confirmKey.value = key
+    clearTimeout(confirmTimer)
+    confirmTimer = setTimeout(() => (confirmKey.value = null), 5000)
+    return
+  }
+  confirmKey.value = null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('dismiss_alarm', {
+    p_device: deviceId,
+    p_variable: variable,
+  })
+  if (error || data?.status !== 'ok') {
+    dismissMsg.value = { ok: false, text: error?.message ?? data?.detail ?? 'échec du retrait' }
+  } else {
+    dismissMsg.value = {
+      ok: true,
+      text: `Alarme ${variable} retirée. Si la box renvoie un statut où elle est encore active, elle réapparaîtra.`,
+    }
+    await loadDevices()
+    alarmCounts?.refresh()
+  }
+  setTimeout(() => (dismissMsg.value = null), 6000)
+}
 const { devices, loading: devicesLoading, error: devicesError, load: loadDevices } = useDevices()
 
 // historique = occurrences (apparition -> disparition) issues des rapports journaliers (fichiers Parquet) ;
@@ -488,6 +524,13 @@ function openDevice(id: string) {
 
     <!-- Live (unified : sensor alarms + open interventions) -->
     <template v-if="mode === 'live'">
+      <p
+        v-if="dismissMsg"
+        data-testid="alarm-dismiss-msg"
+        :class="['mb-3 text-xs', dismissMsg.ok ? 'text-muted-foreground' : 'text-offline']"
+      >
+        {{ dismissMsg.text }}
+      </p>
       <div
         v-if="(devicesLoading || interventionsLoading) && !devices.length && !interventions.length"
         class="border border-border rounded-md bg-card/40 p-8 text-center font-mono text-sm text-muted-foreground"
@@ -520,6 +563,7 @@ function openDevice(id: string) {
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3 w-[100px]">Source</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Sujet</th>
               <th class="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-medium px-4 py-3">Détail</th>
+              <th class="w-[110px]" />
             </tr>
           </thead>
           <tbody>
@@ -573,6 +617,23 @@ function openDevice(id: string) {
                   {{ row.intervention.photo_paths.length }} photo{{ row.intervention.photo_paths.length > 1 ? 's' : '' }}
                 </div>
               </td>
+              <td class="px-3 py-3 text-right whitespace-nowrap">
+                <button
+                  v-if="row.kind === 'alarm' && canDismiss(row.device_id)"
+                  type="button"
+                  data-testid="alarm-dismiss"
+                  :class="[
+                    'font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded border transition',
+                    confirmKey === `${row.device_id}|${row.title}`
+                      ? 'border-offline text-offline bg-offline/10'
+                      : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/40',
+                  ]"
+                  title="Retirer cette alarme restée active (box perdue ou démontée)"
+                  @click.stop="dismiss(row.device_id, row.title)"
+                >
+                  {{ confirmKey === `${row.device_id}|${row.title}` ? 'Confirmer' : 'Retirer' }}
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -584,9 +645,11 @@ function openDevice(id: string) {
         class="md:hidden space-y-2 fade-up"
         style="animation-delay: 100ms"
       >
-        <button
+        <template
           v-for="(row, i) in filteredLive"
           :key="row.kind === 'alarm' ? `ma-${row.device_id}-${row.title}` : `mi-${row.intervention.id}`"
+        >
+        <button
           class="neu-card w-full text-left border border-border rounded-md bg-card/40 px-4 py-3 hover:bg-secondary/40 transition-colors fade-up"
           :style="{ animationDelay: `${Math.min(i * 25, 400)}ms` }"
           @click="row.kind === 'alarm' ? openDevice(row.device_id) : openDetail(row.intervention)"
@@ -637,6 +700,25 @@ function openDevice(id: string) {
             </div>
           </div>
         </button>
+        <div
+          v-if="row.kind === 'alarm' && canDismiss(row.device_id)"
+          class="flex justify-end -mt-1"
+        >
+          <button
+            type="button"
+            data-testid="alarm-dismiss-mobile"
+            :class="[
+              'font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded border transition',
+              confirmKey === `${row.device_id}|${row.title}`
+                ? 'border-offline text-offline bg-offline/10'
+                : 'border-border text-muted-foreground',
+            ]"
+            @click="dismiss(row.device_id, row.title)"
+          >
+            {{ confirmKey === `${row.device_id}|${row.title}` ? 'Confirmer le retrait' : 'Retirer l\'alarme' }}
+          </button>
+        </div>
+        </template>
       </div>
     </template>
 
