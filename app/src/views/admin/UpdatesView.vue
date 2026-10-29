@@ -59,12 +59,14 @@ const onlyTodo = ref(true)
 const selected = ref<string[]>([])
 const confirmIds = ref<string[] | null>(null)
 const busy = ref(false)
+/** versions publiées sur le dépôt des box (lues par le portail toutes les heures) */
+const releases = ref<{ version: string; description: string | null }[]>([])
 
 async function load() {
   loading.value = true
   error.value = null
   const since = new Date(Date.now() - 7 * 86400e3).toISOString()
-  const [b, c, r] = await Promise.all([
+  const [b, c, r, fr] = await Promise.all([
     supabase
       .from('devices')
       .select(
@@ -81,6 +83,8 @@ async function load() {
       .from('reports')
       .select('device_id, version:payload->device->>version')
       .eq('type', 'status'),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any).from('firmware_releases').select('version, description'),
   ])
   loading.value = false
   if (b.error || c.error) {
@@ -89,6 +93,9 @@ async function load() {
   }
   boxes.value = (b.data ?? []) as unknown as Box[]
   cmds.value = (c.data ?? []) as unknown as Cmd[]
+  releases.value = ((fr?.data ?? []) as { version: string; description: string | null }[]).sort(
+    (x, y) => (newer(x.version, y.version) ? -1 : newer(y.version, x.version) ? 1 : 0),
+  )
   reported.value = new Map(
     ((r.data ?? []) as unknown as { device_id: string; version: string | null }[])
       .filter((x) => x.version)
@@ -131,6 +138,23 @@ function atLeast(v: string, min: string) {
     if ((a[i] ?? 0) !== (m[i] ?? 0)) return (a[i] ?? 0) > (m[i] ?? 0)
   }
   return true
+}
+
+/** a strictement plus récente que b (suffixe ignoré) */
+const newer = (a: string, b: string) => !atLeast(b, a)
+const isVersion = (v: string | null | undefined): v is string => !!v && /^[0-9]/.test(v)
+/** dernière version publiée sur le dépôt */
+const latest = computed(() => releases.value[0] ?? null)
+/** version que la box installera : celle qu'elle propose, sinon la dernière du dépôt si plus récente */
+function targetOf(b: Box): { v: string; fromRepo: boolean } | null {
+  // sans version imposée, la box rafraîchit sa liste puis installe la plus récente du dépôt
+  const cand = isVersion(b.candidate_version) ? b.candidate_version : null
+  // même règle que queue_run_update : version annoncée par le bloc de pilotage à distance
+  const cur = b.pkg_version ?? b.running_version
+  const l = latest.value?.version
+  if (l && isVersion(cur) && newer(l, cur) && (!cand || newer(l, cand)))
+    return { v: l, fromRepo: true }
+  return cand ? { v: cand, fromRepo: false } : null
 }
 
 function state(b: Box): UState {
@@ -195,11 +219,16 @@ function state(b: Box): UState {
       detail: failed ?? 'la nouvelle version tournera au prochain redémarrage de la box',
       tone: 'warn',
     }
-  if (b.candidate_version)
+  const t = targetOf(b)
+  if (t)
     return {
       key: 'available',
-      label: `v${b.candidate_version} disponible`,
-      detail: failed,
+      label: `v${t.v} disponible`,
+      detail:
+        failed ??
+        (t.fromRepo
+          ? 'publiée sur le dépôt ; la box la téléchargera au lancement de la mise à jour'
+          : undefined),
       tone: failed ? 'bad' : 'warn',
     }
   return {
@@ -293,6 +322,16 @@ onBeforeUnmount(() => clearInterval(timer))
         La box télécharge la nouvelle version (~120 Mo, parfois en 4G), l'installe puis redémarre :
         supervision coupée quelques minutes. Chaque étape remonte au contact suivant de la box
         (toutes les 30 min) : compter 1 à 2 h. Pas de retour à une version antérieure.
+      </p>
+      <p
+        v-if="latest"
+        class="text-xs text-muted-foreground"
+        data-testid="latest-release"
+        :title="latest.description ?? undefined"
+      >
+        Dernière version publiée :
+        <span class="font-mono text-foreground">v{{ latest.version }}</span>
+        (vérifiée sur le dépôt toutes les heures)
       </p>
     </header>
 
@@ -420,7 +459,7 @@ onBeforeUnmount(() => clearInterval(timer))
             {{ boxById.get(id)?.name }}
             <span class="font-mono text-xs text-muted-foreground"
               >v{{ boxById.get(id)?.running_version ?? '?' }} → v{{
-                boxById.get(id)?.candidate_version
+                targetOf(boxById.get(id)!)?.v ?? '?'
               }}</span
             >
           </li>
