@@ -159,7 +159,8 @@ const deviceNameById = computed(() => {
 const filteredInterventions = computed(() => {
   return interventions.value.filter((r) => {
     if (selectedDevice.value !== 'all' && r.device_id !== selectedDevice.value) return false
-    if (!selectedTypes.value.has(r.severity)) return false
+    // un signalement est une déclaration humaine : toujours affiché, quelle que soit sa gravité
+    // (le filtre de sévérité, qui masque « info » par défaut, ne vaut que pour les alarmes des box)
     if (interventionStatusFilter.value !== 'all' && r.status !== interventionStatusFilter.value) return false
     return true
   })
@@ -296,7 +297,9 @@ const filteredLive = computed<LiveRow[]>(() => {
     ts: a.ts,
   }))
   const opens: LiveInterventionRow[] = interventions.value
-    .filter((r) => r.status === 'open' && matchesFilters({ device_id: r.device_id, type_alarm: r.severity }))
+    .filter(
+      (r) => r.status === 'open' && (selectedDevice.value === 'all' || r.device_id === selectedDevice.value),
+    )
     .map((r) => ({
       kind: 'intervention',
       intervention: r,
