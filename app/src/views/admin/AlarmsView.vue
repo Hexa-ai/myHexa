@@ -159,8 +159,7 @@ const deviceNameById = computed(() => {
 const filteredInterventions = computed(() => {
   return interventions.value.filter((r) => {
     if (selectedDevice.value !== 'all' && r.device_id !== selectedDevice.value) return false
-    // un signalement est une déclaration humaine : toujours affiché, quelle que soit sa gravité
-    // (le filtre de sévérité, qui masque « info » par défaut, ne vaut que pour les alarmes des box)
+    if (!selectedTypes.value.has(r.severity)) return false
     if (interventionStatusFilter.value !== 'all' && r.status !== interventionStatusFilter.value) return false
     return true
   })
@@ -300,9 +299,7 @@ const filteredLive = computed<LiveRow[]>(() => {
     ts: a.ts,
   }))
   const opens: LiveInterventionRow[] = interventions.value
-    .filter(
-      (r) => r.status === 'open' && (selectedDevice.value === 'all' || r.device_id === selectedDevice.value),
-    )
+    .filter((r) => r.status === 'open' && matchesFilters({ device_id: r.device_id, type_alarm: r.severity }))
     .map((r) => ({
       kind: 'intervention',
       intervention: r,
@@ -322,6 +319,27 @@ const filteredLive = computed<LiveRow[]>(() => {
 })
 
 const kpiActive = computed(() => filteredLive.value.length)
+
+// Filtre de sévérité : rendre visible ce qu'il masque (bandeau + boutons barrés)
+const hiddenTypes = computed(() => TYPE_OPTIONS.filter((t) => !selectedTypes.value.has(t)))
+const onDevice = (id: string) => selectedDevice.value === 'all' || id === selectedDevice.value
+const hiddenBySeverity = (t: string | null) => !selectedTypes.value.has((t ?? '').toLowerCase() as AlarmType)
+const hiddenCount = computed(() => {
+  if (!hiddenTypes.value.length) return 0
+  if (mode.value === 'history')
+    return history.value.filter((a) => onDevice(a.device_id) && hiddenBySeverity(a.type_alarm)).length
+  const sig = interventions.value.filter(
+    (r) =>
+      onDevice(r.device_id) &&
+      hiddenBySeverity(r.severity) &&
+      (mode.value === 'live' ? r.status === 'open' : interventionStatusFilter.value === 'all' || r.status === interventionStatusFilter.value),
+  ).length
+  if (mode.value === 'signalements') return sig
+  return sig + activeAlarms.value.filter((a) => onDevice(a.device_id) && hiddenBySeverity(a.type_alarm)).length
+})
+function showAllTypes() {
+  selectedTypes.value = new Set(TYPE_OPTIONS)
+}
 const kpiHistory = computed(() => filteredHistory.value.length)
 
 // ------------------------------ Rendering helpers ----------------------------
@@ -394,11 +412,16 @@ function openDevice(id: string) {
           :class="[
             'font-mono text-[10px] uppercase tracking-[0.18em] px-3 py-1.5 rounded-md border-2 transition inline-flex items-center gap-1.5',
             severityButtonClass(t, selectedTypes.has(t)),
+            !selectedTypes.has(t) && 'border-dashed opacity-70',
           ]"
+          :aria-pressed="selectedTypes.has(t)"
+          :title="selectedTypes.has(t) ? 'Cliquer pour masquer' : 'Masqué : cliquer pour afficher'"
+          :data-testid="`sev-${t}`"
           @click="toggleType(t)"
         >
           <span class="text-xs leading-none">{{ SEVERITY_ICON[t] }}</span>
-          {{ SEVERITY_LABEL[t] }}
+          <span :class="!selectedTypes.has(t) && 'line-through'">{{ SEVERITY_LABEL[t] }}</span>
+          <span v-if="!selectedTypes.has(t)" class="normal-case tracking-normal">masqué</span>
         </button>
       </div>
 
@@ -437,6 +460,30 @@ function openDevice(id: string) {
           Signalements · {{ kpiInterventions }}
         </button>
       </nav>
+    </div>
+
+    <div
+      v-if="hiddenTypes.length"
+      class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-warn/50 bg-warn/10 px-3 py-2 text-sm"
+      data-testid="filter-banner"
+      role="status"
+    >
+      <span>
+        <strong>Filtre actif</strong> :
+        {{ hiddenTypes.map((t) => SEVERITY_LABEL[t]).join(', ') }} masqué{{ hiddenTypes.length > 1 ? 's' : '' }}
+        <template v-if="hiddenCount > 0">
+          · <strong class="tabular">{{ hiddenCount }}</strong> élément{{ hiddenCount > 1 ? 's' : '' }} non
+          affiché{{ hiddenCount > 1 ? 's' : '' }} ici
+        </template>
+      </span>
+      <button
+        type="button"
+        class="ml-auto font-mono text-[10px] uppercase tracking-[0.18em] px-2.5 py-1 rounded border border-warn/60 hover:bg-warn/20"
+        data-testid="filter-show-all"
+        @click="showAllTypes"
+      >
+        Tout afficher
+      </button>
     </div>
 
     <!-- Live (unified : sensor alarms + open interventions) -->
