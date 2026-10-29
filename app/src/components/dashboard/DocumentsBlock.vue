@@ -242,11 +242,16 @@ const meta = (d: Doc) => [KIND[d.kind] ?? d.kind, size(d.size_bytes)].filter(Boo
           class="flex-1 w-full rounded-lg bg-neutral-600"
           :title="viewer.doc.name"
         />
-        <div v-else class="flex-1 min-h-0 grid place-items-center" @click.self="viewer = null">
+        <!-- image : même cadre que le PDF (même fond, mêmes arrondis), image centrée -->
+        <div
+          v-else
+          class="flex-1 min-h-0 w-full rounded-lg bg-neutral-600 p-4 sm:p-6 flex items-center justify-center overflow-hidden"
+          data-testid="doc-viewer-image"
+        >
           <img
             :src="viewer.url"
             :alt="viewer.doc.name"
-            class="max-w-full max-h-full object-contain rounded-md"
+            class="max-w-full max-h-full object-contain rounded-[3px] bg-white shadow-lg"
           />
         </div>
       </div>
