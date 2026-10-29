@@ -5,7 +5,8 @@ import AlarmBlock from '@/components/dashboard/AlarmBlock.vue'
 import InterventionsBlock from '@/components/dashboard/InterventionsBlock.vue'
 import DeviceMap, { type MarkerInput } from '@/components/DeviceMap.vue'
 // PROTOTYPE — rendu d'un bloc de tableau de bord (commun aux futurs rapports).
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { useLiveStore } from '@/stores/live'
 const { uiStyle } = useTheme()
 const appareil = computed(() => uiStyle.value === 'appareil')
 /** graduations du bouton rotatif (style appareil) : 41 traits sur 270° */
@@ -83,6 +84,8 @@ function seriesOf(map: SeriesMap | null | undefined) {
           w.value.op,
         ),
         desc: list.map((x) => srcLabel(x.s.device, x.s.var)).join(' + '),
+        dev: undefined as string | undefined,
+        vname: undefined as string | undefined,
       },
     ]
   return list.map((x) => ({
@@ -92,9 +95,47 @@ function seriesOf(map: SeriesMap | null | undefined) {
     state: ['state', 'alarm'].includes(x.m?.category ?? ''),
     points: x.ser!.points,
     desc: x.m?.description ?? '',
+    dev: x.s.device as string | undefined,
+    vname: x.s.var as string | undefined,
   }))
 }
 const series = computed(() => seriesOf(props.data))
+
+// ---- courbe en temps réel (mode direct) : la série défile, fenêtre glissante 5 / 15 / 60 min ----
+const live = useLiveStore()
+const RT_WINDOWS = [5, 15, 60]
+const rtOn = ref(false)
+const rtWin = ref(15)
+/** disponible : courbe simple (pas d'opération multi-box), direct actif, chaque série issue d'une variable de box */
+const rtAvailable = computed(
+  () =>
+    w.value.type === 'curve' &&
+    live.isActive &&
+    series.value.length > 0 &&
+    series.value.every((s) => !!s.dev && live.capable(s.dev)),
+)
+const rtActive = computed(() => rtOn.value && rtAvailable.value)
+const rtTo = computed(() => live.now)
+const rtFrom = computed(() => live.now - rtWin.value * 60_000)
+/** historique existant dans la fenêtre + fenêtre glissante du direct (raccord au premier point direct) */
+function rtPoints(s: { points: HistPoint[]; dev?: string; vname?: string }): HistPoint[] {
+  const trail = live.trail(s.dev!, s.vname!, rtWin.value * 60_000)
+  const from = Date.now() - rtWin.value * 60_000
+  const firstLive = trail.length ? trail[0][0] : Infinity
+  return [...s.points.filter((p) => p[0] >= from && p[0] < firstLive), ...trail]
+}
+/** séries telles que tracées : en temps réel, les points sont ceux de la fenêtre glissante */
+const cseries = computed(() =>
+  rtActive.value ? series.value.map((s) => ({ ...s, points: rtPoints(s) })) : series.value,
+)
+const cOverlayExtra = computed(() =>
+  rtActive.value
+    ? overlayExtra.value.map((e, i) => ({ ...e, points: cseries.value[i + 1].points }))
+    : overlayExtra.value,
+)
+const cFrom = computed(() => (rtActive.value ? rtFrom.value : props.range[0]))
+const cTo = computed(() => (rtActive.value ? rtTo.value : props.range[1]))
+const cGap = computed(() => (rtActive.value ? 0 : 2 * 3600e3))
 
 /** plusieurs courbes dans une seule tuile : 1re unité à gauche, les autres à droite */
 const overlay = computed(
@@ -169,6 +210,13 @@ const stat = computed(() =>
 
 /** valeur en direct (statut) d'une variable, si disponible */
 function liveOf(dev: string, name: string): number | null {
+  // mode direct actif et valeur fraîche : elle prime sur le dernier statut 30 min (sinon repli inchangé)
+  const lv = live.value(dev, name)
+  if (lv !== undefined && lv !== null) {
+    if (typeof lv === 'boolean') return lv ? 1 : 0
+    if (typeof lv === 'number') return Number.isFinite(lv) ? lv : null
+    if (lv.trim() !== '' && !isNaN(Number(lv))) return Number(lv)
+  }
   const d = props.devices.get(dev)
   const vars = (d?.status_payload as { variables?: { name?: string; value?: unknown }[] } | null)
     ?.variables
@@ -415,6 +463,38 @@ const tableRows = computed(() =>
       >
     </div>
 
+    <!-- courbe en temps réel : visible seulement quand le direct est actif sur des box qui l'annoncent -->
+    <div
+      v-if="rtAvailable"
+      class="flex items-center justify-end gap-2 mb-1 font-mono text-[10px]"
+      data-testid="rt-toggle"
+    >
+      <select
+        v-if="rtOn"
+        v-model.number="rtWin"
+        class="bg-card border border-border rounded-sm px-1 py-0.5"
+        aria-label="Fenêtre de la courbe en temps réel"
+        data-testid="rt-window"
+      >
+        <option v-for="m in RT_WINDOWS" :key="m" :value="m">{{ m }} min</option>
+      </select>
+      <button
+        type="button"
+        :class="[
+          'inline-flex items-center gap-1.5 rounded border px-2 py-0.5 uppercase tracking-wider',
+          rtOn
+            ? 'border-signal text-signal'
+            : 'border-border text-muted-foreground hover:border-signal/60',
+        ]"
+        :aria-pressed="rtOn"
+        data-testid="rt-btn"
+        @click="rtOn = !rtOn"
+      >
+        <span v-if="rtOn" class="live-dot" aria-hidden="true" />
+        Courbe en temps réel
+      </button>
+    </div>
+
     <!-- courbe / barres -->
     <template v-if="w.type === 'curve' || w.type === 'bars'">
       <div
@@ -440,19 +520,20 @@ const tableRows = computed(() =>
           </span>
         </div>
         <HistoryChart
-          :points="series[0].points"
+          :points="cseries[0].points"
           :label="series[0].label"
           :unit="series[0].unit"
           :color="COLORS[0]"
-          :from="range[0]"
-          :to="range[1]"
+          :from="cFrom"
+          :to="cTo"
           :step="series[0].state"
           :band="false"
-          :bars="w.type === 'bars' || series[0].counter ? barMs(series[0].points) : 0"
-          :gap-ms="2 * 3600e3"
-          :extra="overlayExtra"
+          :bars="!rtActive && (w.type === 'bars' || series[0].counter) ? barMs(series[0].points) : 0"
+          :gap-ms="cGap"
+          :fine="rtActive"
+          :extra="cOverlayExtra"
           :thresholds="w.options.thresholds ?? []"
-          :compare="series.map((s) => cmpPoints(s.label))"
+          :compare="rtActive ? [] : series.map((s) => cmpPoints(s.label))"
           :compare-label="cmpShort"
           height="200px"
         />
@@ -462,17 +543,18 @@ const tableRows = computed(() =>
           {{ s.label }}
         </div>
         <HistoryChart
-          :points="s.points"
+          :points="cseries[i].points"
           :label="s.label"
           :unit="s.unit"
           :color="COLORS[i % COLORS.length]"
-          :from="range[0]"
-          :to="range[1]"
+          :from="cFrom"
+          :to="cTo"
           :step="s.state"
-          :band="w.type === 'curve'"
-          :bars="w.type === 'bars' || s.counter ? barMs(s.points) : 0"
-          :gap-ms="2 * 3600e3"
-          :compare="[cmpPoints(s.label)]"
+          :band="w.type === 'curve' && !rtActive"
+          :bars="!rtActive && (w.type === 'bars' || s.counter) ? barMs(s.points) : 0"
+          :gap-ms="cGap"
+          :fine="rtActive"
+          :compare="rtActive ? [] : [cmpPoints(s.label)]"
           :thresholds="w.options.thresholds ?? []"
           :compare-label="cmpShort"
           :height="series.length > 1 ? '120px' : '170px'"

@@ -29,8 +29,12 @@ import ReportsPanel from '@/components/dashboard/ReportsPanel.vue'
 import DashboardSharePanel from '@/components/dashboard/DashboardSharePanel.vue'
 import TimeRangePicker from '@/components/TimeRangePicker.vue'
 import DashboardNavDrawer from '@/components/dashboard/DashboardNavDrawer.vue'
+import LiveControl from '@/components/dashboard/LiveControl.vue'
+import LiveBanner from '@/components/dashboard/LiveBanner.vue'
+import { useLiveStore } from '@/stores/live'
 
 const route = useRoute()
+const live = useLiveStore()
 const router = useRouter()
 const auth = useAuthStore()
 const { allDevices, load: loadDevices } = useDevices()
@@ -261,6 +265,44 @@ onMounted(() => {
   init()
   armAuto()
 })
+
+// ---- mode direct ----
+// box du tableau (blocs + portée) : le store ouvre UN canal par box et surveille la capacité « direct » ;
+// l'œil n'apparaît que si au moins l'une d'elles l'annonce.
+const liveIds = computed(() => {
+  const s = new Set<string>(scopeDevices.value.map((d) => d.id))
+  for (const w of widgets.value) for (const src of w.sources) if (src.device) s.add(src.device)
+  return [...s].sort()
+})
+const liveKey = computed(() => liveIds.value.join(','))
+let releaseLive: (() => void) | null = null
+watch(
+  liveKey,
+  () => {
+    releaseLive?.()
+    releaseLive = liveIds.value.length ? live.watch(liveIds.value) : null
+    // direct en cours et liste de box modifiée : on repart sur la nouvelle liste (même cadence)
+    if (live.mode !== 'off') live.start(liveIds.value, live.mode as 'fast' | 'slow')
+  },
+  { immediate: true },
+)
+/** affichage permanent demandé par l'admin sur CE tableau, et au moins une box l'annonce */
+const kiosk = computed(() => !!current.value?.live_display && live.anyCapable(liveIds.value))
+watch(
+  [kiosk, liveKey],
+  ([k]) => {
+    if (k) live.start(liveIds.value, 'slow')
+    else if (!k && live.mode === 'slow') live.stop()
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => {
+  releaseLive?.()
+  releaseLive = null
+  live.stop()
+})
+/** réglage « Affichage permanent » : proposé aux administrateurs, sur un tableau enregistré (colonne présente) */
+const canSetKiosk = computed(() => canManage.value && !!current.value?.id && current.value.live_display !== undefined)
 
 // ---- édition ----
 const editing = ref(false)
@@ -512,6 +554,7 @@ const backTo = computed(() =>
           data-testid="range-label"
           >{{ customLabel }}</span
         >
+        <LiveControl :device-ids="liveIds" :permanent="kiosk" />
         <label
           class="flex items-center gap-1 text-[11px] font-mono text-muted-foreground"
           :title="`Actualisé à ${new Date(lastRefresh).toLocaleTimeString('fr-FR')}`"
@@ -587,6 +630,7 @@ const backTo = computed(() =>
       </div>
     </header>
 
+    <LiveBanner />
     <div
       v-if="proposed && !loading"
       class="mb-4 text-xs text-muted-foreground border border-dashed border-border rounded px-3 py-2"
@@ -664,6 +708,13 @@ const backTo = computed(() =>
         "
         ><input v-model="current.is_default" type="checkbox" data-testid="dash-default" />
         {{ scope === 'device' ? 'ouvrir à la place de la fiche' : 'tableau par défaut' }}</label
+      >
+      <label
+        v-if="canSetKiosk"
+        class="text-xs flex items-center gap-1.5 text-muted-foreground"
+        title="Écran mural : les valeurs se mettent à jour toutes les ~10 s tant que le tableau est ouvert, sans limite de durée (si une box du tableau l'annonce). Réservé aux administrateurs."
+        ><input v-model="current.live_display" type="checkbox" data-testid="dash-live-display" />
+        affichage permanent (écran mural)</label
       >
       <button
         class="text-xs px-3 py-1.5 rounded border border-border"
