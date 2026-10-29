@@ -122,8 +122,8 @@ export const useLiveStore = defineStore('live', () => {
   function openChannel(id: string, e: Entry) {
     const d = dev(id)
     e.sent = null
-    let handle: LiveChannel
-    handle = e.ch = source.open(id, {
+    // les rappels du transport ne sont appelés qu'après le retour de open() (asynchrone par construction)
+    const handle: LiveChannel = (e.ch = source.open(id, {
       onStatus(s) {
         if (e.ch !== handle) return // canal remplacé ou fermé
         if (s === 'joined') {
@@ -152,7 +152,7 @@ export const useLiveStore = defineStore('live', () => {
       onValues(m) {
         if (e.ch === handle) ingest(id, m)
       },
-    })
+    }))
   }
 
   function ensureChannel(id: string) {

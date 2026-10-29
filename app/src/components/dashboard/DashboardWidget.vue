@@ -65,12 +65,18 @@ const meta = (dev: string, v: string) => props.catalogs[dev]?.find((x) => x.var 
 const devName = (id: string) => props.devices.get(id)?.name ?? '—'
 const srcLabel = (dev: string, v: string) => (props.multiDevice ? `${devName(dev)} · ${v}` : v)
 
+/** direct actif sur une box sans historique pour cette variable : série vide, la courbe temps réel la remplit */
+function liveStub(s: { device: string; var: string }) {
+  if (!live.isActive || !live.capable(s.device)) return undefined
+  return { var: s.var, unit: null, category: null, points: [] } as unknown as NonNullable<ReturnType<SeriesMap['get']>>
+}
+
 /** séries du bloc : une combinée si op, sinon une par source */
 function seriesOf(map: SeriesMap | null | undefined) {
   if (!map) return []
   const list = w.value.sources
     .filter((s) => s.var)
-    .map((s) => ({ s, ser: map.get(key(s)), m: meta(s.device, s.var) }))
+    .map((s) => ({ s, ser: map.get(key(s)) ?? liveStub(s), m: meta(s.device, s.var) }))
     .filter((x) => !!x.ser)
   if (w.value.op && list.length > 1)
     return [
