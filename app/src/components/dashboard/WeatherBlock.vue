@@ -244,7 +244,7 @@ const bar = (d: { min: number | null; max: number | null }) => {
           <div class="min-w-0 flex-1">
             <div class="flex items-start gap-1 leading-none" data-testid="weather-temp">
               <span class="wxb-big big-num tabular">{{ tempTxt }}</span>
-              <span class="wxb-unit pt-1.5">°C</span>
+              <span class="w-unit text-muted-foreground self-end pb-1">°C</span>
             </div>
             <div
               v-if="has('cond') || has('feels')"
@@ -428,9 +428,10 @@ const bar = (d: { min: number | null; max: number | null }) => {
 
 <style scoped>
 .wxb-big {
-  font-size: 64px;
+  /* même taille que les grands chiffres des autres tuiles (big-num text-3xl en style appareil) */
+  font-size: 3.25rem;
   font-weight: 300;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.02em;
 }
 .wxb-unit {
   font-family: ui-monospace, 'JetBrains Mono', monospace;
