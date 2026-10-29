@@ -136,6 +136,8 @@ export interface Dashboard {
   device_ids: string[]
   period: string
   is_default: boolean
+  /** affichage permanent (écran mural) : direct lent sans limite de durée. Absent tant que la migration n'est pas passée. */
+  live_display?: boolean
 }
 
 export const WIDGET_LABEL: Record<WidgetType, string> = {
@@ -272,6 +274,8 @@ export async function saveDashboard(d: Dashboard, widgets: Widget[]): Promise<st
     device_ids: d.device_ids,
     period: d.period,
     is_default: d.is_default,
+    // colonne ajoutée par la migration dashboards_live_display : n'écrire que si elle existe (front livré avant la base)
+    ...(d.live_display !== undefined ? { live_display: d.live_display } : {}),
   }
   let id = d.id
   // un seul tableau par défaut par box / projet : les autres perdent la marque

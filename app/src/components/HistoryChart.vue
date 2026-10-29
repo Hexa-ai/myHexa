@@ -53,6 +53,8 @@ const props = withDefaults(
     compareLabel?: string
     /** seuils : traits horizontaux pointillés sur l'axe de gauche, avec libellé et valeur */
     thresholds?: { value: number; label: string; color: string }[]
+    /** courbe en temps réel : graduations fines (30 s à 2 min) et horloge à la seconde sur les fenêtres courtes */
+    fine?: boolean
   }>(),
   {
     unit: '',
@@ -67,6 +69,7 @@ const props = withDefaults(
     compare: () => [],
     compareLabel: 'période préc.',
     thresholds: () => [],
+    fine: false,
   },
 )
 const emit = defineEmits<{
@@ -80,6 +83,7 @@ let silent = false
 
 const fmtDay = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit' })
 const fmtHour = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' })
+const fmtSec = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 const fmtFull = new Intl.DateTimeFormat('fr-FR', {
   day: '2-digit',
   month: '2-digit',
@@ -94,6 +98,7 @@ function tick(v: number | string) {
   const t = Number(v)
   const span = (chart?.scales.x.max ?? props.to) - (chart?.scales.x.min ?? props.from)
   const d = new Date(t)
+  if (props.fine && span <= 20 * 60e3) return fmtSec.format(d)
   const midnight = d.getHours() === 0 && d.getMinutes() === 0
   if (span > 6 * 86400e3) return fmtDay.format(d)
   if (midnight) return [fmtHour.format(d), fmtDay.format(d)]
@@ -101,9 +106,11 @@ function tick(v: number | string) {
 }
 
 // graduations « rondes » (5 min … 1 mois), alignées sur l'heure locale
+const FINE_STEPS = [0.5, 1, 2].map((m) => m * 60e3)
 const STEPS = [5, 15, 30, 60, 180, 360, 720, 1440, 2880, 10080, 20160, 43200].map((m) => m * 60e3)
 function niceTicks(min: number, max: number): { value: number }[] {
-  const step = STEPS.find((s) => (max - min) / s <= 7) ?? STEPS[STEPS.length - 1]
+  const steps = props.fine ? [...FINE_STEPS, ...STEPS] : STEPS
+  const step = steps.find((s) => (max - min) / s <= 7) ?? steps[steps.length - 1]
   const d = new Date(min)
   const off = d.getTimezoneOffset() * 60e3
   let t: number

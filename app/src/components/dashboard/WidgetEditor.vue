@@ -464,8 +464,8 @@ function save() {
             >Comparer avec</span
           >
           <select
-            data-testid="widget-compare-table"
             v-model="w.options.compare"
+            data-testid="widget-compare-table"
             class="mt-1 w-full bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
           >
             <option :value="null">rien</option>
@@ -639,8 +639,8 @@ function save() {
             >Comparer avec</span
           >
           <select
-            data-testid="widget-compare"
             v-model="w.options.compare"
+            data-testid="widget-compare"
             class="mt-1 w-full bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
           >
             <option :value="null">rien</option>

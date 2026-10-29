@@ -490,8 +490,8 @@ function goUsage() {
         </button>
 
         <button
-          :title="collapsed ? 'Destinataires' : undefined"
           v-if="isAdmin"
+          :title="collapsed ? 'Destinataires' : undefined"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isRecipients
@@ -590,8 +590,8 @@ function goUsage() {
         <div v-if="auth.isHexaStaff" class="my-3 border-t border-border" />
 
         <button
-          :title="collapsed ? 'Staff' : undefined"
           v-if="auth.isHexaStaff"
+          :title="collapsed ? 'Staff' : undefined"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
             isStaff
@@ -623,8 +623,8 @@ function goUsage() {
           >
         </button>
         <button
-          :title="collapsed ? 'Parc des box' : undefined"
           v-if="auth.isHexaStaff"
+          :title="collapsed ? 'Parc des box' : undefined"
           data-testid="nav-fleet"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
@@ -654,8 +654,8 @@ function goUsage() {
           <span class="tracking-tight">Parc des box</span>
         </button>
         <button
-          :title="collapsed ? 'Consommation' : undefined"
           v-if="auth.isHexaStaff"
+          :title="collapsed ? 'Consommation' : undefined"
           data-testid="nav-usage"
           :class="[
             'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',

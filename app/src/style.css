@@ -197,3 +197,17 @@
   }
   .alarm-flash { animation: alarm-flash 1.4s ease-out infinite; }
 }
+
+/* Mode direct : pastille turquoise animée (indicateur « Direct », courbe en temps réel) */
+.live-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--signal, #00d4aa);
+  animation: pulse-dot 1.8s ease-out infinite;
+}
+.live-dot.is-off { background: #8a8f98; animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+}
