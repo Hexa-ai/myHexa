@@ -16,6 +16,7 @@
 //   est simplement ignoré (et journalisé).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { issueRealtimeToken } from '../_shared/realtimeToken.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -150,6 +151,12 @@ Deno.serve(async (req) => {
 
   // /provision/<hostname>
   if (parts[0] === 'provision' && parts.length === 2) return provision(req)
+
+  // /ingress/<hostname>/realtime-token : jeton court pour le mode direct (Supabase Realtime), même Bearer que le statut.
+  // Contrairement au reste de /ingress (toujours 200), un jeton refusé répond 401 : le firmware ne doit PAS effacer son jeton.
+  if (parts[0] === 'ingress' && parts.length === 3 && parts[2] === 'realtime-token') {
+    return issueRealtimeToken(req, admin)
+  }
 
   // /ingress/<hostname>/status  et  /ingress/<hostname>/report/<period>
   if (parts[0] === 'ingress' && parts.length >= 3) {
