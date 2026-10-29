@@ -2,6 +2,7 @@
 import DocumentsBlock from '@/components/dashboard/DocumentsBlock.vue'
 import { seriesColors, useTheme } from '@/composables/useTheme'
 import AlarmBlock from '@/components/dashboard/AlarmBlock.vue'
+import InterventionsBlock from '@/components/dashboard/InterventionsBlock.vue'
 import DeviceMap, { type MarkerInput } from '@/components/DeviceMap.vue'
 // PROTOTYPE — rendu d'un bloc de tableau de bord (commun aux futurs rapports).
 import { computed } from 'vue'
@@ -450,6 +451,7 @@ const tableRows = computed(() =>
           :bars="w.type === 'bars' || series[0].counter ? barMs(series[0].points) : 0"
           :gap-ms="2 * 3600e3"
           :extra="overlayExtra"
+          :thresholds="w.options.thresholds ?? []"
           :compare="series.map((s) => cmpPoints(s.label))"
           :compare-label="cmpShort"
           height="200px"
@@ -471,6 +473,7 @@ const tableRows = computed(() =>
           :bars="w.type === 'bars' || s.counter ? barMs(s.points) : 0"
           :gap-ms="2 * 3600e3"
           :compare="[cmpPoints(s.label)]"
+          :thresholds="w.options.thresholds ?? []"
           :compare-label="cmpShort"
           :height="series.length > 1 ? '120px' : '170px'"
         />
@@ -821,6 +824,15 @@ const tableRows = computed(() =>
     <!-- alarmes : historique / statistiques (rapports journaliers) -->
     <AlarmBlock
       v-else-if="w.type === 'alarm_history' || w.type === 'alarm_stats'"
+      :widget="w"
+      :range="range"
+      :devices="devices"
+      :multi-device="multiDevice"
+    />
+
+    <!-- signalements : le dernier en grand avec ses photos, puis les suivants -->
+    <InterventionsBlock
+      v-else-if="w.type === 'interventions'"
       :widget="w"
       :range="range"
       :devices="devices"

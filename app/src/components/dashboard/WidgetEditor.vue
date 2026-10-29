@@ -13,6 +13,7 @@ import {
   OP_LABEL,
   STAT_LABEL,
   STATUS_FIELDS,
+  THRESHOLD_COLORS,
   WIDGET_LABEL,
   isAlarmWidget,
   type Op,
@@ -51,7 +52,9 @@ async function pickImage(ev: Event, set: (url: string) => void) {
 }
 const WIDTHS: WidgetWidth[] = ['1/4', '1/3', '1/2', '2/3', 'full']
 const needsVars = computed(
-  () => !['status', 'image', 'text', 'map', 'document'].includes(w.value.type) && !isAlarmWidget(w.value.type),
+  () =>
+    !['status', 'image', 'text', 'map', 'document', 'interventions'].includes(w.value.type) &&
+    !isAlarmWidget(w.value.type),
 )
 const multi = computed(() => props.devices.length > 1)
 
@@ -87,7 +90,17 @@ function setType(t: WidgetType) {
       w.value.sources = props.devices.map((d) => ({ device: d.id, var: '' }))
     w.value.options.severities ??= ['error', 'warning']
     w.value.options.compare ??= null
-    if (w.value.width === '1/4' || w.value.width === '1/3') w.value.width = t === 'alarm_history' ? 'full' : '1/2'
+    if (w.value.width === '1/4' || w.value.width === '1/3')
+      w.value.width = t === 'alarm_history' ? 'full' : '1/2'
+  } else if (t === 'interventions') {
+    w.value.op = null
+    if (!w.value.sources.length || w.value.sources.some((s) => s.var))
+      w.value.sources = props.devices.map((d) => ({ device: d.id, var: '' }))
+    w.value.options.kinds ??= ['signalement']
+    w.value.options.openOnly ??= true
+    w.value.options.photos ??= true
+    w.value.options.limit ??= 5
+    if (w.value.width === '1/4' || w.value.width === '1/3') w.value.width = '1/2'
   } else if (t === 'status') {
     w.value.sources = props.devices.map((d) => ({ device: d.id, var: '' }))
     w.value.options.fields ??= ['online', 'last_seen', 'uptime', 'version']
@@ -144,6 +157,17 @@ function toggleStatusDevice(id: string) {
     : [...w.value.sources, { device: id, var: '' }]
 }
 const isChart = computed(() => ['curve', 'bars'].includes(w.value.type))
+// seuils d'une courbe : trait horizontal + libellé
+function addThreshold() {
+  const t = w.value.options.thresholds ?? []
+  t.push({ value: 0, label: '', color: THRESHOLD_COLORS[t.length % THRESHOLD_COLORS.length].color })
+  w.value.options.thresholds = t
+}
+function toggleKind(k: 'signalement' | 'intervention') {
+  const a = w.value.options.kinds ?? ['signalement']
+  const n = a.includes(k) ? a.filter((x) => x !== k) : [...a, k]
+  w.value.options.kinds = n.length ? n : [k === 'signalement' ? 'intervention' : 'signalement']
+}
 function setMode(m: 'overlay' | 'separate') {
   w.value.op = null
   w.value.options.separate = m === 'separate'
@@ -175,6 +199,10 @@ function save() {
   )
     initStates()
   if (w.value.sources.filter((s) => s.var).length < 2) w.value.op = null
+  if (w.value.options.thresholds)
+    w.value.options.thresholds = w.value.options.thresholds
+      .filter((t) => typeof t.value === 'number' && Number.isFinite(t.value))
+      .map((t) => ({ ...t, label: (t.label ?? '').trim().slice(0, 60) }))
   emit('save', w.value)
 }
 </script>
@@ -412,6 +440,154 @@ function save() {
           </select>
         </label>
       </div>
+      <!-- seuils (courbes, barres) -->
+      <div v-if="isChart" class="mb-3" data-testid="threshold-editor">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+            >Seuils</span
+          >
+          <span class="text-[11px] text-muted-foreground"
+            >traits horizontaux pointillés, sur l'axe de gauche</span
+          >
+        </div>
+        <div
+          v-for="(t, i) in w.options.thresholds ?? []"
+          :key="i"
+          class="flex flex-wrap items-center gap-1.5 mb-1.5"
+          data-testid="threshold-row"
+        >
+          <input
+            v-model.number="t.value"
+            type="number"
+            step="any"
+            placeholder="valeur"
+            class="w-28 bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+            data-testid="threshold-value"
+          />
+          <input
+            v-model="t.label"
+            type="text"
+            maxlength="60"
+            placeholder="description (ex. seuil haut)"
+            class="flex-1 min-w-[10rem] bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+            data-testid="threshold-label"
+          />
+          <div class="flex gap-1">
+            <button
+              v-for="c in THRESHOLD_COLORS"
+              :key="c.color"
+              type="button"
+              :title="c.label"
+              :class="[
+                'h-6 w-6 rounded-full border-2',
+                t.color === c.color ? 'border-foreground' : 'border-transparent',
+              ]"
+              :style="{ background: c.color }"
+              @click="t.color = c.color"
+            />
+          </div>
+          <button
+            type="button"
+            class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-offline px-1"
+            @click="w.options.thresholds!.splice(i, 1)"
+          >
+            retirer
+          </button>
+        </div>
+        <button
+          type="button"
+          class="font-mono text-[10px] uppercase tracking-widest px-2.5 py-1 rounded border border-border hover:bg-muted"
+          data-testid="threshold-add"
+          @click="addThreshold"
+        >
+          + Ajouter un seuil
+        </button>
+      </div>
+
+      <!-- signalements -->
+      <div
+        v-if="w.type === 'interventions'"
+        class="mb-3 space-y-3"
+        data-testid="interventions-editor"
+      >
+        <div v-if="devices.length > 1">
+          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
+            Box
+          </div>
+          <div class="flex flex-wrap gap-x-4 gap-y-1">
+            <label
+              v-for="d in devices"
+              :key="d.id"
+              class="inline-flex items-center gap-1.5 text-sm"
+            >
+              <input
+                type="checkbox"
+                :checked="w.sources.some((s) => s.device === d.id)"
+                @change="toggleStatusDevice(d.id)"
+              />
+              {{ d.name }}
+            </label>
+          </div>
+        </div>
+        <div>
+          <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
+            Afficher
+          </div>
+          <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            <label class="inline-flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                :checked="(w.options.kinds ?? ['signalement']).includes('signalement')"
+                @change="toggleKind('signalement')"
+              />
+              signalements
+            </label>
+            <label class="inline-flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                :checked="(w.options.kinds ?? []).includes('intervention')"
+                @change="toggleKind('intervention')"
+              />
+              interventions
+            </label>
+            <label class="inline-flex items-center gap-1.5">
+              <input
+                v-model="w.options.photos"
+                type="checkbox"
+                data-testid="interventions-photos"
+              />
+              photos
+            </label>
+          </div>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <label class="text-sm">
+            <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+              >Lesquels</span
+            >
+            <select
+              v-model="w.options.openOnly"
+              class="mt-1 w-full bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+            >
+              <option :value="true">les ouverts (non résolus)</option>
+              <option :value="false">ceux de la période du tableau</option>
+            </select>
+          </label>
+          <label class="text-sm">
+            <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+              >Nombre affiché</span
+            >
+            <input
+              v-model.number="w.options.limit"
+              type="number"
+              min="1"
+              max="20"
+              class="mt-1 w-full bg-card border border-border rounded-sm px-2 py-1.5 text-sm"
+            />
+          </label>
+        </div>
+      </div>
+
       <div v-if="['value', 'gauge'].includes(w.type)" class="grid sm:grid-cols-2 gap-3 mb-3">
         <label class="text-sm">
           <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
@@ -567,7 +743,12 @@ function save() {
           </select>
         </div>
       </div>
-      <AlarmWidgetEditor v-if="isAlarmWidget(w.type)" :key="w.type" :widget="w" :devices="devices" />
+      <AlarmWidgetEditor
+        v-if="isAlarmWidget(w.type)"
+        :key="w.type"
+        :widget="w"
+        :devices="devices"
+      />
       <div v-if="w.type === 'status'" class="mb-3">
         <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
           Champs

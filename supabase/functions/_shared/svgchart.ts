@@ -96,6 +96,9 @@ export function timeChartSvg(opts: {
   bars?: number
   width?: number
   height?: number
+  /** seuils : traits horizontaux pointillés sur l'axe de gauche, avec libellé et valeur */
+  thresholds?: { value: number; label: string; color: string }[]
+  unit?: string | null
 }): string {
   const W = opts.width ?? 600
   const H = opts.height ?? 210
@@ -121,7 +124,14 @@ export function timeChartSvg(opts: {
     if (opts.bars) lo = Math.min(lo, 0)
     return lo === Infinity ? [0, 1] : [lo, hi]
   }
-  const ticksL = niceScale(...(range(left) as [number, number]))
+  const thr = (opts.thresholds ?? []).filter((t) => typeof t.value === 'number' && Number.isFinite(t.value))
+  const rl = range(left) as [number, number]
+  // les seuils restent dans le cadre, même loin des valeurs de la période
+  for (const t of thr) {
+    rl[0] = Math.min(rl[0], t.value)
+    rl[1] = Math.max(rl[1], t.value)
+  }
+  const ticksL = niceScale(...rl)
   const ticksR = right.length ? niceScale(...(range(right) as [number, number])) : []
   // décimales des graduations selon le pas (évite « 0,01 0,01 » pour 0,005 / 0,015)
   const dec = (t: number[]) => {
@@ -185,6 +195,14 @@ export function timeChartSvg(opts: {
         `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="1.6" stroke-linejoin="round"${s.dashed ? ' stroke-dasharray="4 3" stroke-opacity="0.7"' : ''}/>`,
       )
   })
+  for (const t of thr) {
+    const yy = yL(t.value)
+    const col = /^#[0-9a-fA-F]{6}$/.test(t.color) ? t.color : '#dc2626'
+    const txt = `${t.label ? t.label + ' · ' : ''}${fmtNum(t.value)}${opts.unit ? ' ' + opts.unit : ''}`
+    const ty = yy - 3 < MT + 10 ? yy + 11 : yy - 3
+    parts.push(`<line x1="${ML}" x2="${W - MR}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="${col}" stroke-width="1.2" stroke-dasharray="6 4"/>`)
+    parts.push(`<text x="${W - MR - 4}" y="${ty.toFixed(1)}" text-anchor="end" fill="${col}">${esc(txt)}</text>`)
+  }
   parts.push(`<line x1="${ML}" x2="${W - MR}" y1="${MT + ph}" y2="${MT + ph}" stroke="#9ca3af"/>`)
   parts.push('</svg>')
   return parts.join('')

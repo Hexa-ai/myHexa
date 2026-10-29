@@ -287,7 +287,7 @@ async function renderWidget(w: Widget, ctx: Ctx): Promise<Block | null> {
           parts.push({ k: 'legend', items: cs.map((c) => ({ color: c.color, label: `${c.label} ${c.unit ?? ''}${c.axis === 'right' ? ' (axe droit)' : ''}` })), extra: total })
         else parts.push({ k: 'text', t: [g[0].unit ?? '', g[0].desc, total].filter((x) => x).join(' · '), color: '#6b7280', size: 11 })
         if (cmpKind) parts.push({ k: 'text', t: `Pointillés : ${cmpKind === 'year' ? 'même période l’an dernier' : 'période précédente'}`, color: '#6b7280', size: 10 })
-        parts.push({ k: 'img', img: await image(ctx, timeChartSvg({ series: drawn, from: ctx.from, to: ctx.to, tz: ctx.tz, bars: bars ? barMs(span) : 0 }), 600, 210) })
+        parts.push({ k: 'img', img: await image(ctx, timeChartSvg({ series: drawn, from: ctx.from, to: ctx.to, tz: ctx.tz, bars: bars ? barMs(span) : 0, thresholds: w.options.thresholds, unit: g[0].unit }), 600, 210) })
       }
       if (missing.length) parts.push({ k: 'text', t: `Sans données sur la période : ${missing.join(', ')}`, color: '#9ca3af', size: 11 })
       return { title: title || 'Graphique', parts }

@@ -23,6 +23,7 @@ export type WidgetType =
   | 'text'
   | 'alarm_history'
   | 'alarm_stats'
+  | 'interventions'
 export type WidgetWidth = '1/4' | '1/3' | '1/2' | '2/3' | 'full'
 export type Op = 'sum' | 'mean' | 'min' | 'max'
 export type Stat = 'last' | 'mean' | 'min' | 'max' | 'total'
@@ -62,7 +63,27 @@ export const DEFAULT_ALARM_STATES: StateLook[] = [
   { value: 1, label: 'Défaut', color: '#dc2626' },
 ]
 
+/** seuil tracé sur une courbe : trait horizontal pointillé, avec un libellé et sa valeur */
+export interface Threshold {
+  value: number
+  label: string
+  color: string
+}
+export const THRESHOLD_COLORS = [
+  { color: '#dc2626', label: 'rouge' },
+  { color: '#f59e0b', label: 'orange' },
+  { color: '#2563eb', label: 'bleu' },
+  { color: '#16a34a', label: 'vert' },
+  { color: '#6b7280', label: 'gris' },
+]
+
 export interface WidgetOptions {
+  /** courbes / barres : seuils (traits horizontaux) */
+  thresholds?: Threshold[]
+  /** bloc signalements : types retenus, ouverts seulement (sinon : ceux de la période), photos affichées */
+  kinds?: ('signalement' | 'intervention')[]
+  openOnly?: boolean
+  photos?: boolean
   /** documents : identifiants de device_documents affichés (plans, manuels, photos…) */
   docs?: string[]
   /** voyant : une couleur, un libellé et éventuellement une image par valeur */
@@ -123,6 +144,7 @@ export const WIDGET_LABEL: Record<WidgetType, string> = {
   text: 'Texte',
   alarm_history: 'Historique d\u2019alarmes',
   alarm_stats: 'Statistiques d\u2019alarmes',
+  interventions: 'Signalements',
 }
 /** blocs d'alarmes : les sources ne portent que les box (var vide), le filtre est dans les options */
 export const isAlarmWidget = (t: WidgetType) => t === 'alarm_history' || t === 'alarm_stats'
