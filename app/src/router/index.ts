@@ -18,6 +18,7 @@ import StaffCompaniesView from '@/views/admin/staff/CompaniesView.vue'
 import StaffCompanyDetailView from '@/views/admin/staff/CompanyDetailView.vue'
 import StaffDevicesView from '@/views/admin/staff/DevicesView.vue'
 import UpdatesView from '@/views/admin/UpdatesView.vue'
+import NotificationsView from '@/views/admin/NotificationsView.vue'
 import StaffDeviceNewView from '@/views/admin/staff/DeviceNewView.vue'
 import StaffDeviceEditView from '@/views/admin/staff/DeviceEditView.vue'
 import InterventionView from '@/views/public/InterventionView.vue'
@@ -93,6 +94,7 @@ export const router = createRouter({
           component: AlarmRecipientsView,
         },
         { path: 'updates', name: 'admin-updates', component: UpdatesView },
+        { path: 'notifications', name: 'admin-notifications', component: NotificationsView },
         {
           path: 'staff/companies',
           name: 'staff-companies',

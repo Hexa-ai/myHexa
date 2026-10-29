@@ -518,7 +518,7 @@ async function sendRow(d: Device) {
                 draft.restrict_to_devices?.length
                   ? `${draft.restrict_to_devices.length} box visibles`
                   : 'toutes les box'
-              }}. Reçoit aussi les mails du portail (rapports, connectivité).
+              }}. Mails du portail (perte de liaison, récapitulatif) : selon la page Notifications.
             </div>
             <p v-if="invisible.length" class="text-xs text-amber-400">
               Reçoit les alarmes de {{ invisible.length }} box qu'il ne voit pas dans le portail :
