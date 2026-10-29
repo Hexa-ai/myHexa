@@ -51,6 +51,8 @@ const props = withDefaults(
      *  ([principale, ...extra]) ; tracés en pointillés de la même couleur (barres : colonne pointillée à gauche) */
     compare?: (HistPoint[] | null)[]
     compareLabel?: string
+    /** seuils : traits horizontaux pointillés sur l'axe de gauche, avec libellé et valeur */
+    thresholds?: { value: number; label: string; color: string }[]
   }>(),
   {
     unit: '',
@@ -64,6 +66,7 @@ const props = withDefaults(
     extra: () => [],
     compare: () => [],
     compareLabel: 'période préc.',
+    thresholds: () => [],
   },
 )
 const emit = defineEmits<{
@@ -312,6 +315,12 @@ function valueAt(points: HistPoint[], t: number, bars: number): HistPoint | unde
   return best
 }
 
+function validThresholds() {
+  return (props.thresholds ?? []).filter(
+    (t) => typeof t.value === 'number' && Number.isFinite(t.value),
+  )
+}
+
 function build() {
   if (!canvas.value) return
   chart?.destroy()
@@ -399,6 +408,16 @@ function build() {
           },
         },
         y: {
+          // les seuils restent toujours dans le cadre, même loin des valeurs de la période
+          afterDataLimits: (axis) => {
+            const t = validThresholds()
+            if (!t.length) return
+            const lo = Math.min(axis.min, ...t.map((x) => x.value))
+            const hi = Math.max(axis.max, ...t.map((x) => x.value))
+            const pad = (hi - lo || Math.abs(hi) || 1) * 0.06
+            if (lo < axis.min) axis.min = lo - pad
+            if (hi > axis.max) axis.max = hi + pad
+          },
           ticks: { font: { size: 10 }, maxTicksLimit: 5 },
           grid: { color: 'rgba(127,127,127,0.12)' },
           title: {
@@ -427,6 +446,36 @@ function build() {
       },
     },
     plugins: [
+      {
+        id: 'thresholds',
+        afterDatasetsDraw(c) {
+          const t = validThresholds()
+          if (!t.length) return
+          const { left, right, top, bottom } = c.chartArea
+          const g = c.ctx
+          g.save()
+          g.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace'
+          g.textAlign = 'right'
+          g.textBaseline = 'bottom'
+          for (const th of t) {
+            const y = c.scales.y.getPixelForValue(th.value)
+            if (y < top - 0.5 || y > bottom + 0.5) continue
+            g.strokeStyle = th.color
+            g.lineWidth = 1.25
+            g.setLineDash([6, 4])
+            g.beginPath()
+            g.moveTo(left, y)
+            g.lineTo(right, y)
+            g.stroke()
+            const txt = `${th.label ? th.label + ' · ' : ''}${fmtNum(th.value).replace(".", ",")}${props.unit ? ' ' + props.unit : ''}`
+            // libellé au-dessus du trait (en dessous s'il touche le haut du cadre)
+            const ty = y - 2 < top + 12 ? y + 13 : y - 2
+            g.fillStyle = th.color
+            g.fillText(txt, right - 4, ty)
+          }
+          g.restore()
+        },
+      },
       {
         id: 'cursor',
         afterDraw(c) {
@@ -466,6 +515,7 @@ watch(
     props.bars,
     props.extra,
     props.compare,
+    JSON.stringify(props.thresholds),
   ],
   () => {
     if (!chart || multi.value) return build()

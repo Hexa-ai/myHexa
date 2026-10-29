@@ -135,17 +135,20 @@ async function toggleStatus(row: InterventionRow) {
 // Detail modal + lightbox
 const detailRow = ref<InterventionRow | null>(null)
 const detailPhotoUrls = ref<string[]>([])
+const detailPhotoError = ref(false)
 const detailLightbox = ref<number | null>(null)
 
 async function openDetail(row: InterventionRow) {
   detailRow.value = row
   detailPhotoUrls.value = []
+  detailPhotoError.value = false
   if (row.photo_paths.length === 0) return
   const { data, error: err } = await supabase.storage
     .from('intervention-photos')
     .createSignedUrls(row.photo_paths, 60 * 30)
-  if (err) {
+  if (err || !(data ?? []).some((d) => d.signedUrl)) {
     console.error('[interventions] signed urls failed', err)
+    detailPhotoError.value = true
     return
   }
   detailPhotoUrls.value = (data ?? [])
@@ -424,7 +427,10 @@ useAutoRefresh(load, { intervalMs: 60_000 })
               <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
                 Photos ({{ detailRow.photo_paths.length }})
               </div>
-              <div v-if="!detailPhotoUrls.length" class="font-mono text-xs text-muted-foreground">
+              <div v-if="detailPhotoError" class="font-mono text-xs text-offline" data-testid="photo-error">
+                Photo inaccessible.
+              </div>
+              <div v-else-if="!detailPhotoUrls.length" class="font-mono text-xs text-muted-foreground">
                 <span class="blink">▍</span> chargement…
               </div>
               <div v-else class="grid grid-cols-3 gap-2">
