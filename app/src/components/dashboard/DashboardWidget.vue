@@ -819,7 +819,11 @@ const tableRows = computed(() =>
     </template>
 
     <!-- documents des box -->
-    <DocumentsBlock v-else-if="w.type === 'document'" :ids="w.options.docs ?? []" />
+    <DocumentsBlock
+      v-else-if="w.type === 'document'"
+      :ids="w.options.docs ?? []"
+      :layout="w.options.docLayout ?? 'cards'"
+    />
 
     <!-- alarmes : historique / statistiques (rapports journaliers) -->
     <AlarmBlock

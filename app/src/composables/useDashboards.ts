@@ -86,6 +86,8 @@ export interface WidgetOptions {
   photos?: boolean
   /** documents : identifiants de device_documents affichés (plans, manuels, photos…) */
   docs?: string[]
+  /** documents : présentation en fiches par format (défaut) ou en liste */
+  docLayout?: 'cards' | 'list'
   /** voyant : une couleur, un libellé et éventuellement une image par valeur */
   states?: StateLook[]
   /** voyant : synthèse de plusieurs états en un seul (au moins un actif / tous actifs / le plus élevé) */
