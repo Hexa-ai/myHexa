@@ -1,240 +1,232 @@
-// Edge Function: cron-connectivity-alerts (modèle unifié)
-// Code repris tel quel de la version déployée en prod (v12 du 2026-05-21), plus récente que le dépôt :
-// états d'alerte lus dans connectivity_alerts par une requête séparée (plus de jointure embarquée).
-// Réalignement du 2026-10-22.
-// Magic link redirige vers /auth/callback?next=/admin/devices/:id
+// Edge Function: cron-connectivity-alerts
+// Alertes de perte / retour de liaison des box (seul cas que la box ne peut pas signaler elle-même).
+// Réglages par entreprise (companies.connectivity_alerts_enabled / connectivity_delay_minutes),
+// destinataires choisis box par box (connectivity_subscriptions), mode maintenance par box
+// (devices.alerts_paused_until). Un seul mail par personne et par passage, qui regroupe toutes
+// les box concernées. Sans configuration Gmail (projet de test) : aucun envoi, réponse « dry_run ».
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendMail, closeMailer, mailerConfigured } from "../_shared/mailer.ts";
+import {
+  buildEmail,
+  computeTransitions,
+  type CompanyCfg,
+  type Transition,
+} from "./logic.ts";
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { sendMail, closeMailer } from '../_shared/mailer.ts'
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
+const APP_URL = Deno.env.get("APP_URL") ?? "https://my.hexa-ai.fr";
+// Garde-fou optionnel : n'écrire qu'aux adresses de ce domaine (ex. hexa-ai.fr pendant les essais)
+const ALLOW_DOMAIN = (Deno.env.get("ALERT_MAIL_ALLOW_DOMAIN") ?? "")
+  .trim()
+  .toLowerCase();
 
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const CRON_SECRET = Deno.env.get('CRON_SECRET') ?? ''
-const APP_URL = Deno.env.get('APP_URL') ?? 'https://my.hexa-ai.fr'
-const LOST_THRESHOLD_MS = 60 * 60 * 1000
+const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
+  auth: { persistSession: false },
+});
 
-const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } })
-
-interface DeviceState {
-  id: string
-  company_id: string
-  name: string | null
-  last_seen_at: string | null
-  last_notified_state: 'lost' | 'recovered' | null
-}
-interface Transition {
-  device_id: string
-  hostname: string
-  company_id: string
-  last_seen_at: string
-  transition: 'lost' | 'recovered'
-  offline_minutes: number
-}
 interface Recipient {
-  id: string
-  contact_email: string
-  name: string | null
-  company_id: string | null
-  restrict_to_devices: string[] | null
-  shared_devices: string[] | null
-  auth_user_id: string
+  id: string;
+  contact_email: string;
+  name: string | null;
+  portal_access: boolean;
+  auth_user_id: string | null;
 }
 
-function escapeHtml(s: string): string {
-  return String(s ?? '').replace(
-    /[&<>"']/g,
-    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
-  )
-}
-function formatDateTime(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Europe/Paris',
-  })
-}
-function formatDuration(minutes: number): string {
-  if (minutes < 60) return `${minutes} min`
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  if (h < 24) return m ? `${h}h ${m}min` : `${h}h`
-  const d = Math.floor(h / 24)
-  const rh = h % 24
-  return rh ? `${d}j ${rh}h` : `${d}j`
-}
-
-async function makeMagicLink(email: string, redirectTo: string): Promise<string | null> {
+async function makeMagicLink(
+  email: string,
+  redirectTo: string,
+): Promise<string | null> {
   const { data, error } = await admin.auth.admin.generateLink({
-    type: 'magiclink',
+    type: "magiclink",
     email,
     options: { redirectTo },
-  })
+  });
   if (error) {
-    console.error('[connectivity-alerts] generateLink failed for', email, error.message)
-    return null
+    console.error("[connectivity-alerts] generateLink failed", error.message);
+    return null;
   }
-  return data?.properties?.action_link ?? null
-}
-
-function buildEmail(t: Transition, recipient: Recipient, viewUrl: string) {
-  const isLost = t.transition === 'lost'
-  const subjectIcon = isLost ? '🔴' : '🟢'
-  const subjectText = isLost ? 'Équipement perdu' : 'Équipement reconnecté'
-  const subject = `${subjectIcon} ${subjectText} : ${t.hostname}`
-  const heading = isLost
-    ? `Connexion perdue avec <strong>${escapeHtml(t.hostname)}</strong>`
-    : `Connexion rétablie avec <strong>${escapeHtml(t.hostname)}</strong>`
-  const detail = isLost
-    ? `Aucune donnée reçue depuis le ${escapeHtml(formatDateTime(t.last_seen_at))} (soit ${escapeHtml(formatDuration(t.offline_minutes))}).`
-    : `L'équipement a recommencé à émettre des données (interruption d'environ ${escapeHtml(formatDuration(t.offline_minutes))}).`
-  const banner = isLost
-    ? `<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:14px 18px;border-radius:8px;margin-bottom:20px;font-size:14px;">⚠ ${detail}</div>`
-    : `<div style="background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;padding:14px 18px;border-radius:8px;margin-bottom:20px;font-size:14px;">✓ ${detail}</div>`
-  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>${escapeHtml(subjectText)}</title></head><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#111;background:#fafafa;margin:0;padding:20px 24px;"><div style="max-width:600px;margin:0 auto;"><h1 style="margin:0 0 16px 0;font-size:22px;color:#111;letter-spacing:-0.5px;">${heading}</h1><p style="margin:0 0 8px 0;color:#6b7280;font-size:14px;">Bonjour ${escapeHtml(recipient.name ?? '')},</p>${banner}<p style="margin:0 0 20px 0;"><a href="${viewUrl}" style="display:inline-block;background:#00d4aa;color:#0a0f14;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;">Voir l'équipement →</a></p></div></body></html>`
-  return { subject, html }
+  return data?.properties?.action_link ?? null;
 }
 
 Deno.serve(async (req) => {
-  const provided = req.headers.get('x-cron-secret') ?? ''
-  if (!CRON_SECRET || provided !== CRON_SECRET) return new Response('Unauthorized', { status: 401 })
-  const startedAt = Date.now()
+  const provided = req.headers.get("x-cron-secret") ?? "";
+  if (!CRON_SECRET || provided !== CRON_SECRET)
+    return new Response("Unauthorized", { status: 401 });
+  const startedAt = Date.now();
+  const json = (o: unknown, status = 200) =>
+    new Response(JSON.stringify(o), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
 
-  const { data: devs, error: devErr } = await admin.from('devices').select('id, company_id, name')
-  if (devErr) {
-    console.error('[connectivity-alerts] load devices failed', devErr)
-    return new Response(JSON.stringify({ ok: false, error: devErr.message }), { status: 500 })
+  const [
+    { data: comps, error: cErr },
+    { data: devs, error: dErr },
+    { data: alerts, error: aErr },
+  ] = await Promise.all([
+    admin
+      .from("companies")
+      .select("id, connectivity_alerts_enabled, connectivity_delay_minutes"),
+    admin.from("devices").select("id, company_id, name, alerts_paused_until"),
+    admin
+      .from("connectivity_alerts")
+      .select("device_id, state, last_notified_at"),
+  ]);
+  const err = cErr ?? dErr ?? aErr;
+  if (err) {
+    console.error("[connectivity-alerts] load failed", err.message);
+    return json({ ok: false, error: err.message }, 500);
   }
-  const ids = (devs ?? []).map((d) => d.id)
-  if (ids.length === 0)
-    return new Response(
-      JSON.stringify({ ok: true, transitions: 0, duration_ms: Date.now() - startedAt }),
-      { headers: { 'Content-Type': 'application/json' } },
-    )
-
-  const { data: alerts, error: alertsErr } = await admin
-    .from('connectivity_alerts')
-    .select('device_id, state')
-    .in('device_id', ids)
-  if (alertsErr) {
-    console.error('[connectivity-alerts] load alerts failed', alertsErr)
-    return new Response(JSON.stringify({ ok: false, error: alertsErr.message }), { status: 500 })
-  }
-  const stateById = new Map<string, 'lost' | 'recovered'>()
+  const companies = new Map<string, CompanyCfg>();
+  for (const c of comps ?? [])
+    companies.set(c.id, {
+      enabled: !!c.connectivity_alerts_enabled,
+      delayMin: Number(c.connectivity_delay_minutes) || 60,
+    });
+  const devices = (devs ?? [])
+    .filter((d) => d.company_id)
+    .map((d) => ({
+      id: d.id as string,
+      company_id: d.company_id as string,
+      name: d.name as string | null,
+      paused_until: d.alerts_paused_until as string | null,
+    }));
+  const notified = new Map<
+    string,
+    { state: "lost" | "recovered"; at: string | null }
+  >();
   for (const a of alerts ?? [])
-    stateById.set(a.device_id as string, a.state as 'lost' | 'recovered')
+    notified.set(a.device_id, { state: a.state, at: a.last_notified_at });
 
-  const { data: reps } = await admin
-    .from('reports')
-    .select('device_id, received_at')
-    .eq('type', 'status')
-    .in('device_id', ids)
-    .order('received_at', { ascending: false })
-  const lastSeenById = new Map<string, string>()
-  for (const r of reps ?? []) {
-    if (!lastSeenById.has(r.device_id)) lastSeenById.set(r.device_id, r.received_at as string)
-  }
-  const deviceStates: DeviceState[] = (devs ?? []).map((d: any) => ({
-    id: d.id,
-    company_id: d.company_id,
-    name: d.name,
-    last_seen_at: lastSeenById.get(d.id) ?? null,
-    last_notified_state: stateById.get(d.id) ?? null,
-  }))
-
-  const now = Date.now()
-  const transitions: Transition[] = []
-  for (const d of deviceStates) {
-    if (!d.last_seen_at) continue
-    const lastSeenMs = new Date(d.last_seen_at).getTime()
-    const isLost = now - lastSeenMs > LOST_THRESHOLD_MS
-    const lastState = d.last_notified_state
-    let next: 'lost' | 'recovered' | null = null
-    if (isLost && lastState !== 'lost') next = 'lost'
-    else if (!isLost && lastState === 'lost') next = 'recovered'
-    if (next)
-      transitions.push({
-        device_id: d.id,
-        hostname: d.name ?? d.id,
-        company_id: d.company_id,
-        last_seen_at: d.last_seen_at,
-        transition: next,
-        offline_minutes: Math.floor((now - lastSeenMs) / 60000),
-      })
+  // Dernier status de chaque box surveillée : une requête par box (limit 1)
+  const lastSeen = new Map<string, string>();
+  const watched = devices.filter((d) => companies.get(d.company_id)?.enabled);
+  for (let i = 0; i < watched.length; i += 20) {
+    await Promise.all(
+      watched.slice(i, i + 20).map(async (d) => {
+        const { data } = await admin
+          .from("reports")
+          .select("received_at")
+          .eq("type", "status")
+          .eq("device_id", d.id)
+          .order("received_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (data?.received_at) lastSeen.set(d.id, data.received_at);
+      }),
+    );
   }
 
-  if (transitions.length === 0)
-    return new Response(
-      JSON.stringify({ ok: true, transitions: 0, duration_ms: Date.now() - startedAt }),
-      { headers: { 'Content-Type': 'application/json' } },
-    )
-
-  let mailsSent = 0,
-    mailsFailed = 0
-  for (const t of transitions) {
-    const { data: recipients, error: recErr } = await admin
-      .from('recipients')
-      .select(
-        'id, contact_email, name, company_id, restrict_to_devices, shared_devices, auth_user_id',
-      )
-      .not('contact_email', 'is', null)
-      .eq('portal_access', true) // personnes « alarmes de box seulement » : pas de mail du portail
-    if (recErr) {
-      console.error('[connectivity-alerts] recipients fetch failed', recErr)
-      continue
-    }
-    const targets: Recipient[] = (recipients ?? [])
-      .filter((r: any): r is Recipient => !!r.contact_email && !!r.auth_user_id)
-      .filter((r) => {
-        const inCompany =
-          r.company_id === t.company_id &&
-          (r.restrict_to_devices === null || r.restrict_to_devices.includes(t.device_id))
-        const shared = (r.shared_devices ?? []).includes(t.device_id)
-        return inCompany || shared
-      })
-    for (const r of targets) {
-      const targetPath = `/admin/devices/${t.device_id}`
-      const link = await makeMagicLink(
-        r.contact_email,
-        `${APP_URL}/auth/callback?next=${encodeURIComponent(targetPath)}`,
-      )
-      const viewUrl = link ?? `${APP_URL}${targetPath}`
-      const { subject, html } = buildEmail(t, r, viewUrl)
-      try {
-        await sendMail({ to: r.contact_email, subject, html })
-        mailsSent++
-        console.log('[connectivity-alerts] sent', t.transition, 'to', r.contact_email)
-      } catch (e) {
-        mailsFailed++
-        console.error(
-          '[connectivity-alerts] sendMail failed for',
-          r.contact_email,
-          e instanceof Error ? e.message : String(e),
-        )
-      }
-    }
-    const { error: upErr } = await admin
-      .from('connectivity_alerts')
-      .upsert({
-        device_id: t.device_id,
-        state: t.transition,
-        last_notified_at: new Date().toISOString(),
-      })
-    if (upErr) console.error('[connectivity-alerts] upsert state failed', upErr)
-  }
-  await closeMailer()
-  return new Response(
-    JSON.stringify({
+  const transitions = computeTransitions(
+    devices,
+    lastSeen,
+    notified,
+    companies,
+    Date.now(),
+  );
+  if (!transitions.length)
+    return json({
       ok: true,
-      transitions: transitions.length,
-      mails_sent: mailsSent,
-      mails_failed: mailsFailed,
+      transitions: 0,
       duration_ms: Date.now() - startedAt,
-    }),
-    { headers: { 'Content-Type': 'application/json' } },
-  )
-})
+    });
+
+  const { data: subs, error: sErr } = await admin
+    .from("connectivity_subscriptions")
+    .select(
+      "device_id, recipients(id, contact_email, name, portal_access, auth_user_id)",
+    )
+    .in(
+      "device_id",
+      transitions.map((t) => t.device_id),
+    );
+  if (sErr) {
+    console.error("[connectivity-alerts] subscriptions failed", sErr.message);
+    return json({ ok: false, error: sErr.message }, 500);
+  }
+  const byRecipient = new Map<string, { r: Recipient; ts: Transition[] }>();
+  for (const s of subs ?? []) {
+    // deno-lint-ignore no-explicit-any
+    const r = (s as any).recipients as Recipient | null;
+    if (!r?.contact_email) continue;
+    const t = transitions.find((x) => x.device_id === s.device_id);
+    if (!t) continue;
+    const e = byRecipient.get(r.id) ?? { r, ts: [] };
+    e.ts.push(t);
+    byRecipient.set(r.id, e);
+  }
+
+  const dryRun = !mailerConfigured();
+  let mailsSent = 0,
+    mailsFailed = 0,
+    mailsSkipped = 0;
+  const planned: {
+    recipient_id: string;
+    devices: string[];
+    subject: string;
+  }[] = [];
+  for (const { r, ts } of byRecipient.values()) {
+    if (
+      ALLOW_DOMAIN &&
+      !r.contact_email.toLowerCase().endsWith("@" + ALLOW_DOMAIN)
+    ) {
+      mailsSkipped++;
+      continue;
+    }
+    let link: string | null = null;
+    if (r.portal_access) {
+      const path =
+        ts.length === 1
+          ? `/admin/devices/${ts[0].device_id}`
+          : "/admin/devices";
+      link = `${APP_URL}${path}`;
+      if (r.auth_user_id && !dryRun)
+        link =
+          (await makeMagicLink(
+            r.contact_email,
+            `${APP_URL}/auth/callback?next=${encodeURIComponent(path)}`,
+          )) ?? link;
+    }
+    const { subject, html } = buildEmail(ts, r, link);
+    planned.push({
+      recipient_id: r.id,
+      devices: ts.map((t) => t.device_id),
+      subject,
+    });
+    if (dryRun) continue;
+    try {
+      await sendMail({ to: r.contact_email, subject, html });
+      mailsSent++;
+    } catch (e) {
+      mailsFailed++;
+      console.error(
+        "[connectivity-alerts] sendMail failed",
+        e instanceof Error ? e.message : String(e),
+      );
+    }
+  }
+  // État mémorisé même sans destinataire : la même transition n'est jamais renvoyée
+  const { error: upErr } = await admin.from("connectivity_alerts").upsert(
+    transitions.map((t) => ({
+      device_id: t.device_id,
+      state: t.transition,
+      last_notified_at: new Date().toISOString(),
+    })),
+  );
+  if (upErr)
+    console.error("[connectivity-alerts] upsert state failed", upErr.message);
+  await closeMailer();
+  return json({
+    ok: true,
+    dry_run: dryRun,
+    transitions: transitions.length,
+    mails_planned: planned.length,
+    mails_sent: mailsSent,
+    mails_failed: mailsFailed,
+    mails_skipped_domain: mailsSkipped,
+    planned: dryRun ? planned : undefined,
+    duration_ms: Date.now() - startedAt,
+  });
+});

@@ -94,6 +94,11 @@ export const router = createRouter({
         },
         { path: 'updates', name: 'admin-updates', component: UpdatesView },
         {
+          path: 'notifications',
+          name: 'admin-notifications',
+          redirect: { name: 'admin-alarm-recipients', query: { tab: 'box' } },
+        },
+        {
           path: 'staff/companies',
           name: 'staff-companies',
           component: StaffCompaniesView,
