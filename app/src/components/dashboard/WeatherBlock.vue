@@ -127,10 +127,7 @@ const source = computed(() =>
       ? 'Open-Meteo'
       : '',
 )
-const tempInt = computed(() => (cur.value?.temp == null ? '—' : Math.trunc(cur.value.temp)))
-const tempDec = computed(() =>
-  cur.value?.temp == null ? '' : Math.abs(Math.round((cur.value.temp % 1) * 10)),
-)
+const tempTxt = computed(() => n(cur.value?.temp, 1))
 
 /** cases de mesures de la vue « maintenant » (ordre fixe, selon le choix de l'utilisateur) */
 const cells = computed(() => {
@@ -245,12 +242,9 @@ const bar = (d: { min: number | null; max: number | null }) => {
       <div v-if="view === 'now'" class="flex-1 flex flex-col gap-4">
         <div class="flex items-start gap-3">
           <div class="min-w-0 flex-1">
-            <div class="flex items-start leading-none" data-testid="weather-temp">
-              <span class="wxb-big tabular-nums">{{ tempInt }}</span>
-              <span class="flex flex-col pt-1.5 pl-1">
-                <span class="wxb-unit">°C</span>
-                <span v-if="tempDec !== ''" class="wxb-dec tabular-nums">,{{ tempDec }}</span>
-              </span>
+            <div class="flex items-start gap-1 leading-none" data-testid="weather-temp">
+              <span class="wxb-big big-num tabular">{{ tempTxt }}</span>
+              <span class="wxb-unit pt-1.5">°C</span>
             </div>
             <div
               v-if="has('cond') || has('feels')"
@@ -442,12 +436,6 @@ const bar = (d: { min: number | null; max: number | null }) => {
   font-family: ui-monospace, 'JetBrains Mono', monospace;
   font-size: 13px;
   color: var(--muted-foreground);
-}
-.wxb-dec {
-  font-size: 22px;
-  font-weight: 300;
-  color: var(--muted-foreground);
-  margin-top: 2px;
 }
 .wxb-label {
   font-family: ui-monospace, 'JetBrains Mono', monospace;
