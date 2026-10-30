@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// PROTOTYPE — tableau de bord d'une box ou d'un projet (plusieurs tableaux possibles, éditables par l'admin).
+// Tableau de bord d'une box ou d'un projet (plusieurs tableaux possibles, éditables par l'admin).
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -395,6 +395,13 @@ async function removeDashboard() {
 
 // ---- export CSV ----
 const exportOpen = ref(false)
+// menu « ⋯ » des actions secondaires (mobile)
+const moreOpen = ref(false)
+const closeMore = (e: Event) => {
+  if (!(e.target as HTMLElement | null)?.closest('[data-testid=dash-actions]')) moreOpen.value = false
+}
+onMounted(() => document.addEventListener('click', closeMore))
+onBeforeUnmount(() => document.removeEventListener('click', closeMore))
 const reportsOpen = ref(false)
 const exportRes = ref<'shown' | 'detailed'>('detailed')
 const exportMsg = ref<string | null>(null)
@@ -474,7 +481,7 @@ const backTo = computed(() =>
   <section
     ref="rootEl"
     :class="[
-      'px-4 sm:px-6 lg:px-8 py-6 sm:py-8 w-full',
+      'px-4 sm:px-6 lg:px-8 pt-3 sm:pt-4 pb-6 sm:pb-8 w-full',
       isFull && 'bg-background overflow-auto h-full',
     ]"
   >
@@ -499,7 +506,7 @@ const backTo = computed(() =>
         >
           <path d="M4 6h16M4 12h10M4 18h13" />
         </svg>
-        Arborescence
+        <span class="hidden sm:inline">Arborescence</span>
       </button>
       <RouterLink :to="{ name: 'admin-dashboards' }" class="hover:text-signal"
         >Tableaux de bord</RouterLink
@@ -513,8 +520,8 @@ const backTo = computed(() =>
           >{{ parentProject.name }}</RouterLink
         >
       </template>
-      <span>›</span>
-      <span class="text-foreground normal-case tracking-normal">{{ heading }}</span>
+      <span class="hidden sm:inline">›</span>
+      <span class="hidden sm:inline text-foreground normal-case tracking-normal">{{ heading }}</span>
       <RouterLink :to="backTo" class="ml-auto hover:text-signal">
         {{ scope === 'device' ? 'fiche de la box' : 'fiche du projet' }} →
       </RouterLink>
@@ -525,14 +532,23 @@ const backTo = computed(() =>
       :version="treeVersion"
       @close="treeOpen = false"
     />
-    <header class="mt-3 mb-4 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
-      <div class="min-w-0">
-        <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground mb-1">
-          Tableau de bord · {{ scope === 'device' ? 'box' : 'projet' }} · prototype
-        </div>
-        <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight truncate">{{ heading }}</h1>
-      </div>
-      <div v-if="current" class="flex flex-wrap items-center gap-2">
+    <!-- en-tête compact : titre + actions sur une ligne, filtres (tableau, période, actualisation) dessous ;
+         tout sur une seule ligne dès 1700 px ; sur mobile les actions secondaires passent dans le menu « ⋯ » -->
+    <header
+      class="mt-2 mb-3 flex flex-wrap items-center gap-x-3 gap-y-2"
+      data-testid="dash-header"
+    >
+      <h1
+        class="order-1 min-w-0 flex-1 basis-40 truncate text-lg sm:text-2xl font-semibold tracking-tight"
+        data-testid="dash-title"
+      >
+        {{ heading }}
+      </h1>
+      <div
+        v-if="current"
+        class="order-3 min-[1700px]:order-2 flex flex-wrap items-center gap-2 w-full min-[1700px]:w-auto"
+        data-testid="dash-filters"
+      >
         <select
           v-if="dashboards.length > 1 || (dashboards.length && proposed)"
           :value="current?.id ?? ''"
@@ -543,7 +559,7 @@ const backTo = computed(() =>
           <option v-for="d in dashboards" :key="d.id" :value="d.id">{{ d.name }}</option>
         </select>
         <div
-          class="flex gap-px bg-border border border-border rounded-sm overflow-x-auto max-w-full"
+          class="flex gap-px bg-border border border-border rounded-sm overflow-x-auto max-w-full min-w-0 flex-1 sm:flex-none"
         >
           <button
             v-for="(p, k) in PERIODS"
@@ -571,7 +587,7 @@ const backTo = computed(() =>
           class="flex items-center gap-1 text-[11px] font-mono text-muted-foreground"
           :title="`Actualisé à ${new Date(lastRefresh).toLocaleTimeString('fr-FR')}`"
         >
-          <span class="hidden sm:inline">Actualiser</span>
+          <span class="hidden xl:inline">Actualiser</span>
           <select
             v-model.number="autoRefresh"
             class="bg-card border border-border rounded-sm px-1.5 py-1 text-xs"
@@ -580,20 +596,12 @@ const backTo = computed(() =>
             <option v-for="a in AUTO" :key="a.s" :value="a.s">{{ a.label }}</option>
           </select>
         </label>
-        <button
-          class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60"
-          data-testid="dash-export"
-          @click="exportOpen = !exportOpen"
-        >
-          CSV
-        </button>
-        <button
-          class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60"
-          data-testid="dash-reports"
-          @click="reportsOpen = !reportsOpen"
-        >
-          Rapports
-        </button>
+      </div>
+      <div
+        v-if="current"
+        class="order-2 min-[1700px]:order-3 relative flex flex-nowrap items-center gap-2 ml-auto"
+        data-testid="dash-actions"
+      >
         <button
           v-if="!editing"
           class="hidden md:inline-flex items-center justify-center size-[30px] rounded border border-border hover:border-signal/60 text-muted-foreground hover:text-foreground"
@@ -624,21 +632,56 @@ const backTo = computed(() =>
           Modifier
         </button>
         <button
-          v-if="canCreate && !editing && current"
-          class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60"
-          data-testid="dash-new"
-          @click="newDashboard(false)"
+          class="md:hidden text-xs font-mono px-2.5 py-1.5 rounded border border-border hover:border-signal/60"
+          data-testid="dash-more"
+          aria-label="Autres actions"
+          :aria-expanded="moreOpen"
+          @click="moreOpen = !moreOpen"
         >
-          + Nouveau
+          ⋯
         </button>
-        <button
-          v-if="canShare"
-          class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60"
-          data-testid="dash-share"
-          @click="shareOpen = !shareOpen"
+        <!-- CSV, Rapports, + Nouveau, Partager : en ligne dès md, menu déroulant en dessous -->
+        <div
+          :class="[
+            moreOpen
+              ? 'absolute right-0 top-full z-30 mt-1 flex flex-col items-stretch gap-1 p-2 rounded border border-border bg-card shadow-lg'
+              : 'hidden',
+            'md:static md:mt-0 md:flex md:flex-row md:items-center md:gap-2 md:p-0 md:border-0 md:bg-transparent md:shadow-none',
+          ]"
+          data-testid="dash-more-menu"
+          @click="moreOpen = false"
         >
-          Partager
-        </button>
+          <button
+            class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60 text-left"
+            data-testid="dash-export"
+            @click="exportOpen = !exportOpen"
+          >
+            CSV
+          </button>
+          <button
+            class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60 text-left"
+            data-testid="dash-reports"
+            @click="reportsOpen = !reportsOpen"
+          >
+            Rapports
+          </button>
+          <button
+            v-if="canCreate && !editing && current"
+            class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60 text-left"
+            data-testid="dash-new"
+            @click="newDashboard(false)"
+          >
+            + Nouveau
+          </button>
+          <button
+            v-if="canShare"
+            class="text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded border border-border hover:border-signal/60 text-left"
+            data-testid="dash-share"
+            @click="shareOpen = !shareOpen"
+          >
+            Partager
+          </button>
+        </div>
       </div>
     </header>
 
