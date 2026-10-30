@@ -72,6 +72,20 @@ Trois modes d'affichage (`modeAffichage()` dans `environnement.ts`, réactif via
 - **Édition** : jamais sur mobile ni tablette (`usePeutEditerIci`).
 - **Thèmes** : variables du thème uniquement (`bg-card`, `text-destructive`, `bg-signal`, `border-border`…), aucune couleur en dur.
 
+## Famille CVC (traitement d'air et chaufferie)
+
+Deux éléments paramétriques, dessinés en SVG par `engine/cvc-dessin.ts` à partir du modèle pur `engine/cvc-modele.ts` (géométrie, états, ports, résumé mobile ; testé dans `tests/unit/lib/synoptic/cvc.spec.ts`). Les documents existants (process) ne sont pas touchés : seuls les types `cta` et `hydro` passent par cette branche (`geom.ts`, `symCvc` dans `moteur.ts`).
+
+- **Bandeau CTA** (`type: "cta"`, palette « CVC ») : une gaine de 160 de haut (axe y=80), modules de 60 ou 120 de large posés bout à bout. `params.flux` = `simple` (un étage) ou `double` (extraction en haut, de droite à gauche ; soufflage en bas ; modules doubles 120×320 qui relient les deux étages : récupérateur à plaques ou à roue, caisson de mélange). `params.colonnes` = liste de colonnes `{ haut?, bas?, double? }`, chaque module `{ id, k, libelle?, w? }`.
+  Modules : air neuf, reprise, soufflage, rejet (flèche colorée par type d'air), registre, filtre plan / à poches, batteries chaude / froide / électrique (piquages d'eau), humidificateur, piège à son, ventilateur, sonde, gaine, récupérateur à plaques, roue, caisson de mélange.
+- **Lignes hydrauliques** (`type: "hydro"`, palette « Chaufferie ») : deux lignes horizontales, aller (y=50, chaud) et retour (y=110, froid) ; une rangée par départ (pas 160), reliées par des collecteurs verticaux dès qu'il y a plusieurs rangées. Modules : chaudière, PAC, pompe, vanne 2 voies, vanne 3 voies mélangeuse, échangeur, bouteille de découplage, ballon ECS, vase, pot à boue, filtre, compteur d'énergie, clapet, isolement, sonde, départ réseau, arrivée.
+- **Emplacements de variables** : un module a ses propres emplacements, nommés `<id module>:<grandeur>` (`VE1:marche`, `VE1:defaut`, `VE1:frequence`, `BC:sortie_t`, `BC:position`, `FS1:dp`…). Ils sont créés, renommés et retirés avec les modules (`synchroniserSlots`) ; les règles de conversion existantes s'appliquent comme pour les autres symboles. Les valeurs sont écrites en étiquettes au-dessus (étage haut : au-dessus de la gaine ; étage bas : sous l'étage du haut) et le nom du module sous la gaine.
+- **États** identiques partout : vert = marche, gris = arrêt, rouge + pastille « ! » = défaut, position intermédiaire = « modulant » (lames de registre à 45°, vanne proportionnelle). Le ventilateur et la roue tournent en marche, la couronne des pompes aussi (animations CSS, coupées avec `prefers-reduced-motion`).
+- **Couleurs** : uniquement des variables du thème (`--air-neuf`, `--air-souffle`, `--air-repris`, `--air-rejete`, `--eau-aller`, `--eau-retour`, `--flamme`, valeurs clair et sombre dans `synoptique.css`).
+- **Édition** : le panneau de propriétés d'un bandeau liste les modules (libellé, flèches ◀ ▶, retrait, largeur, ligne aller/retour) et propose « Ajouter un module » (par groupes) ; le type de CTA (simple / double) et, en hydraulique, l'ajout d'un départ s'y règlent aussi.
+- **Résumé mobile** (`cartesCvc`) : CTA → cartes « Soufflage » (ventilateur du bas, T, humidité, Hz), « Reprise » (ventilateur du haut, T, CO₂), « Récupération », « Batteries » (T de sortie et position de vanne, qualifiées par le nom du module), « Filtres et registres » ; hydraulique → une carte par départ. Pictogrammes : ventilateur, registre, batterie, roue, flamme, filtre, pompe, vanne.
+- **Limites** : pas de conduites libres entre un bandeau et les autres symboles hors des ports `in`/`out` (et `p3`/`p4` en double flux) ; les alarmes d'un bandeau sont celles de ses modules (défaut, antigel, colmatage).
+
 ## Ajouter un symbole
 
 1. Géométrie (taille, ports) : `G.EXTRA` dans `engine/geom.ts` (`{ rw, rh, ports }`).
