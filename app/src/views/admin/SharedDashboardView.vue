@@ -18,6 +18,7 @@ import {
   type Widget,
 } from '@/composables/useDashboards'
 import DashboardWidget from '@/components/dashboard/DashboardWidget.vue'
+import { minHeightPx, spanClasses, widgetRows } from '@/lib/dashboardGrid'
 
 const route = useRoute()
 const router = useRouter()
@@ -103,13 +104,6 @@ watch(period, () => {
 watch(dashId, init)
 onMounted(init)
 
-const SPAN: Record<string, string> = {
-  '1/4': 'col-span-12 sm:col-span-6 lg:col-span-3',
-  '1/3': 'col-span-12 sm:col-span-6 lg:col-span-4',
-  '1/2': 'col-span-12 lg:col-span-6',
-  '2/3': 'col-span-12 lg:col-span-8',
-  full: 'col-span-12',
-}
 </script>
 
 <template>
@@ -157,7 +151,8 @@ const SPAN: Record<string, string> = {
       <div
         v-for="(w, i) in widgets"
         :key="i + w.type"
-        :class="[SPAN[w.width] ?? 'col-span-12', 'relative']"
+        :class="[spanClasses(w), widgetRows(w) > 1 && 'sm:min-h-[var(--min-h)]', 'relative']"
+        :style="{ '--min-h': minHeightPx(w) ? minHeightPx(w) + 'px' : undefined }"
         data-testid="widget-slot"
       >
         <DashboardWidget

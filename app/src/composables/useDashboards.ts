@@ -26,6 +26,12 @@ export type WidgetType =
   | 'interventions'
   | 'weather'
 export type WidgetWidth = '1/4' | '1/3' | '1/2' | '2/3' | 'full'
+/**
+ * Taille par défaut (colonnes sur 12 × rangées) d'un type de tuile à son choix dans l'éditeur.
+ * Un type absent garde la taille actuelle de la tuile. Ex. à ajouter pour un grand synoptique :
+ * `synoptic: { w: 12, h: 4 }`.
+ */
+export const DEFAULT_SIZE: Partial<Record<WidgetType, { w: number; h: number }>> = {}
 export type Op = 'sum' | 'mean' | 'min' | 'max'
 export type Stat = 'last' | 'mean' | 'min' | 'max' | 'total'
 
@@ -79,6 +85,9 @@ export const THRESHOLD_COLORS = [
 ]
 
 export interface WidgetOptions {
+  /** taille libre sur la grille : colonnes (2-12) et rangées (1 = hauteur automatique, jusqu'à 6) */
+  w?: number
+  h?: number
   /** courbes / barres : seuils (traits horizontaux) */
   thresholds?: Threshold[]
   /** bloc signalements : types retenus, ouverts seulement (sinon : ceux de la période), photos affichées */

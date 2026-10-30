@@ -31,6 +31,8 @@ import TimeRangePicker from '@/components/TimeRangePicker.vue'
 import DashboardNavDrawer from '@/components/dashboard/DashboardNavDrawer.vue'
 import LiveControl from '@/components/dashboard/LiveControl.vue'
 import LiveBanner from '@/components/dashboard/LiveBanner.vue'
+import { useGridEditing } from '@/composables/useGridEditing'
+import { minHeightPx, spanClasses, widgetRows } from '@/lib/dashboardGrid'
 import { useLiveStore } from '@/stores/live'
 
 const route = useRoute()
@@ -343,18 +345,8 @@ function onEdited(w: Widget) {
   editWidget.value = null
   refresh()
 }
-// glisser-déposer (PC) : le bloc déplacé prend la place du bloc cible
-const dragIdx = ref<number | null>(null)
-const dragOver = ref<number | null>(null)
-function onDrop(j: number) {
-  const i = dragIdx.value
-  dragIdx.value = dragOver.value = null
-  if (i === null || i === j) return
-  const a = widgets.value.slice()
-  const [x] = a.splice(i, 1)
-  a.splice(j, 0, x)
-  widgets.value = a
-}
+// glisser-déposer avec insertion + poignée de taille (voir composables/useGridEditing.ts)
+const grid = useGridEditing(widgets)
 function move(i: number, d: number) {
   const j = i + d
   if (j < 0 || j >= widgets.value.length) return
@@ -442,13 +434,6 @@ async function doExport() {
   }
 }
 
-const SPAN: Record<string, string> = {
-  '1/4': 'col-span-12 sm:col-span-6 lg:col-span-3',
-  '1/3': 'col-span-12 sm:col-span-6 lg:col-span-4',
-  '1/2': 'col-span-12 lg:col-span-6',
-  '2/3': 'col-span-12 lg:col-span-8',
-  full: 'col-span-12',
-}
 // navigation : arborescence (panneau) + fil d'Ariane Tableaux de bord > projet > box
 const treeOpen = ref(false)
 const treeVersion = ref(0)
@@ -856,21 +841,32 @@ const backTo = computed(() =>
         v-for="(w, i) in widgets"
         :key="i + w.type"
         :class="[
-          SPAN[w.width] ?? 'col-span-12',
+          spanClasses(w),
+          widgetRows(w) > 1 && 'sm:min-h-[var(--min-h)]',
           'relative',
           editing && 'cursor-move',
-          dragIdx === i && 'opacity-40',
-          dragOver === i && dragIdx !== i && 'ring-2 ring-signal rounded-md',
+          grid.dragIdx.value === i && 'opacity-40',
+          grid.resizingIdx.value === i && 'ring-1 ring-signal rounded-md',
         ]"
-        :draggable="editing"
-        :style="{ '--i': i }"
+        :draggable="editing && grid.resizingIdx.value === null"
+        :style="{ '--i': i, '--min-h': minHeightPx(w) ? minHeightPx(w) + 'px' : undefined }"
         data-testid="widget-slot"
-        @dragstart="dragIdx = i"
-        @dragover.prevent="dragOver = i"
-        @dragleave="dragOver === i && (dragOver = null)"
-        @drop.prevent="onDrop(i)"
-        @dragend="dragIdx = dragOver = null"
+        @dragstart="grid.onDragStart($event, i)"
+        @dragover.prevent="grid.onDragOver($event, i)"
+        @drop.prevent="grid.onDrop()"
+        @dragend="grid.endDrag()"
       >
+        <!-- barre d'insertion : la tuile déplacée tombera avant / après celle-ci -->
+        <div
+          v-if="grid.drop.value?.target === i"
+          :class="[
+            'absolute z-30 rounded-full bg-signal pointer-events-none',
+            w.options.w === 12 || (w.options.w === undefined && w.width === 'full')
+              ? 'left-0 right-0 h-1 ' + (grid.drop.value.side === 'before' ? '-top-2' : '-bottom-2')
+              : 'top-0 bottom-0 w-1 ' + (grid.drop.value.side === 'before' ? '-left-2' : '-right-2'),
+          ]"
+          data-testid="drop-indicator"
+        />
         <DashboardWidget
           :widget="w"
           :data="data"
@@ -898,7 +894,31 @@ const backTo = computed(() =>
           </button>
           <button class="px-1 hover:text-offline" @click="widgets.splice(i, 1)">×</button>
         </div>
+        <!-- poignée de redimensionnement (largeur en colonnes, hauteur en rangées) -->
+        <div
+          v-if="editing"
+          class="z-30 absolute bottom-0.5 right-0.5 size-4 cursor-nwse-resize touch-none rounded-br border-b-2 border-r-2 border-signal"
+          title="Tirer pour redimensionner"
+          data-testid="resize-handle"
+          draggable="false"
+          @mousedown.prevent
+          @pointerdown.stop="grid.onResizeStart($event, i)"
+          @pointermove="grid.onResizeMove($event, i)"
+          @pointerup="grid.onResizeEnd()"
+          @pointercancel="grid.onResizeEnd()"
+        />
       </div>
+    </div>
+    <!-- fin de liste : déposer ici place la tuile en dernier -->
+    <div
+      v-if="editing && grid.dragIdx.value !== null"
+      class="mt-3 rounded-md border border-dashed py-3 text-center font-mono text-xs"
+      :class="grid.drop.value?.target === widgets.length - 1 && grid.drop.value.side === 'after' ? 'border-signal text-signal' : 'border-border text-muted-foreground'"
+      data-testid="drop-end"
+      @dragover.prevent="grid.onDragOverEnd()"
+      @drop.prevent="grid.onDrop()"
+    >
+      Déposer ici pour placer à la fin
     </div>
 
     <WidgetEditor
