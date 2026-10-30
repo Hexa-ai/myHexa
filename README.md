@@ -1,232 +1,87 @@
-# myHexa
+# myHexa — le portail client d'Hexa-AI
 
-> Plateforme web de supervision multi-tenant pour la flotte de boîtiers **Hexa.ai Edge** : monitoring temps réel, rapports périodiques, alarmes, interventions terrain via QR code.
+myHexa est le portail web de [Hexa-AI](https://hexa-ai.fr). Il permet aux clients (et à l'équipe Hexa) de **superviser des box industrielles 4G (HAI-P200)** : état de connexion, mesures, alarmes, historique, tableaux de bord, rapports par mail, mises à jour à distance.
 
-[![Stack](https://img.shields.io/badge/Vue-3-42b883?logo=vue.js&logoColor=white)](#stack) [![Stack](https://img.shields.io/badge/Vite-8-646cff?logo=vite&logoColor=white)](#stack) [![Stack](https://img.shields.io/badge/Tailwind-4-38bdf8?logo=tailwindcss&logoColor=white)](#stack) [![Stack](https://img.shields.io/badge/Supabase-PostgREST-3ecf8e?logo=supabase&logoColor=white)](#stack) [![Stack](https://img.shields.io/badge/Edge%20Functions-Deno-000000?logo=deno&logoColor=white)](#stack)
+- Production : <https://my.hexa-ai.fr>
+- Les box envoient leurs données à <https://api.hexa-ai.fr> (relais Netlify vers la fonction `device-ingress`, voir `netlify.toml`).
 
----
+## En deux phrases
 
-## 1. Vision
+Le **front** (`app/`) est une application Vue 3 hébergée sur Netlify. Le **back** (`supabase/`) est une base PostgreSQL protégée par des règles RLS, plus des Edge Functions (Deno) et des tâches planifiées. Il n'y a pas d'autre serveur.
 
-myHexa remplace progressivement les workflows n8n qui rendaient la supervision Hexa.ai en HTML server-side. La nouvelle version est une SPA Vue 3 hostée sur Netlify + un backend Supabase (Postgres + RLS + Edge Functions Deno) :
-
-| Persona | Entrée | Surface |
-|---|---|---|
-| **Membre authentifié** (admin/viewer) | `/login` (email + password) | `/admin/*` — flotte, carte, détail device, rapports, alarmes |
-| **Destinataire externe** | Lien token reçu par email | `/report?t=&d=` — vue lecture par token |
-| **Technicien terrain** | QR code physique sur le boîtier | `/intervention?d=` — formulaire d'intervention anonyme |
-
-Les workflows n8n existants restent **actifs** côté serveur (`srv1375596.hstgr.cloud`) pour ne rien casser pendant la migration. La phase actuelle est un **double-run** : les Edge Functions répliquent les contrats n8n, les rapports périodiques sont consommés directement depuis la même base Supabase.
-
-## 2. Stack
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Frontend (Netlify)                                             │
-│   Vue 3 + TypeScript + Vite 8                                   │
-│   Tailwind CSS 4 + shadcn-vue (Card / Button / Input)           │
-│   Pinia (auth) + Vue Router 4                                   │
-│   Leaflet (mini-map + flotte) · Chart.js (rapports périodiques) │
-│   qrcode (QR intervention)                                      │
-└────────────────────────────────────────────┬────────────────────┘
-                                             │ HTTPS
-┌────────────────────────────────────────────▼────────────────────┐
-│  Supabase                                                       │
-│   Postgres + RLS (multi-tenant via recipients.company_id)       │
-│   Auth (email + password)                                       │
-│   Edge Functions Deno (5 routes publiques)                      │
-│   Storage (bucket `intervention-photos` privé)                  │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  box["Box HAI-P200 (4G)"] -->|HTTPS| api["api.hexa-ai.fr (Netlify)"]
+  api --> ing["Edge Function device-ingress"]
+  ing --> db[("PostgreSQL + RLS")]
+  box <-->|WebSocket| rt["Supabase Realtime (direct)"]
+  front["Portail Vue (my.hexa-ai.fr)"] -->|supabase-js| db
+  front <-->|WebSocket| rt
+  front -->|appels| fn["Edge Functions"]
+  cron["pg_cron"] --> fn
 ```
 
-## 3. Fonctionnalités
+## Démarrage rapide
 
-### 3.1 Admin authentifié `/admin/*`
-
-| Route | Description |
-|---|---|
-| `/admin/devices` | Liste de la flotte : statut online/offline, alarmes, interfaces réseau actives (ETH0/ETH1/WIFI/4G/VPN), bouton Web (Tailscale), bouton VNC, lien rapports, QR intervention |
-| `/admin/devices/:id` | Fiche détail : header device, mini-carte Leaflet, tabs Données / État / Configuration, détails par interface réseau (IP/Masque/Passerelle/DNS/Mode/SSID/Signal/Techno/Opérateur), services, formulaire de localisation + VNC + QR |
-| `/admin/devices/:id/periodic` | Rapports quotidiens & hebdomadaires avec Chart.js (zoom/pan synchronisé entre tous les charts + plein écran + curseurs synchronisés) |
-| `/admin/map` | Carte flotte tous les devices géolocalisés, full-width, markers cliquables |
-| `/admin/alarms` | Centre d'alarmes : 3 modes (Fil de l'eau / Historique / Interventions) + filtres device + sévérité, modal détail intervention avec galerie photo et lightbox |
-
-**Refresh automatique** toutes les 2 min sur les pages de monitoring, polling 30s sur le badge global d'alarmes (sidebar + header). Animation pulsante rouge tant qu'il y a au moins une alarme active ou intervention ouverte.
-
-### 3.2 Routes publiques (token)
-
-| Route | Description |
-|---|---|
-| `/report?t=&d=` | Vue d'un device par token (lien email n8n) — pas de session, lookup `report_tokens` |
-| `/report/periodic?t=&d=&type=daily\|weekly[&period=]` | Rapport quotidien/hebdomadaire d'un device par token |
-| `/recover?reason=&from=` | Formulaire de récupération de lien (génère + envoie un nouveau token par email) |
-| `/intervention?d=` | Formulaire d'intervention terrain ouvert via QR code physique. Upload jusqu'à 5 photos compressées localement (max 1600px / JPEG 0.85) |
-
-### 3.3 Thèmes & responsive
-
-- 🌗 **Light / Dark** : palette teal `#00d4aa` sur navy `#0a0f14` (dark) ou off-white `#f6faf8` (light), inspirée du site hexa-ai.fr. Toggle dans le header, persisté dans `localStorage`, anti-FOUC inline dans `index.html`
-- 📱 **Mobile** : sidebar admin transformée en drawer (hamburger), tables réduites en cards verticales sous `md`, KPI strips qui empilent
-- 🖥️ **Grand écran** : carte flotte full-width sans cap
-
-### 3.4 Notifications visuelles
-
-- Badge rouge sur l'entrée "Alarmes" de la sidebar avec compteur total (alarmes capteur + interventions ouvertes)
-- Bouton "à traiter · N" dans le header (lien direct vers `/admin/alarms`)
-- Animation `alarm-flash` (ring shadow pulsant) permanente tant que `total > 0`
-- Polling RPC `alarm_counts()` toutes les 30 s, rafraîchissement immédiat au retour d'onglet
-
-### 3.5 QR intervention terrain
-
-- Génération du QR côté admin (composant `QRCodeBlock.vue`, téléchargement PNG/SVG), affiché dans la fiche device + modale accessible depuis la liste
-- Le technicien scanne → form mobile avec : nom obligatoire, contact (téléphone/email), catégorie (intervention/incident/contrôle/autre), sévérité (info/warning/error), commentaire, **5 photos max compressées localement**
-- Soumission via Edge Function `submit-intervention` (verify_jwt=false) qui upload les photos dans le bucket privé `intervention-photos` puis insère la row (RLS bloque les insert anon, seule la service_role peut écrire)
-- Côté admin : liste filtrable (statut ouvert/résolu/toutes), modale détail avec galerie + lightbox plein écran, toggle "Marquer résolu" qui passe `status='resolved' + resolved_at=now()` via RLS
-
-## 4. Schéma DB
-
-Tables Supabase (toutes en RLS company-scopée sauf indication) :
-
-```
-companies            ← tenant racine
-  ├─ devices         ← boîtiers Hexa.ai Edge (vnc_host, vnc_port, etc.)
-  │    └─ reports    ← type ∈ {status, daily, weekly} + payload JSONB
-  │         └─ field_interventions  ← QR rapports techniciens (+ photo_paths text[])
-  ├─ recipients      ← destinataires (auth_user_id, role: admin/viewer/member/external, allowed_device_ids)
-  │    └─ report_tokens  ← lookup tokens pour liens email
-  └─ connectivity_alerts ← état des notifs d'offline (par device)
-```
-
-**RPC (toutes `security invoker`, RLS appliquée) :**
-- `devices_with_latest_status()` — LATERAL JOIN devices + dernier rapport status
-- `alarm_history()` — flatten + dédoublonne les `payload.alarm_events` de daily+weekly
-- `alarm_counts()` — `{active_alarms, open_interventions}` pour le polling badge
-- `current_recipient_company_id()` — helper RLS
-
-**Storage privé `intervention-photos`** :
-- Path : `{device_id}/{intervention_id}/<i>.{jpg|png|webp}`
-- SELECT RLS : authentifié + recipient de la même company que le device
-- INSERT/UPDATE/DELETE : aucune policy → service_role only
-
-## 5. Edge Functions
-
-Toutes en `verify_jwt=false` (public, auth par token query string), partagent `_shared/cors.ts` + `_shared/response.ts` (helpers `ok/fail/preflight`).
-
-| Fonction | Méthode | Contrat |
-|---|---|---|
-| `view-report` | GET | `?t=&d=` → `{ device, status, role, expiresAt }` |
-| `view-periodic-report` | GET | `?t=&d=&type=&period?` → `{ payload, periods, ... }` |
-| `recover-link` | POST | `{ email, from_url? }` — délègue à n8n pendant le double-run |
-| `location-update` | POST | `{ token, deviceId, address }` — Nominatim geocode + update device |
-| `submit-intervention` | POST | `{ deviceId, technicianName, ..., photos[] }` — multipart base64, upload bucket + insert |
-
-## 6. Structure du repo
-
-```
-.
-├── app/                            # Front Vue 3 + Vite
-│   ├── public/                     # favicon Hexa.ai + logos
-│   ├── src/
-│   │   ├── components/             # DeviceReport, DeviceMap, PeriodicReport, SeriesChart, QRCodeBlock, ErrorBoundary
-│   │   ├── composables/            # useDevices, useTheme, useAutoRefresh, useAlarmCounts, useChartSync, useTailscaleReachable, usePeriodicReport
-│   │   ├── lib/                    # supabase, api, utils, image (compression client)
-│   │   ├── router/                 # routes + guards (requireAuth)
-│   │   ├── stores/                 # Pinia (auth)
-│   │   ├── types/supabase.ts       # Types générés (Supabase MCP)
-│   │   └── views/
-│   │       ├── admin/              # AdminLayout, DevicesView, DeviceDetailView, DevicePeriodicView, FleetMapView, AlarmsView
-│   │       ├── auth/               # LoginView
-│   │       └── public/             # ReportView, PeriodicReportView, RecoverView, InterventionView
-│   ├── tests/unit/                 # Vitest
-│   ├── package.json
-│   └── netlify.toml
-├── supabase/
-│   └── functions/                  # Edge Functions Deno
-│       ├── _shared/                # cors.ts, response.ts
-│       ├── view-report/
-│       ├── view-periodic-report/
-│       ├── recover-link/
-│       ├── location-update/
-│       └── submit-intervention/
-└── docs/
-    ├── device-provisioning.md
-    ├── reference/                  # contrats payload status
-    └── superpowers/specs|plans/    # specs P1..P5 et plans d'exécution
-```
-
-## 7. Démarrer en local
-
-### Prérequis
-
-- **Node 22** + **pnpm 11**
-- Compte Supabase + variables d'env (voir `app/.env.example`)
-- (optionnel) Supabase CLI pour développer les Edge Functions en local
-
-### Setup
+Prérequis : Node 20 ou plus (Netlify et la CI utilisent 20 ; les commandes ci-dessous ont été vérifiées en Node 22) et pnpm 10.
 
 ```bash
-git clone https://github.com/Hexa-ai/myHexa.git
-cd myHexa/app
-pnpm install
-cp .env.example .env.local
-# Éditer .env.local avec VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_EDGE_FUNCTIONS_URL
-pnpm dev
+cd app
+npx -y pnpm@10 install --frozen-lockfile   # dépendances
+cp .env.example .env.local                 # puis renseigner les variables VITE_* (voir ci-dessous)
+npx -y pnpm@10 dev                         # serveur de développement (vite)
+
+npx -y pnpm@10 typecheck                   # vérification des types (vue-tsc --noEmit)
+npx -y pnpm@10 test:unit                   # tests unitaires (vitest run)
+npx -y pnpm@10 build                       # vue-tsc -b && vite build → app/dist
 ```
 
-L'app démarre sur `http://localhost:5173`. Login avec un email `recipients.contact_email` qui a `auth_user_id` non-null (à créer côté Supabase Auth, le trigger fait le lien automatiquement).
+Variables de build du front (fichier `app/.env.example`) :
 
-### Scripts
-
-| Commande | Description |
+| Variable | Rôle |
 |---|---|
-| `pnpm dev` | Vite dev server (HMR) |
-| `pnpm build` | Build production |
-| `pnpm preview` | Preview du build |
-| `pnpm typecheck` | `vue-tsc --noEmit` |
-| `pnpm test:unit` | Vitest |
-| `pnpm lint` | ESLint |
-| `pnpm format` | Prettier |
-| `pnpm types:supabase` | Régénérer `types/supabase.ts` depuis le projet remote |
+| `VITE_SUPABASE_URL` | URL du projet Supabase visé |
+| `VITE_SUPABASE_ANON_KEY` | clé publique « anon » de ce projet |
+| `VITE_EDGE_FUNCTIONS_URL` | URL de base des Edge Functions (se termine par `/functions/v1`) |
+| `VITE_CARTO_API_KEY` | fond de carte (facultatif) |
 
-### Edge Functions
+Il existe deux projets Supabase : **TEST** (pour essayer) et **PROD** (les clients). Leurs références ne sont pas dans cette documentation : elles sont dans la configuration locale de l'équipe.
 
-Déploiement via Supabase CLI ou MCP. Code dans `supabase/functions/<name>/index.ts`, imports relatifs vers `_shared/`. Toutes sont déployées en `verify_jwt=false` (auth applicative par token query).
+> **Piège connu** : sans `VITE_EDGE_FUNCTIONS_URL`, `app/src/lib/api.ts` lève une erreur dès son import, donc `tests/unit/lib/api.spec.ts` ne se charge pas. En local, mettez des valeurs factices pour lancer les tests (voir [`docs/exploitation/README.md`](docs/exploitation/README.md)). Ce fichier contient en plus 4 tests qui échouent déjà (ils testent des fonctions supprimées).
 
-## 8. Sécurité
+## Carte de la documentation
 
-- **RLS active sur toutes les tables `public.*`** — multi-tenant strict via `recipients.auth_user_id = auth.uid()` joinant sur `company_id`
-- **service_role** utilisé uniquement côté Edge Functions, jamais exposé au front
-- **Bucket privé** pour les photos d'intervention, URLs signées 30 min côté admin
-- **Tokens publics** (32 hex) stockés en table `report_tokens` avec `expires_at` — pas de signature, lookup DB
-- **PKCE / refresh tokens** : laissés en configuration Supabase par défaut, persistence localStorage
+Tout est dans [`docs/`](docs/README.md). Ordre conseillé pour un nouveau développeur :
 
-## 9. Déploiement
+1. [`docs/glossaire.md`](docs/glossaire.md) — le vocabulaire (box, variable, direct, synoptique…).
+2. [`docs/architecture.md`](docs/architecture.md) — la vue d'ensemble avec schémas.
+3. [`docs/flux/`](docs/flux/) — comment les données circulent (ingestion, direct, position, météo, alertes, partage).
+4. [`docs/front/`](docs/front/README.md) — le code de `app/src` et comment ajouter un écran.
+5. [`docs/backend/`](docs/backend/) — tables, droits (RLS), fonctions SQL, Edge Functions.
+6. [`docs/exploitation/`](docs/exploitation/README.md) — environnements, migrations, déploiement, tests, retour arrière.
 
-- **Frontend** : Netlify, branche `main` → site prod (build `app/`)
-  - `netlify.toml` configure le redirect SPA (`/* → /index.html`)
-- **Backend** : Supabase managed (migrations versionnées via MCP `apply_migration`)
-- **Edge Functions** : déployées via Supabase CLI ou MCP (`deploy_edge_function`)
+Documents plus anciens, toujours utiles : [`docs/device-provisioning.md`](docs/device-provisioning.md) (contrat des box), [`docs/reference/status-payload-schema.md`](docs/reference/status-payload-schema.md) (format du statut), [`docs/realignement-prod-2026-10.md`](docs/realignement-prod-2026-10.md) (réalignement de la prod), [`supabase/cron-setup.md`](supabase/cron-setup.md) (tâches planifiées).
 
-CI GitHub Actions (`.github/workflows/`) lance typecheck + tests sur chaque push.
+## Organisation du dépôt
 
-## 10. Roadmap
+```
+app/                 front Vue 3 + TypeScript + Vite + Tailwind 4 + shadcn-vue + Pinia
+  src/               code (voir docs/front)
+  tests/unit/        tests vitest
+supabase/
+  migrations/        schéma SQL, RLS, fonctions SQL, planifications (l'ordre = le nom de fichier)
+  functions/         Edge Functions Deno + _shared/
+  tests/             scripts de test (Python et SQL) pour le projet TEST
+  email-templates/   modèles de mails d'authentification
+  config.toml        configuration Supabase
+docs/                documentation (ce guide)
+netlify.toml         build du front, relais api.hexa-ai.fr, en-têtes de sécurité
+.github/workflows/   CI (typecheck, lint, tests, build)
+```
 
-Plans détaillés dans `docs/superpowers/plans/` :
+## Règles d'or
 
-| Phase | Statut | Description |
-|---|---|---|
-| **P1** | ✅ Done | Bootstrap Vue + Vite + Tailwind + Supabase client + Vitest + ESLint + Prettier + Netlify + CI |
-| **P2** | ✅ Done | Migrations auth (`auth_user_id`, `role`, trigger), RLS, authStore, router guards, Login / Admin / Devices views |
-| **P3** | ✅ Done | Audit n8n, helpers Edge, 5 fonctions publiques, vues admin riches (carte flotte + détail + rapports périodiques + alarmes), QR interventions, thème dark/light, responsive, refresh auto, notification permanente |
-| **P4** | ⏳ Next | Admin CRUD (Companies, Devices, Recipients) — création/édition/suppression |
-| **P5** | ⏳ Plan | Tests E2E Playwright + coupure progressive des workflows n8n |
-
-## 11. Crédits
-
-- Design system : inspiré de [hexa-ai.fr](https://www.hexa-ai.fr/) (palette teal, logo officiel)
-- Icônes : Lucide / inline SVG
-- Cartes : OpenStreetMap + CartoDB tiles via Leaflet
-- Géocodage : Nominatim (User-Agent identifié)
-
----
-
-© Hexa.ai — Tous droits réservés.
+- **Aucun secret dans le dépôt** (il est public). Les secrets des fonctions sont des variables d'environnement Supabase ; la documentation ne les cite que par leur nom.
+- Une modification de la base = **une nouvelle migration** dans `supabase/migrations/` (on n'édite pas une migration déjà appliquée).
+- Le droit d'accès aux données est décidé **dans la base (RLS)**, pas dans le front. Le front ne fait que masquer des boutons.
+- Ne pas « corriger » la compatibilité firmware de `device-ingress` sans lire [`docs/flux/ingestion.md`](docs/flux/ingestion.md).
