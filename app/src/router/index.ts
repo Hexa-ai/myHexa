@@ -6,6 +6,7 @@ import MagicLinkView from '@/views/auth/MagicLinkView.vue'
 import CallbackView from '@/views/auth/CallbackView.vue'
 import AcceptView from '@/views/auth/AcceptView.vue'
 import { useAuthStore } from '@/stores/auth'
+import { peutEditerIci } from '@/lib/synoptic/environnement'
 import AdminLayout from '@/views/admin/AdminLayout.vue'
 import DevicesView from '@/views/admin/DevicesView.vue'
 import DeviceDetailView from '@/views/admin/DeviceDetailView.vue'
@@ -73,6 +74,22 @@ export const router = createRouter({
           path: 'dashboard/partage/:d',
           name: 'admin-dashboard-shared',
           component: () => import('@/views/admin/SharedDashboardView.vue'),
+        },
+        {
+          // synoptique en plein cadre, lecture seule
+          path: 'synoptic/:id',
+          name: 'admin-synoptic',
+          component: () => import('@/views/admin/SynopticView.vue'),
+        },
+        {
+          // éditeur de synoptique : ordinateur uniquement (écran large + pointeur fin), sinon retour à la vue
+          path: 'synoptic/:id/edit',
+          name: 'admin-synoptic-edit',
+          component: () => import('@/views/admin/SynopticEditView.vue'),
+          beforeEnter: (to) =>
+            peutEditerIci()
+              ? true
+              : { name: 'admin-synoptic', params: to.params, query: { ...to.query, avis: 'bureau' } },
         },
         {
           path: 'projects',

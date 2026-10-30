@@ -25,6 +25,7 @@ export type WidgetType =
   | 'alarm_stats'
   | 'interventions'
   | 'weather'
+  | 'synoptic'
 export type WidgetWidth = '1/4' | '1/3' | '1/2' | '2/3' | 'full'
 export type Op = 'sum' | 'mean' | 'min' | 'max'
 export type Stat = 'last' | 'mean' | 'min' | 'max' | 'total'
@@ -116,6 +117,9 @@ export interface WidgetOptions {
   weatherFields?: import('@/composables/useWeather').WeatherField[]
   /** météo : pictogrammes animés, fixes ou masqués */
   weatherIcons?: import('@/composables/useWeather').WeatherIcons
+  /** synoptique : identifiant (table synoptics) et variables reliées, annoncées au mode direct */
+  synoptic_id?: string
+  synoptic_vars?: string[]
 }
 export interface Widget {
   id?: string
@@ -157,6 +161,7 @@ export const WIDGET_LABEL: Record<WidgetType, string> = {
   alarm_stats: 'Statistiques d\u2019alarmes',
   interventions: 'Signalements',
   weather: 'Météo',
+  synoptic: 'Synoptique',
 }
 /** blocs d'alarmes : les sources ne portent que les box (var vide), le filtre est dans les options */
 export const isAlarmWidget = (t: WidgetType) => t === 'alarm_history' || t === 'alarm_stats'

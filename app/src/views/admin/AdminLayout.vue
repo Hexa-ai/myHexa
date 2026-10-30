@@ -65,6 +65,8 @@ const breadcrumb = computed(() => {
     'admin-map': 'carte',
     'admin-projects': 'projets',
     'admin-dashboard': 'tableau de bord',
+    'admin-synoptic': 'synoptique',
+    'admin-synoptic-edit': 'synoptique · édition',
     'admin-dashboard-shared': 'tableau partagé',
     'admin-alarms': 'alarmes',
     'admin-interventions': 'interventions',

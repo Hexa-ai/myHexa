@@ -1,0 +1,13 @@
+/* Adaptation au portail : le synoptique remplit la place que lui laisse son conteneur (tuile, vue agrandie, éditeur),
+   au lieu de la hauteur de fenêtre du prototype. Chargé APRÈS synoptique.css. */
+.syn-root { height: 100%; min-height: 0; display: flex; flex-direction: column; position: relative; background: #0c1319; background-image: none; border-radius: inherit; overflow: hidden; }
+.syn-root .synbody { flex: 1; min-height: 0; display: flex; }
+.syn-root #scene, .syn-root .synbody.edition #scene { flex: 1; min-width: 0; height: 100% !important; min-height: 0 !important; }
+.syn-root .synbody.sans-verif .ed-only { display: none; }
+.syn-root .pastille-verif { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #f5b950; vertical-align: -1px; margin-right: 6px; }
+.syn-root .pastille-inconnu { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 1.5px dashed #8091a0; vertical-align: -2px; margin-right: 6px; box-sizing: border-box; }
+/* tuile réduite : pas de légende, boutons de zoom discrets */
+.syn-root:not(.syn-plein) .legende { display: none; }
+.syn-root:not(.syn-plein) .zoomb { opacity: 0; transition: opacity .15s; }
+.syn-root:not(.syn-plein):hover .zoomb { opacity: 1; }
+.syn-root.mode-edition .edbar { flex: none; }

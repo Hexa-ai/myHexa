@@ -280,6 +280,10 @@ const liveVars = computed(() => {
   const m: Record<string, string[]> = {}
   for (const id of liveIds.value) m[id] = []
   for (const w of widgets.value) for (const src of w.sources) if (src.device && src.var) (m[src.device] ??= []).push(src.var)
+  // synoptiques : variables reliées dans le dessin (tenues à jour à chaque enregistrement de l'éditeur)
+  for (const w of widgets.value)
+    if (w.type === 'synoptic' && w.sources[0]?.device)
+      (m[w.sources[0].device] ??= []).push(...(w.options.synoptic_vars ?? []))
   return m
 })
 watch(

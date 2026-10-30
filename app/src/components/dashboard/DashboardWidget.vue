@@ -27,6 +27,7 @@ const knobHand = (f: number, r = 30) => {
   return { x: 60 + r * Math.cos(a), y: 60 + r * Math.sin(a) }
 }
 import HistoryChart from '@/components/HistoryChart.vue'
+import SynopticTile from '@/components/synoptic/SynopticTile.vue'
 import type { DeviceWithStatus } from '@/composables/useDevices'
 import type { HistPoint, HistVar } from '@/composables/useHistory'
 import {
@@ -452,7 +453,15 @@ const tableRows = computed(() =>
 </script>
 
 <template>
+  <!-- synoptique : tuile à part (cadre, hauteur et boutons propres) -->
+  <SynopticTile
+    v-if="w.type === 'synoptic'"
+    :synoptic-id="w.options.synoptic_id"
+    :title="w.title"
+    :device="devices.get(w.sources[0]?.device ?? '')"
+  />
   <div
+    v-else
     class="w-mod h-full border border-border rounded-md bg-card/40 p-3 sm:p-4 flex flex-col min-w-0"
     :data-testid="`widget-${w.type}`"
   >

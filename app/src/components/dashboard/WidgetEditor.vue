@@ -29,6 +29,8 @@ import {
   type WidgetWidth,
 } from '@/composables/useDashboards'
 
+import SynopticWidgetOptions from '@/components/synoptic/SynopticWidgetOptions.vue'
+
 const props = defineProps<{
   widget: Widget
   devices: DeviceWithStatus[]
@@ -59,7 +61,7 @@ async function pickImage(ev: Event, set: (url: string) => void) {
 const WIDTHS: WidgetWidth[] = ['1/4', '1/3', '1/2', '2/3', 'full']
 const needsVars = computed(
   () =>
-    !['status', 'image', 'text', 'map', 'document', 'interventions', 'weather'].includes(
+    !['status', 'image', 'text', 'map', 'document', 'interventions', 'weather', 'synoptic'].includes(
       w.value.type,
     ) && !isAlarmWidget(w.value.type),
 )
@@ -128,6 +130,11 @@ function setType(t: WidgetType) {
     if (!w.value.sources.length || w.value.sources.some((s) => s.var))
       w.value.sources = props.devices.slice(0, 1).map((d) => ({ device: d.id, var: '' }))
     w.value.options.weatherView ??= 'now'
+  } else if (t === 'synoptic') {
+    w.value.op = null
+    w.value.width = 'full'
+    if (!w.value.sources.length || w.value.sources.some((s) => s.var))
+      w.value.sources = props.devices.slice(0, 1).map((d) => ({ device: d.id, var: '' }))
   } else if (t === 'status') {
     w.value.sources = props.devices.map((d) => ({ device: d.id, var: '' }))
     w.value.options.fields ??= ['online', 'last_seen', 'uptime', 'version']
@@ -220,6 +227,7 @@ function addState() {
   w.value.options.states = st
 }
 function save() {
+  if (w.value.type === 'synoptic' && !w.value.options.synoptic_id) return
   if (
     w.value.type === 'indicator' ||
     (w.value.type === 'map' && w.value.sources.some((s) => s.var))
@@ -819,6 +827,12 @@ function save() {
           </div>
         </template>
       </div>
+      <SynopticWidgetOptions
+        v-if="w.type === 'synoptic'"
+        :widget="w"
+        :devices="devices"
+        :company-id="companyId"
+      />
       <div v-if="w.type === 'weather'" class="mb-3 space-y-3" data-testid="weather-editor">
         <div>
           <div class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
