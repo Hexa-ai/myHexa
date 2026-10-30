@@ -32,7 +32,10 @@ export type WidgetWidth = '1/4' | '1/3' | '1/2' | '2/3' | 'full'
  * Un type absent garde la taille actuelle de la tuile. Ex. à ajouter pour un grand synoptique :
  * `synoptic: { w: 12, h: 4 }`.
  */
-export const DEFAULT_SIZE: Partial<Record<WidgetType, { w: number; h: number }>> = {}
+export const DEFAULT_SIZE: Partial<Record<WidgetType, { w: number; h: number }>> = {
+  // Un synoptique se lit en grand : pleine largeur, 4 rangées (~480 px)
+  synoptic: { w: 12, h: 4 },
+}
 export type Op = 'sum' | 'mean' | 'min' | 'max'
 export type Stat = 'last' | 'mean' | 'min' | 'max' | 'total'
 

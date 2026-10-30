@@ -51,7 +51,7 @@ function editer() {
 
 <template>
   <div
-    class="h-full min-h-[520px] border border-border rounded-md bg-card/40 flex flex-col min-w-0 overflow-hidden"
+    class="h-full min-h-[360px] border border-border rounded-md bg-card/40 flex flex-col min-w-0 overflow-hidden"
     data-testid="widget-synoptic"
   >
     <SynopticBar :titre="titre" :en-direct="enDirect" :recu="recu" :alarmes="etat?.alarmes ?? 0">
