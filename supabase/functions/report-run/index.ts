@@ -967,6 +967,16 @@ Deno.serve(async (req) => {
       if (!tpl) return fail('FORBIDDEN', 'Rapport non accessible', 403)
       const { data: can } = await user.rpc('can_manage_company', { p_company: tpl.company_id })
       if (!can) return fail('FORBIDDEN', 'Réservé à l’administrateur', 403)
+      // échéance déjà passée et pas encore partie : l'envoi manuel la remplace (même période, échéance
+      // avancée AVANT génération) -> le cron ne renvoie pas le même rapport quelques minutes plus tard
+      if (tpl.enabled && tpl.next_run_at && Date.parse(tpl.next_run_at) <= Date.now()) {
+        const due = tpl.next_run_at as string
+        const { data: nx } = await admin.rpc('report_next_run', {
+          p_freq: tpl.frequency, p_hour: tpl.send_hour, p_weekday: tpl.weekday, p_monthday: tpl.monthday, p_tz: tpl.tz, p_after: new Date().toISOString(),
+        })
+        await admin.from('report_templates').update({ next_run_at: nx }).eq('id', tpl.id).eq('next_run_at', due)
+        return ok(await runTemplate(tpl, 'manual', due))
+      }
       return ok(await runTemplate(tpl, 'manual'))
     }
     return fail('BAD_REQUEST', 'action inconnue', 400)

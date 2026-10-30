@@ -134,19 +134,47 @@ const previewPdf = (t: ReportTemplate) =>
     setTimeout(() => URL.revokeObjectURL(url), 60000)
     msg.value = 'Aperçu PDF téléchargé.'
   })
-const sendNow = (r: ReportTemplate) =>
-  wrap(async () => {
-    const res = await runReport(r.id!)
-    msg.value =
-      res.status === 'sent'
-        ? `Envoyé à ${res.sent_to.join(', ')}.${res.error ? ' ' + res.error : ''}`
-        : `Rapport généré et archivé, non envoyé : ${res.error ?? ''}`
-    await refresh()
+// retour visible sur la ligne du rapport (le message du haut est hors de vue sur un long panneau)
+const sending = ref<string | null>(null)
+const rowMsg = ref<Record<string, { ok: boolean; text: string }>>({})
+const sendNow = async (r: ReportTemplate) => {
+  if (sending.value) return
+  sending.value = r.id!
+  rowMsg.value = { ...rowMsg.value, [r.id!]: { ok: true, text: 'Génération et envoi en cours…' } }
+  await wrap(async () => {
+    try {
+      const res = await runReport(r.id!)
+      const text =
+        res.status === 'sent'
+          ? `Envoyé à ${res.sent_to.join(', ')}.${res.error ? ' ' + res.error : ''}`
+          : `Rapport généré et archivé, non envoyé : ${res.error ?? ''}`
+      msg.value = text
+      rowMsg.value = { ...rowMsg.value, [r.id!]: { ok: res.status === 'sent', text } }
+      await refresh()
+    } catch (e) {
+      rowMsg.value = { ...rowMsg.value, [r.id!]: { ok: false, text: (e as Error).message } }
+      throw e
+    } finally {
+      sending.value = null
+    }
   })
-const open = (path: string | null) =>
-  wrap(async () => {
-    if (path) window.open(await archiveUrl(path), '_blank')
-  })
+}
+// ouverture d'une archive : fenêtre ouverte AU CLIC (sinon bloquée par Safari / iPhone après l'attente
+// de l'URL signée), puis redirigée ; erreur affichée sous l'historique
+const archiveErr = ref('')
+const open = async (path: string | null) => {
+  if (!path) return
+  archiveErr.value = ''
+  const w = window.open('', '_blank')
+  try {
+    const url = await archiveUrl(path)
+    if (w) w.location.href = url
+    else window.location.href = url
+  } catch (e) {
+    w?.close()
+    archiveErr.value = `Archive inaccessible : ${(e as Error).message}`
+  }
+}
 function downloadCsv() {
   if (!preview.value) return
   const a = document.createElement('a')
@@ -253,12 +281,19 @@ const STATUS: Record<ReportRun['status'], [string, string]> = {
           </button>
           <template v-if="canManage">
             <button
-              class="text-xs px-2.5 py-1 rounded border border-border"
+              class="text-xs px-2.5 py-1 rounded border border-border inline-flex items-center gap-1.5"
+              :class="sending === r.id ? 'border-signal/60 text-signal' : ''"
               :disabled="busy"
+              :aria-busy="sending === r.id"
               data-testid="report-send"
               @click="sendNow(r)"
             >
-              Envoyer maintenant
+              <span
+                v-if="sending === r.id"
+                class="inline-block w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin"
+                aria-hidden="true"
+              />
+              {{ sending === r.id ? 'Envoi en cours…' : 'Envoyer maintenant' }}
             </button>
             <button
               class="text-xs px-2.5 py-1 rounded border border-border"
@@ -275,6 +310,14 @@ const STATUS: Record<ReportRun['status'], [string, string]> = {
             </button>
           </template>
         </div>
+        <p
+          v-if="rowMsg[r.id!]"
+          class="basis-full text-xs mt-1"
+          :class="rowMsg[r.id!].ok ? 'text-signal' : 'text-offline'"
+          data-testid="report-send-status"
+        >
+          {{ rowMsg[r.id!].text }}
+        </p>
       </div>
 
       <!-- historique -->
@@ -301,6 +344,9 @@ const STATUS: Record<ReportRun['status'], [string, string]> = {
           <button v-if="x.csv_path" class="underline" @click="open(x.csv_path)">CSV</button>
         </div>
       </details>
+      <p v-if="archiveErr" class="text-xs text-offline mt-1" data-testid="report-archive-error">
+        {{ archiveErr }}
+      </p>
     </div>
 
     <!-- édition -->
