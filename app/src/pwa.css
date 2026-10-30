@@ -140,6 +140,11 @@ html.ios-short-viewport body {
   line-height: 16px;
   text-align: center;
 }
+/* interventions ouvertes : pastille d'information (le rouge reste réservé aux alarmes) */
+.mobile-tab-badge-info {
+  background: var(--signal);
+  color: var(--primary-foreground);
+}
 /* sur téléphone, la barre d'onglets remplace le pied de page (marque + version, restés dans le menu) */
 @media (max-width: 767px) {
   main + footer {

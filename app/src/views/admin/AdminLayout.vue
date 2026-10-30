@@ -14,12 +14,17 @@ import { useAuthStore } from '@/stores/auth'
 import { useTheme, styleSwitchAvailable } from '@/composables/useTheme'
 import { useAlarmCounts, ALARM_COUNTS_KEY } from '@/composables/useAlarmCounts'
 import StaffBar from '@/components/staff/StaffBar.vue'
+import CompanyLogo from '@/components/brand/CompanyLogo.vue'
+import { loadBrandForCompany, useBrand } from '@/composables/useBrand'
 
 const { theme, toggle: toggleTheme, uiStyle, toggleStyle } = useTheme()
 const alarms = useAlarmCounts()
 provide(ALARM_COUNTS_KEY, alarms)
 
 const auth = useAuthStore()
+// co-branding : logo / couleur de l'entreprise (celle sur laquelle le staff agit, le cas échéant)
+const { brand } = useBrand()
+watch(() => auth.effectiveCompanyId, (id) => void loadBrandForCompany(id), { immediate: true })
 const router = useRouter()
 const route = useRoute()
 
@@ -240,13 +245,22 @@ function goUsage() {
           :title="company"
           draggable="false"
         />
+        <CompanyLogo v-if="brand?.logoUrl" height-class="h-7" testid="brand-logo-rail" />
       </div>
       <div :class="['px-5 pt-6 pb-5 border-b border-border', collapsed && 'md:hidden']">
+        <div v-if="brand?.logoUrl" class="mb-3" data-testid="brand-block">
+          <CompanyLogo height-class="h-11" testid="brand-logo" />
+        </div>
         <img
           :src="theme === 'dark' ? '/hexa-logo-dark.png' : '/hexa-logo-light.png'"
           alt="Hexa.ai"
-          class="h-9 w-[140px] object-contain object-left select-none"
+          :class="[
+            'object-contain object-left select-none',
+            brand?.logoUrl ? 'h-6 w-[96px] opacity-90' : 'h-9 w-[140px]',
+          ]"
+          data-testid="hexa-logo"
           draggable="false"
+          @click="diagTap"
         />
         <div class="mt-4 flex items-center justify-between gap-2">
           <div class="flex items-center gap-2 min-w-0">
@@ -587,6 +601,31 @@ function goUsage() {
           <span class="tracking-tight">Mises à jour</span>
         </button>
 
+        <button
+          v-if="isAdmin"
+          :title="collapsed ? 'Mon entreprise' : undefined"
+          :class="[
+            'group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition text-left',
+            route.name === 'admin-branding'
+              ? 'text-foreground bg-secondary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+          ]"
+          data-testid="nav-branding"
+          @click="router.push({ name: 'admin-branding' }); closeSidebar()"
+        >
+          <span
+            :class="[
+              'absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r transition',
+              route.name === 'admin-branding' ? 'bg-signal' : 'bg-transparent',
+            ]"
+          />
+          <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7">
+            <rect x="4" y="3" width="16" height="18" rx="2" />
+            <path d="M8 8h8M8 12h8M8 16h4" />
+          </svg>
+          <span class="tracking-tight">Mon entreprise</span>
+        </button>
+
         <div v-if="auth.isHexaStaff" class="my-3 border-t border-border" />
 
         <button
@@ -712,6 +751,31 @@ function goUsage() {
           Session
         </div>
         <div class="text-xs truncate">{{ email }}</div>
+        <!-- téléphone : la barre du haut est masquée, les bascules d'affichage sont ici -->
+        <div class="md:hidden flex items-center gap-2" data-testid="mobile-prefs">
+          <button
+            data-testid="theme-toggle-menu"
+            class="h-8 px-3 inline-flex items-center gap-2 rounded-md border border-border text-muted-foreground hover:text-foreground transition font-mono text-[10px] uppercase tracking-wider"
+            @click="toggleTheme"
+          >
+            <svg v-if="theme === 'dark'" viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
+            </svg>
+            {{ theme === 'dark' ? 'Thème clair' : 'Thème sombre' }}
+          </button>
+          <button
+            v-if="styleSwitchAvailable"
+            data-testid="style-switch-menu"
+            class="h-8 px-3 inline-flex items-center rounded-md border border-border text-muted-foreground hover:text-foreground transition font-mono text-[10px]"
+            @click="toggleStyle"
+          >
+            {{ uiStyle === 'appareil' ? 'classique' : 'appareil' }}
+          </button>
+        </div>
         <div class="flex items-center justify-between">
           <span
             class="font-mono text-[10px] uppercase px-1.5 py-0.5 border border-hairline rounded text-muted-foreground bg-secondary/60"
@@ -727,6 +791,14 @@ function goUsage() {
         </div>
       </div>
       <div class="px-3 pb-2"><PwaInstallButton :collapsed="collapsed" /></div>
+      <a
+        href="https://hexa-ai.fr"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="md:hidden px-4 pb-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-signal transition"
+        data-testid="powered-by-menu"
+        >propulsé par Hexa-AI · version {{ buildDate }}</a
+      >
       <button
         class="hidden md:flex items-center justify-center gap-2 border-t border-border py-2 text-[10px] font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground transition"
         :title="collapsed ? 'Déplier le menu' : 'Réduire le menu'"
@@ -750,7 +822,8 @@ function goUsage() {
     <div class="flex-1 flex flex-col min-w-0">
       <StaffBar v-if="auth.isHexaStaff" />
       <header
-        class="h-12 border-b border-border bg-background/60 backdrop-blur-sm flex items-center justify-between px-3 sm:px-5 md:px-6"
+        class="hidden md:flex h-12 border-b border-border bg-background/60 backdrop-blur-sm items-center justify-between px-3 sm:px-5 md:px-6"
+        data-testid="topbar"
       >
         <div
           class="flex items-center gap-2 sm:gap-2.5 text-xs font-mono text-muted-foreground min-w-0"
@@ -775,7 +848,7 @@ function goUsage() {
           <span class="text-muted-foreground/50 hidden sm:inline">/</span>
           <span class="hidden sm:inline">admin</span>
           <span class="text-muted-foreground/50 hidden sm:inline">/</span>
-          <span class="text-foreground truncate" @click="diagTap">{{ breadcrumb }}</span>
+          <span class="text-foreground truncate">{{ breadcrumb }}</span>
         </div>
         <div class="flex items-center gap-2 sm:gap-5 text-[11px] font-mono text-muted-foreground">
           <button
@@ -876,7 +949,14 @@ function goUsage() {
       <footer
         class="border-t border-border bg-card/40 px-6 py-2 flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-muted-foreground"
       >
-        <span>Hexa.ai · myHexa edge ops</span>
+        <a
+          href="https://hexa-ai.fr"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="hover:text-signal transition"
+          data-testid="powered-by"
+          >propulsé par Hexa-AI</a
+        >
         <span class="flex items-center gap-3">
           <span>version {{ buildDate }}</span>
           <span class="text-signal">●</span>
@@ -885,6 +965,7 @@ function goUsage() {
       <MobileTabBar
         :active="mobileTab"
         :alarms="alarms.urgent.value"
+        :interventions="alarms.openInterventions.value"
         :menu-open="sidebarOpen"
         @go="goTab"
         @menu="toggleSidebar"

@@ -50,3 +50,20 @@ export async function removeLogo(companyId: string) {
   const { error } = await sb.rpc('set_company_logo', { p_company: companyId, p_path: null })
   if (error) throw new Error(error.message)
 }
+
+/** logo variante sombre (optionnel, co-branding) */
+export async function uploadLogoDark(companyId: string, file: File): Promise<string> {
+  check(file)
+  const path = `${companyId}/logo-dark-${Date.now()}.${ext(file)}`
+  const { error } = await supabase.storage
+    .from('branding')
+    .upload(path, file, { contentType: file.type, cacheControl: '31536000' })
+  if (error) throw new Error(error.message)
+  const { error: e2 } = await sb.rpc('set_company_logo_dark', { p_company: companyId, p_path: path })
+  if (e2) throw new Error(e2.message)
+  return publicUrl(path)
+}
+export async function removeLogoDark(companyId: string) {
+  const { error } = await sb.rpc('set_company_logo_dark', { p_company: companyId, p_path: null })
+  if (error) throw new Error(error.message)
+}

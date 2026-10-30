@@ -1,8 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useTheme } from '@/composables/useTheme'
+import { clearBrand, loadBrandBySlug, useBrand } from '@/composables/useBrand'
+import CompanyLogo from '@/components/brand/CompanyLogo.vue'
+
+// /<slug> : page de connexion de l'entreprise (logo + couleurs avant connexion) ; slug inconnu = connexion standard
+const props = defineProps<{ slug?: string }>()
+const { brand } = useBrand()
 
 const { theme, toggle: toggleTheme } = useTheme()
 
@@ -16,6 +22,15 @@ const password = ref('')
 function defaultRoute() {
   return auth.isHexaStaff ? '/admin/staff/companies' : '/admin'
 }
+
+watch(
+  () => props.slug,
+  (slug) => {
+    if (slug) void loadBrandBySlug(slug)
+    else clearBrand()
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   if (auth.isAuthenticated) {
@@ -39,7 +54,8 @@ async function handleSubmit() {
 
     <!-- corners -->
     <div class="absolute top-6 left-6 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground flex items-center gap-2">
-      <span class="text-signal">⬢</span> Hexa.ai · myHexa edge
+      <span class="text-signal">⬢</span>
+      <a href="https://hexa-ai.fr" target="_blank" rel="noopener noreferrer" class="hover:text-signal transition" data-testid="powered-by">{{ brand ? 'propulsé par Hexa-AI' : 'Hexa.ai · myHexa edge' }}</a>
     </div>
     <div class="absolute bottom-6 right-6 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
       v1 · 2026
@@ -69,7 +85,19 @@ async function handleSubmit() {
 
     <div class="relative w-full max-w-[440px] fade-up">
       <div class="mb-8 flex flex-col items-center">
+        <div v-if="brand?.logoUrl" class="mb-7 flex items-center justify-center gap-5" data-testid="login-cobrand">
+          <CompanyLogo height-class="h-20" testid="login-brand-logo" />
+          <span class="h-12 w-px bg-border" aria-hidden="true" />
+          <img
+            :src="theme === 'dark' ? '/hexa-logo-dark.png' : '/hexa-logo-light.png'"
+            alt="Hexa.ai"
+            class="h-10 w-[120px] object-contain select-none"
+            data-testid="login-hexa-logo"
+            draggable="false"
+          />
+        </div>
         <img
+          v-else
           :src="theme === 'dark' ? '/hexa-logo-dark.png' : '/hexa-logo-light.png'"
           alt="Hexa.ai"
           class="h-14 w-[200px] object-contain mb-7 select-none drop-shadow-[0_8px_30px_rgb(232_144_46_/_0.25)]"
