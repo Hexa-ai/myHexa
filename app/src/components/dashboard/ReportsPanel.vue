@@ -148,7 +148,6 @@ const sendNow = async (r: ReportTemplate) => {
         res.status === 'sent'
           ? `Envoyé à ${res.sent_to.join(', ')}.${res.error ? ' ' + res.error : ''}`
           : `Rapport généré et archivé, non envoyé : ${res.error ?? ''}`
-      msg.value = text
       rowMsg.value = { ...rowMsg.value, [r.id!]: { ok: res.status === 'sent', text } }
       await refresh()
     } catch (e) {
@@ -269,6 +268,14 @@ const STATUS: Record<ReportRun['status'], [string, string]> = {
           <div class="text-[11px] text-muted-foreground">
             Prochain envoi : {{ r.enabled ? fmt(r.next_run_at) : '—' }}
           </div>
+          <p
+            v-if="rowMsg[r.id!]"
+            class="text-xs mt-1 break-words"
+            :class="rowMsg[r.id!].ok ? 'text-signal' : 'text-offline'"
+            data-testid="report-send-status"
+          >
+            {{ rowMsg[r.id!].text }}
+          </p>
         </div>
         <div class="flex flex-wrap gap-1.5">
           <button
@@ -310,14 +317,6 @@ const STATUS: Record<ReportRun['status'], [string, string]> = {
             </button>
           </template>
         </div>
-        <p
-          v-if="rowMsg[r.id!]"
-          class="basis-full text-xs mt-1"
-          :class="rowMsg[r.id!].ok ? 'text-signal' : 'text-offline'"
-          data-testid="report-send-status"
-        >
-          {{ rowMsg[r.id!].text }}
-        </p>
       </div>
 
       <!-- historique -->
@@ -339,7 +338,6 @@ const STATUS: Record<ReportRun['status'], [string, string]> = {
             >à {{ x.sent_to.join(', ') }}</span
           >
           <span v-if="x.error" class="text-muted-foreground italic">{{ x.error }}</span>
-          <button v-if="x.html_path" class="underline" @click="open(x.html_path)">voir</button>
           <button v-if="x.pdf_path" class="underline" @click="open(x.pdf_path)">PDF</button>
           <button v-if="x.csv_path" class="underline" @click="open(x.csv_path)">CSV</button>
         </div>
