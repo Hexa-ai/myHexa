@@ -6,7 +6,7 @@ Fichiers clés :
 
 | Côté | Fichier |
 |---|---|
-| base | `supabase/migrations/20261031090000_realtime_direct.sql` (rôle `box_rt`, droits sur `realtime.messages`, `device_realtime`, `realtime_box_lookup`) |
+| base | `supabase/migrations/20261031090000_realtime_direct.sql` (rôle `box_rt`, droits sur `realtime.messages`, `device_realtime`, `realtime_box_lookup`) + `20261031120000_realtime_box_rt_droits.sql` (droits rejoués, `box_rt` membre d'`authenticator`) |
 | jeton box | `supabase/functions/realtime-token/index.ts`, `supabase/functions/_shared/realtimeToken.ts`, route `/<hostname>/realtime-token` de `device-ingress` |
 | front : état | `app/src/stores/live.ts` (store Pinia partagé) |
 | front : transport | `app/src/lib/live/` (`index.ts`, `types.ts`, `supabaseSource.ts`, `mockSource.ts`) |
@@ -40,7 +40,7 @@ La box ne publie **que s'il y a au moins un spectateur** : tant que personne ne 
 
 - Un canal **privé** par box : topic `box:<devices.id>`.
 - Un utilisateur authentifié peut lire (broadcast + présence) et annoncer sa présence sur `box:<id>` **si `is_device_visible(<id>)`**, c'est-à-dire la même règle que pour voir la box dans le portail. Un client anonyme est refusé (canaux privés obligatoires sur le projet).
-- La box utilise un JWT court de rôle `box_rt`, qui ne donne accès **qu'à son propre topic** (`select` + `insert` sur `realtime.messages`). PostgREST refuse ce rôle ; seul Realtime l'accepte.
+- La box utilise un JWT court de rôle `box_rt`, qui ne donne accès **qu'à son propre topic** (`select` + `insert` sur `realtime.messages`). `box_rt` est membre d'`authenticator` (indispensable pour que Realtime accepte le jeton) mais n'a aucun droit sur le schéma `public` : l'API de données répond 403 (test de sécurité T20). Attention : activer `private_only` peut faire perdre le grant sur `realtime.messages`, la migration `20261031120000` le rejoue.
 - Le jeton est signé en HS256 avec le secret JWT du projet, fourni à la fonction par le secret `RT_JWT_SECRET`. Si le projet passe aux clés de signature asymétriques, la signature devra changer (ES256).
 - Durée de vie : 6 h par défaut (`RT_TOKEN_TTL_S`). Une box mise au rebut garde au plus 6 h l'accès à **son** canal ; le renouvellement est refusé tout de suite. La box renouvelle aux 2/3 (`renew_after`).
 - Frein anti-essai : 30 échecs par minute et par IP (par instance de la fonction).
