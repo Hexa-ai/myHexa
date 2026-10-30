@@ -546,3 +546,12 @@
   .syn-root .cv-flux, .syn-root .cv-flux-eau, .syn-root .cv-rotor, .syn-root .cv-couronne, .syn-root .cv-goutte, .syn-root .cv-flamme-i,
   .syn-root .anneau, .syn-root .pale, .syn-root .rotor, .syn-root .flux, .syn-root .cv-lame{animation:none!important;transition:none!important}
 }
+
+/* CVC : lignes de modules dans le panneau de propriétés */
+.syn-root .ed-module{display:flex;flex-direction:column;gap:4px;margin:6px 0;padding:7px 8px;border:1px solid var(--hairline);border-radius:8px}
+.syn-root .ed-module-h{display:flex;align-items:center;gap:6px;min-width:0}
+.syn-root .ed-module-h b{font-family:var(--mono,ui-monospace,monospace);font-size:11px;font-weight:600;flex:none}
+.syn-root .ed-module-h>span:not(.ed-module-b){flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted-foreground);font-size:11px}
+.syn-root .ed-module-b{display:flex;gap:3px;flex:none}
+.syn-root .ed-module .ed-in{width:100%}
+.syn-root .ed-module .sm{font-size:11px}

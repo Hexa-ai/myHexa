@@ -385,8 +385,11 @@ export function cartesCvc(type: TypeCvc, params: (ParamsCta & ParamsHydro) | und
       const voulues = valeursVoulues ? valeursVoulues(p) : d?.mesures ?? []
       for (const b of voulues) {
         const x = lire(p.m.id, b)
+        // vitesse (%) et fréquence (Hz) disent la même chose : la fréquence est préférée
+        if (b === 'vitesse' && lire(p.m.id, 'frequence') != null) continue
         if (x != null && valeurs.length < 3 && !valeurs.some((v) => v.idModule === p.m.id && v.base === b)) {
-          valeurs.push({ libelle: LIB_VALEUR[b] ?? b, base: b, idModule: p.m.id, valeur: x })
+          const qualif = ps.filter((q) => q.m.k === p.m.k).length < ps.length && ps.length > 1 && !['ventilateur'].includes(p.m.k) ? `${libelleModule(p.m, type)} · ` : ''
+          valeurs.push({ libelle: qualif + (LIB_VALEUR[b] ?? b), base: b, idModule: p.m.id, valeur: x })
         }
       }
     })
