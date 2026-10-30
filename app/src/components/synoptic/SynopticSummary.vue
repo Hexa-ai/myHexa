@@ -2,6 +2,7 @@
 // Résumé d'un synoptique pour mobile : alarmes actives (rouge), puis une carte par zone ou ouvrage avec son état et ses
 // valeurs principales. Ne capte aucun geste : la page défile toujours. Un appui sur une carte ou sur le bouton ouvre le dessin.
 import type { CadreDessin, EtatOuvrage, ResumeSynoptique } from '@/lib/synoptic/resume'
+import SynopticPicto from './SynopticPicto.vue'
 
 defineProps<{ resume: ResumeSynoptique }>()
 const emit = defineEmits<{ (e: 'ouvrir', cadre: CadreDessin | null): void }>()
@@ -76,6 +77,9 @@ const PASTILLE: Record<EtatOuvrage, string> = {
               c.alarmes ? `${c.alarmes} alarme${c.alarmes > 1 ? 's' : ''}` : LIBELLE_ETAT[c.etat]
             }}</span
           >
+        </span>
+        <span v-if="c.pictos.length" class="flex items-center gap-2" data-testid="synoptic-pictos">
+          <SynopticPicto v-for="p in c.pictos" :key="p.id" :picto="p" />
         </span>
         <span
           v-for="v in c.valeurs"

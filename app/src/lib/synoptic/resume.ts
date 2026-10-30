@@ -27,11 +27,26 @@ export interface CadreDessin {
   h: number
 }
 
+/** famille de pictogramme affichable dans une carte */
+export type FamillePicto = 'pompe' | 'moteur' | 'ventilateur' | 'vanne' | 'cuve'
+export type EtatPicto = 'marche' | 'arret' | 'defaut' | 'ouvert' | 'ferme' | 'inconnu'
+
+export interface PictoResume {
+  id: string
+  famille: FamillePicto
+  etat: EtatPicto
+  libelle: string
+  /** remplissage 0..1 (cuves avec niveau_max connu), sinon null */
+  niveau: number | null
+}
+
 export interface CarteResume {
   id: string
   titre: string
   etat: EtatOuvrage
   alarmes: number
+  /** pictogrammes des équipements principaux (4 au plus, ouvrage d'abord) */
+  pictos: PictoResume[]
   /** 1 à 3 valeurs principales */
   valeurs: ValeurResume[]
   cadre: CadreDessin | null
@@ -357,8 +372,61 @@ function carte(
     etat,
     alarmes: nbAlarmes,
     valeurs: valeursPrincipales(g.membres, v),
+    pictos: pictosDe(g.membres, v),
     cadre,
   }
+}
+
+const MAX_PICTOS = 4
+const FAMILLE: Record<string, FamillePicto> = {
+  pompe: 'pompe',
+  moteur: 'moteur',
+  compresseur: 'moteur',
+  convoyeur: 'moteur',
+  variateur: 'moteur',
+  ventilateur: 'ventilateur',
+  vanne: 'vanne',
+  vanne_reg: 'vanne',
+  vanne_man: 'vanne',
+  vanne_3v: 'vanne',
+  cuve: 'cuve',
+}
+/** ordre d'affichage : l'ouvrage, puis ce qui tourne, puis les vannes */
+const ORDRE: FamillePicto[] = ['cuve', 'pompe', 'moteur', 'ventilateur', 'vanne']
+
+export function familleDe(e: SynopticEquipement): FamillePicto | null {
+  return FAMILLE[typeEffectif(e)] ?? null
+}
+
+function etatPicto(e: SynopticEquipement, v: Valeurs): EtatPicto {
+  const x = etatEquipement(e, v)
+  if (x === 'alarme' || x === 'defaut') return 'defaut'
+  if (x === 'marche' || x === 'arret' || x === 'ouvert' || x === 'ferme') return x
+  return 'inconnu'
+}
+
+function niveauRelatif(e: SynopticEquipement, v: Valeurs): number | null {
+  const sp = e.slots?.niveau
+  const brut = sp?.variable ? v[sp.variable] : undefined
+  const max = Number((e.params as { niveau_max?: number } | undefined)?.niveau_max)
+  if (brut === undefined) return null
+  const ref = max > 0 ? max : 100
+  return Math.max(0, Math.min(1, brut / ref))
+}
+
+export function pictosDe(membres: SynopticEquipement[], v: Valeurs): PictoResume[] {
+  return membres
+    .map((e) => ({ e, famille: familleDe(e) }))
+    .filter((x): x is { e: SynopticEquipement; famille: FamillePicto } => !!x.famille)
+    .sort((a, b) => ORDRE.indexOf(a.famille) - ORDRE.indexOf(b.famille))
+    .slice(0, MAX_PICTOS)
+    .map(({ e, famille }) => ({
+      id: e.id,
+      famille,
+      etat: etatPicto(e, v),
+      libelle: e.libelle,
+      niveau: famille === 'cuve' ? niveauRelatif(e, v) : null,
+    }))
 }
 
 /** niveau de l'ouvrage, mesures, vitesses, puis nombre de vannes ouvertes : 3 valeurs au plus, sans doublon de variable */

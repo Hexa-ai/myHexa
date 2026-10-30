@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { construireResume, etatEquipement, formaterNombre } from '@/lib/synoptic/resume'
+import { construireResume, etatEquipement, formaterNombre, pictosDe } from '@/lib/synoptic/resume'
 import type { SynopticDocument, SynopticEquipement } from '@/lib/synoptic/engine/types'
 
 const eq = (e: Partial<SynopticEquipement> & { id: string; type: string }): SynopticEquipement => ({
@@ -194,5 +194,29 @@ describe('résumé du synoptique (mobile)', () => {
     expect(etatEquipement(pompe, {})).toBe('inconnu')
     expect(etatEquipement(pompe, { M: 0 })).toBe('arret')
     expect(etatEquipement(pompe, { M: 1 })).toBe('marche')
+  })
+
+  it('pictogrammes : cuve en premier, agitateur qui tourne en marche, niveau relatif', () => {
+    const r = construireResume(doc(), { NIV1: 1.5, AG1_RM: 1 })
+    const cuve = r.ouvrages.find((c) => c.titre === 'Cuve de floculation')!
+    expect(cuve.pictos[0].famille).toBe('cuve')
+    const ag = cuve.pictos.find((p) => p.id === 'AG1')
+    expect(ag?.etat).toBe('marche')
+  })
+
+  it('pictogrammes : défaut, inconnu, vanne ouverte, 4 au plus', () => {
+    const membres = [
+      eq({ id: 'P', type: 'pompe', slots: { marche: { variable: 'P_RM' }, defaut: { variable: 'P_DEF' } } }),
+      eq({ id: 'V', type: 'vanne', slots: { etat: { variable: 'V_O' } } }),
+      eq({ id: 'M', type: 'moteur' }),
+      eq({ id: 'F', type: 'ventilateur' }),
+      eq({ id: 'C', type: 'cuve', params: { niveau_max: 4 }, slots: { niveau: { variable: 'N' } } }),
+      eq({ id: 'X', type: 'mesure' }),
+    ]
+    const p = pictosDe(membres, { P_RM: 1, P_DEF: 1, V_O: 1, N: 2 })
+    expect(p.map((x) => x.id)).toEqual(['C', 'P', 'M', 'F'])
+    expect(p[0].niveau).toBe(0.5)
+    expect(p[1].etat).toBe('defaut')
+    expect(p[2].etat).toBe('inconnu')
   })
 })
