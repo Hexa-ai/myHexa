@@ -88,7 +88,7 @@ const yNiveau = computed(() => 20 - 15 * (props.picto.niveau ?? 0))
       <!-- filtre : plis en zigzag dans un cadre -->
       <template v-else-if="picto.famille === 'filtre'">
         <rect x="4" y="4" width="16" height="16" rx="1.5" />
-        <path d="M7 18l3-12 3 12 3-12" />
+        <path d="M7 17L17 7M7 12l5-5M12 17l5-5" />
       </template>
       <!-- cuve : remplissage au niveau -->
       <template v-else>

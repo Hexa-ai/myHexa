@@ -398,7 +398,7 @@ export function cartesCvc(type: TypeCvc, params: (ParamsCta & ParamsHydro) | und
     if (defauts.length) etat = 'defaut'
     else if (moteurs.includes('marche') || moteurs.includes('modulant')) etat = 'marche'
     else if (moteurs.includes('arret')) etat = 'arret'
-    else if (etats.some((e) => e !== 'inconnu')) etat = 'ok'
+    else if (etats.some((e) => e !== 'inconnu') || valeurs.length) etat = 'ok'
     cartes.push({ id: `${nomElement}:${id}`, titre, etat, defauts, pictos, valeurs, modules: ps.map(({ m }) => m.id) })
   }
 
