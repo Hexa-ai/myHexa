@@ -12,15 +12,24 @@ import type {
 import '@/lib/synoptic/engine/synoptique.css'
 import '@/lib/synoptic/engine/adaptation.css'
 
-const props = defineProps<{
-  doc: SynopticDocument
-  values: Record<string, number>
-  catalogue?: CatalogueVariable[]
-  /** true = éditeur (palette, propriétés, outils) ; false = consultation */
-  editing?: boolean
-  /** vrai quand le synoptique occupe toute la zone (vue agrandie, éditeur) */
-  fullFrame?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    doc: SynopticDocument
+    values: Record<string, number>
+    catalogue?: CatalogueVariable[]
+    /** true = éditeur (palette, propriétés, outils) ; false = consultation */
+    editing?: boolean
+    /** vrai quand le synoptique occupe toute la zone (vue agrandie, éditeur) */
+    fullFrame?: boolean
+    /** false = consultation sans geste (tuile de tablette : la page garde ses gestes) ; vrai par défaut */
+    gestes?: boolean
+    /** plein écran mobile : boutons de zoom adaptés au doigt */
+    mobile?: boolean
+    /** zone du dessin sur laquelle cadrer la vue à l'ouverture (sinon : tout le dessin) */
+    cadre?: { x: number; y: number; w: number; h: number } | null
+  }>(),
+  { catalogue: () => [], gestes: true, cadre: null },
+)
 const emit = defineEmits<{
   (e: 'save', doc: SynopticDocument): void
   (e: 'etat', etat: SynopticEtat): void
@@ -37,12 +46,16 @@ function creer() {
     catalogue: props.catalogue,
     values: props.values,
     pleinCadre: props.fullFrame,
+    gestes: props.gestes,
     host: {
       onSave: (d) => emit('save', d),
       onEtat: (e) => emit('etat', e),
     },
   })
   if (props.editing) inst.value.mode(true)
+  // cadrage sur un ouvrage : après la mise en page (le moteur ajuste d'abord tout le dessin)
+  const cadre = props.cadre
+  if (cadre) requestAnimationFrame(() => inst.value?.cadrer(cadre))
 }
 onMounted(creer)
 onBeforeUnmount(() => inst.value?.destroy())
@@ -66,7 +79,16 @@ defineExpose({
 </script>
 
 <template>
-  <div ref="root" class="syn-root" :class="{ 'syn-plein': fullFrame }" data-testid="synoptic-root">
+  <div
+    ref="root"
+    class="syn-root"
+    :class="{
+      'syn-plein': fullFrame,
+      'syn-sans-geste': gestes === false,
+      'syn-mobile': mobile,
+    }"
+    data-testid="synoptic-root"
+  >
     <div id="edbar" class="edbar" hidden />
     <div class="synbody sans-verif">
       <aside id="palette" class="ed-palette" aria-label="Palette de symboles" hidden />
