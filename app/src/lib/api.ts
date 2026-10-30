@@ -16,14 +16,6 @@ function authHeaders(): HeadersInit {
   return ANON_KEY ? { apikey: ANON_KEY } : {}
 }
 
-async function get<T>(fn: string, params: Record<string, string>): Promise<ApiResponse<T>> {
-  const qs = new URLSearchParams(params).toString()
-  const res = await fetch(`${EDGE_URL}/${fn}${qs ? '?' + qs : ''}`, {
-    headers: authHeaders(),
-  })
-  return res.json() as Promise<ApiResponse<T>>
-}
-
 async function post<T>(fn: string, body: unknown): Promise<ApiResponse<T>> {
   const res = await fetch(`${EDGE_URL}/${fn}`, {
     method: 'POST',
@@ -65,13 +57,3 @@ export interface SubmitInterventionData {
 
 export const submitIntervention = (input: SubmitInterventionInput) =>
   post<SubmitInterventionData>('submit-intervention', input)
-
-// ----------------------------- generic helper -------------------------------
-// Kept for any future ad-hoc call.
-
-export async function callEdge<T>(
-  fn: string,
-  params: Record<string, string> = {},
-): Promise<ApiResponse<T>> {
-  return get<T>(fn, params)
-}

@@ -1,13 +1,15 @@
 name: CI
 
+# Vérifications automatiques à chaque push / pull request sur master.
 on:
   pull_request:
-    branches: [main]
+    branches: [master]
   push:
-    branches: [main]
+    branches: [master]
 
 jobs:
   app:
+    name: Portail (Vue)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -15,9 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v3
+      - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 
       - uses: actions/setup-node@v4
         with:
@@ -32,14 +34,34 @@ jobs:
         run: pnpm typecheck
 
       - name: Lint
-        run: pnpm lint
+        run: pnpm exec eslint .
 
       - name: Unit tests
         run: pnpm test:unit
 
+      # Valeurs factices : le build vérifie seulement que l'app compile (aucun secret nécessaire).
       - name: Build
         run: pnpm build
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_EDGE_FUNCTIONS_URL: ${{ secrets.VITE_EDGE_FUNCTIONS_URL }}
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder
+          VITE_EDGE_FUNCTIONS_URL: https://example.supabase.co/functions/v1
+
+  functions:
+    name: Edge Functions (Deno)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: supabase/functions
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.1.x
+
+      - name: Typecheck
+        run: deno check */index.ts
+
+      - name: Tests
+        run: deno test --allow-env --allow-net=none

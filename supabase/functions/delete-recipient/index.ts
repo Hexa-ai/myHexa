@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
       .eq('company_id', caller!.company_id!)
     if (cdErr) return fail('DB_ERROR', cdErr.message, 500)
     const callerDevSet = new Set((callerDevs ?? []).map((d) => d.id))
-    const remaining = (target.shared_devices ?? []).filter((id) => !callerDevSet.has(id))
+    const remaining = ((target.shared_devices ?? []) as string[]).filter((id) => !callerDevSet.has(id))
 
     if (remaining.length > 0) {
       const { error: uErr } = await admin

@@ -116,7 +116,8 @@ function stopPlay() {
 }
 
 function togglePlay() {
-  isPlaying.value ? stopPlay() : startPlay()
+  if (isPlaying.value) stopPlay()
+  else startPlay()
 }
 
 // Activate from URL on mount (e.g. /admin/map?play=1 on a kiosk)

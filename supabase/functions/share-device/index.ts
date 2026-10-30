@@ -87,14 +87,14 @@ Deno.serve(async (req) => {
   }
 
   // 4. Mise à jour shared_devices (idempotent)
-  const current = target.shared_devices ?? []
+  const current: string[] = target.shared_devices ?? []
   let nextList: string[] | null
   if (revoke) {
-    nextList = current.filter((id) => id !== device.id)
-    if (nextList.length === current.length) {
+    const kept = current.filter((id) => id !== device.id)
+    if (kept.length === current.length) {
       return ok({ recipient_id: target.id, device_id: device.id, status: 'not_shared' })
     }
-    if (nextList.length === 0) nextList = null
+    nextList = kept.length === 0 ? null : kept
   } else {
     if (current.includes(device.id)) {
       return ok({ recipient_id: target.id, device_id: device.id, status: 'already_shared' })

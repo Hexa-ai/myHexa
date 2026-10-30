@@ -1,54 +1,62 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const fetchMock = vi.fn()
-vi.stubGlobal('fetch', fetchMock)
+// lib/api.ts lit VITE_EDGE_FUNCTIONS_URL au chargement : on fixe l'env AVANT l'import dynamique.
+const EDGE = 'https://edge.example/functions/v1'
 
-import { viewReport, recoverLink, updateLocation } from '@/lib/api'
+async function loadApi() {
+  vi.resetModules()
+  vi.stubEnv('VITE_EDGE_FUNCTIONS_URL', EDGE)
+  vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'ANON')
+  return import('@/lib/api')
+}
 
-beforeEach(() => fetchMock.mockReset())
-
-describe('api', () => {
-  it('viewReport calls /view-report with t & d in query', async () => {
-    fetchMock.mockResolvedValue({
-      json: () => Promise.resolve({ ok: true, data: { device: { id: 'dev-1' } } }),
-    })
-    const res = await viewReport('TOK', 'dev-1')
-    expect(res.ok).toBe(true)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    const [url] = fetchMock.mock.calls[0]
-    expect(url).toContain('/view-report?')
-    expect(url).toContain('t=TOK')
-    expect(url).toContain('d=dev-1')
+describe('lib/api', () => {
+  const fetchMock = vi.fn()
+  beforeEach(() => {
+    fetchMock.mockReset()
+    vi.stubGlobal('fetch', fetchMock)
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
   })
 
-  it('recoverLink POSTs JSON body with email + from_url', async () => {
-    fetchMock.mockResolvedValue({
-      json: () => Promise.resolve({ ok: true, data: { sent: true } }),
-    })
-    await recoverLink('a@b.com', 'https://x')
+  it('submitIntervention envoie un POST JSON avec la clé anon', async () => {
+    const { submitIntervention } = await loadApi()
+    fetchMock.mockResolvedValue({ json: async () => ({ ok: true, data: { id: 'i1' } }) })
+    const input = {
+      deviceId: 'D',
+      kind: 'intervention' as const,
+      technicianName: 'Tech',
+      category: 'controle' as const,
+      severity: 'info' as const,
+    }
+    const res = await submitIntervention(input)
+    expect(res).toEqual({ ok: true, data: { id: 'i1' } })
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/recover-link')
+    expect(url).toBe(`${EDGE}/submit-intervention`)
     expect(init.method).toBe('POST')
-    expect(JSON.parse(init.body)).toEqual({ email: 'a@b.com', from_url: 'https://x' })
+    expect(init.headers).toMatchObject({ apikey: 'ANON', 'Content-Type': 'application/json' })
+    expect(JSON.parse(init.body)).toEqual(input)
   })
 
-  it('updateLocation POSTs token + deviceId + address', async () => {
-    fetchMock.mockResolvedValue({
-      json: () => Promise.resolve({ ok: true, data: { deviceId: 'd', address: 'a', latitude: 0, longitude: 0 } }),
+  it('renvoie telle quelle une erreur métier de la fonction', async () => {
+    const { submitIntervention } = await loadApi()
+    const err = { ok: false, error: { code: 'NOT_FOUND', message: 'box inconnue' } }
+    fetchMock.mockResolvedValue({ json: async () => err })
+    const res = await submitIntervention({
+      deviceId: 'X',
+      kind: 'signalement',
+      technicianName: 'T',
+      category: 'incident',
+      severity: 'error',
     })
-    await updateLocation({ token: 'T', deviceId: 'D', address: 'Paris' })
-    const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/location-update')
-    expect(init.method).toBe('POST')
-    expect(JSON.parse(init.body)).toEqual({ token: 'T', deviceId: 'D', address: 'Paris' })
+    expect(res).toEqual(err)
   })
 
-  it('returns parsed error payload on failure', async () => {
-    fetchMock.mockResolvedValue({
-      json: () => Promise.resolve({ ok: false, error: { code: 'TOKEN_EXPIRED', message: 'expired' } }),
-    })
-    const res = await viewReport('X', 'Y')
-    expect(res.ok).toBe(false)
-    if (!res.ok) expect(res.error.code).toBe('TOKEN_EXPIRED')
+  it('refuse de se charger sans VITE_EDGE_FUNCTIONS_URL', async () => {
+    vi.resetModules()
+    vi.stubEnv('VITE_EDGE_FUNCTIONS_URL', '')
+    await expect(import('@/lib/api')).rejects.toThrow('Missing VITE_EDGE_FUNCTIONS_URL')
   })
 })

@@ -1,7 +1,14 @@
 import { supabase } from '@/lib/supabase'
 
-// RPC récentes, absentes des types générés
-const sb = supabase as any
+// RPC récentes, absentes des types générés (src/types/supabase.ts) : on type juste ce qu'on utilise.
+type Row = Record<string, unknown>
+type RpcClient = {
+  rpc: (
+    fn: string,
+    args?: Record<string, unknown>,
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>
+}
+const sb = supabase as unknown as RpcClient
 
 export interface UsageDevice {
   device_id: string
@@ -61,13 +68,13 @@ const num = (x: unknown) => Number(x ?? 0) || 0
 export async function loadUsageDevices(company?: string | null) {
   const { data, error } = await sb.rpc('usage_by_device', { p_company: company ?? null })
   if (error) throw new Error(error.message)
-  return ((data ?? []) as any[]).map((r) => ({
+  return ((data ?? []) as Row[]).map((r) => ({
     ...r,
     ts_bytes: num(r.ts_bytes),
     doc_bytes: num(r.doc_bytes),
     photo_bytes: num(r.photo_bytes),
     report_bytes: num(r.report_bytes),
-  })) as UsageDevice[]
+  })) as unknown as UsageDevice[]
 }
 export async function loadUsagePlatform() {
   const { data, error } = await sb.rpc('usage_platform')
@@ -80,7 +87,7 @@ export async function loadUsageTrend(company?: string | null, days = 90) {
     p_days: days,
   })
   if (error) throw new Error(error.message)
-  return ((data ?? []) as any[]).map((r) => ({ ...r, bytes: num(r.bytes) })) as UsageTrendRow[]
+  return ((data ?? []) as Row[]).map((r) => ({ ...r, bytes: num(r.bytes) })) as unknown as UsageTrendRow[]
 }
 
 export function deviceBytes(d: UsageDevice) {
