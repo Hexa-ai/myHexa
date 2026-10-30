@@ -1,16 +1,21 @@
 <script setup lang="ts">
-// Tuile « synoptique » d'un tableau de bord : dessin animé ajusté à la taille de la tuile, âge de la donnée,
-// bouton « Agrandir » (le synoptique occupe alors toute la zone de contenu), bouton « Éditer » (poste de bureau + droit de modifier).
-import { computed, ref, toRef } from 'vue'
+// Tuile « synoptique » d'un tableau de bord : âge de la donnée, alarmes, et selon l'appareil
+// - bureau : dessin animé ajusté à la tuile, bouton « Agrandir » (zone de contenu), bouton « Éditer » (droit de modifier) ;
+// - tablette : dessin sans capture de geste + « Plein écran » ;
+// - mobile : résumé lisible (alarmes, ouvrages) et « Voir le synoptique » (plein écran) ; aucun geste n'est capté.
+import { computed, ref, toRef, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useSynoptic } from '@/composables/useSynoptic'
 import { useAuthStore } from '@/stores/auth'
-import { usePeutEditerIci } from '@/lib/synoptic/environnement'
+import { usePeutEditerIci, useModeAffichage } from '@/lib/synoptic/environnement'
+import { construireResume, type CadreDessin } from '@/lib/synoptic/resume'
 import type { DeviceWithStatus } from '@/composables/useDevices'
 import type { SynopticEtat } from '@/lib/synoptic/engine/types'
 import SynopticCanvas from './SynopticCanvas.vue'
 import SynopticFrame from './SynopticFrame.vue'
 import SynopticBar from './SynopticBar.vue'
+import SynopticSummary from './SynopticSummary.vue'
+import SynopticMobileFull from './SynopticMobileFull.vue'
 
 const props = defineProps<{
   synopticId?: string
@@ -29,6 +34,22 @@ const { charge, doc, chargement, erreur, values, enDirect, recu } = useSynoptic(
 const agrandi = ref(false)
 const etat = ref<SynopticEtat | null>(null)
 const bureau = usePeutEditerIci()
+const mode = useModeAffichage()
+// plein écran mobile / tablette (cadre = ouvrage sur lequel centrer, absent = tout le dessin)
+const pleinEcran = ref(false)
+const cadre = ref<CadreDessin | null>(null)
+function ouvrirPleinEcran(c: CadreDessin | null = null) {
+  cadre.value = c
+  pleinEcran.value = true
+}
+watch(mode, (m) => {
+  if (m === 'bureau') pleinEcran.value = false
+  else agrandi.value = false
+})
+const resume = computed(() =>
+  mode.value === 'mobile' && doc.value ? construireResume(doc.value, values.value) : null,
+)
+const nbAlarmes = computed(() => resume.value?.alarmes.length ?? etat.value?.alarmes ?? 0)
 const peutModifier = computed(
   () =>
     auth.isHexaStaff ||
@@ -51,10 +72,11 @@ function editer() {
 
 <template>
   <div
-    class="h-full min-h-[360px] border border-border rounded-md bg-card/40 flex flex-col min-w-0 overflow-hidden"
+    class="h-full border border-border rounded-md bg-card/40 flex flex-col min-w-0 overflow-hidden"
+    :class="mode === 'mobile' ? '' : 'min-h-[360px]'"
     data-testid="widget-synoptic"
   >
-    <SynopticBar :titre="titre" :en-direct="enDirect" :recu="recu" :alarmes="etat?.alarmes ?? 0">
+    <SynopticBar :titre="titre" :en-direct="enDirect" :recu="recu" :alarmes="nbAlarmes">
       <button
         v-if="peutEditer"
         type="button"
@@ -65,6 +87,16 @@ function editer() {
         Éditer le synoptique
       </button>
       <button
+        v-if="mode === 'tablette'"
+        type="button"
+        class="text-xs px-2.5 py-1 rounded border border-border text-muted-foreground hover:border-signal/50 hover:text-foreground"
+        data-testid="synoptic-plein-ecran"
+        @click="ouvrirPleinEcran()"
+      >
+        Plein écran
+      </button>
+      <button
+        v-else-if="mode === 'bureau'"
         type="button"
         class="text-xs px-2.5 py-1 rounded border border-border text-muted-foreground hover:border-signal/50 hover:text-foreground"
         data-testid="synoptic-agrandir"
@@ -81,13 +113,26 @@ function editer() {
         Ouvrir l'éditeur
       </button>
     </p>
+    <SynopticSummary v-else-if="resume" :resume="resume" @ouvrir="ouvrirPleinEcran" />
     <div v-else-if="!agrandi" class="flex-1 min-h-0">
-      <SynopticCanvas :doc="doc" :values="values" @etat="etat = $event" />
+      <SynopticCanvas
+        :doc="doc"
+        :values="values"
+        :gestes="mode === 'bureau'"
+        @etat="etat = $event"
+      />
     </div>
     <div v-else class="flex-1 grid place-items-center text-sm text-muted-foreground">
       Affiché en grand
     </div>
 
+    <SynopticMobileFull
+      v-if="pleinEcran && doc && mode !== 'bureau'"
+      :doc="doc"
+      :values="values"
+      :cadre="cadre"
+      @close="pleinEcran = false"
+    />
     <SynopticFrame v-if="agrandi && doc" @close="agrandi = false">
       <SynopticBar :titre="titre" :en-direct="enDirect" :recu="recu" :alarmes="etat?.alarmes ?? 0">
         <button

@@ -90,6 +90,8 @@ export interface SynopticOptions {
   host?: SynopticHost
   /** vrai quand le synoptique occupe toute la zone (vue agrandie, éditeur) : les raccourcis + − 0 sont alors toujours actifs */
   pleinCadre?: boolean
+  /** false = consultation sans geste : ni zoom ni déplacement, la page garde tous les gestes tactiles (défaut : true) */
+  gestes?: boolean
 }
 
 export interface SynopticInstance {
@@ -103,6 +105,8 @@ export interface SynopticInstance {
   importerTexte(txt: string): boolean
   ajuster(): void
   zoomer(f: number, cx?: number, cy?: number): void
+  /** cadre la vue sur une zone du dessin (unités du dessin), avec une marge */
+  cadrer(zone: { x: number; y: number; w: number; h: number }): void
   /** opérations internes (sans souris) : réservées aux tests */
   interne: Record<string, (...args: never[]) => unknown>
   destroy(): void

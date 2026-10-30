@@ -719,6 +719,12 @@ function ajuster() {
   else { let w = L.w, hh = L.w / ar; if (hh < L.h) { hh = L.h; w = hh * ar; } VB.w = w; VB.h = hh; VB.x = (L.w - w) / 2; VB.y = (L.h - hh) / 2; }
   appliquerVB(); fitAuto = true;
 }
+/* Cadre la vue sur une zone du dessin (unités du dessin) avec une marge : carte « Voir sur le dessin » du plein écran mobile. */
+function cadrer(b) {
+  const r = svg.getBoundingClientRect(); if (!r.width || !r.height || !b) return; const ar = r.width / r.height;
+  const marge = 1.5; const w = Math.max(b.w * marge, b.h * marge * ar, 250);
+  VB.w = Math.min(w, L.w * 1.5); VB.h = VB.w / ar; VB.x = b.x + b.w / 2 - VB.w / 2; VB.y = b.y + b.h / 2 - VB.h / 2; appliquerVB();
+}
 function zoomer(f, cx, cy) {
   const r = svg.getBoundingClientRect(); const px = (cx == null ? r.width / 2 : cx), py = (cy == null ? r.height / 2 : cy);
   const mx = VB.x + VB.w * px / r.width, my = VB.y + VB.h * py / r.height;
@@ -734,8 +740,9 @@ function brancherZoom() {
   let astuceT = null;
   const astuce = () => { let a = corps.querySelector('.zoom-astuce'); if (!a) { a = h('div', 'zoom-astuce', 'Ctrl + molette pour zoomer'); corps.append(a); }
     a.classList.add('vis'); clearTimeout(astuceT); astuceT = setTimeout(() => a.classList.remove('vis'), 1400); };
+  const sansGestes = options.gestes === false;   // tuile de consultation : ni zoom, ni déplacement, la page garde tous les gestes
   corps.addEventListener('wheel', ev => {
-    if (!ev.target.closest('#scene')) return;
+    if (sansGestes || !ev.target.closest('#scene')) return;
     const r = svg.getBoundingClientRect(), ctrl = ev.ctrlKey || ev.metaKey;
     const dy = ev.deltaMode === 1 ? ev.deltaY * 16 : ev.deltaY, dx = ev.deltaMode === 1 ? ev.deltaX * 16 : ev.deltaX;
     if (ctrl) { ev.preventDefault(); zoomer(Math.max(0.7, Math.min(1.4, Math.exp(dy * 0.0025))), ev.clientX - r.left, ev.clientY - r.top); return; }
@@ -755,7 +762,7 @@ function brancherZoom() {
     if (!ctrl && !etatVerif && root.querySelector('.detail-fond:not([hidden])')) return;
     ev.preventDefault(); if (zero) ajuster(); else zoomer(plus ? 1 / 1.25 : 1.25);
   });
-  corps.addEventListener('pointerdown', ev => { if (ev.target.closest('.zoomb') || (etatVerif && EDITEUR && EDITEUR.gere(ev))) return; pts.set(ev.pointerId, [ev.clientX, ev.clientY]); drag = { x: ev.clientX, y: ev.clientY, vx: VB.x, vy: VB.y }; moved = false;
+  corps.addEventListener('pointerdown', ev => { if (sansGestes || ev.target.closest('.zoomb') || (etatVerif && EDITEUR && EDITEUR.gere(ev))) return; pts.set(ev.pointerId, [ev.clientX, ev.clientY]); drag = { x: ev.clientX, y: ev.clientY, vx: VB.x, vy: VB.y }; moved = false;
     if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); } });
   addG(window, 'pointermove', ev => {
     if (!pts.has(ev.pointerId)) return; pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
@@ -763,7 +770,21 @@ function brancherZoom() {
     if (!drag) return; const r = svg.getBoundingClientRect(); const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
     if (Math.abs(dx) + Math.abs(dy) > 5) { moved = true; corps.classList.add('drag'); }
     if (moved) { VB.x = drag.vx - dx * VB.w / r.width; VB.y = drag.vy - dy * VB.h / r.height; appliquerVB(); } });
-  addG(window, 'pointerup', ev => { pts.delete(ev.pointerId); if (pts.size < 2) pinch = null; if (!pts.size) { drag = null; corps.classList.remove('drag'); } });
+  // Fin d'un geste. Un doigt levé pendant un pincement : le doigt restant reprend le déplacement là où il est (pas de saut).
+  // Double tap (tactile, sans déplacement) = tout voir.
+  let dernierTap = null;
+  const fin = ev => {
+    if (!pts.has(ev.pointerId)) return;
+    const etaitSeul = pts.size === 1 && !moved;
+    pts.delete(ev.pointerId); if (pts.size < 2) pinch = null;
+    if (pts.size === 1) { const [x, y] = [...pts.values()][0]; drag = { x, y, vx: VB.x, vy: VB.y }; }
+    if (!pts.size) { drag = null; corps.classList.remove('drag'); }
+    if (ev.type !== 'pointerup' || ev.pointerType !== 'touch' || !etaitSeul || ev.target.closest && ev.target.closest('.zoomb')) { return; }
+    const t = Date.now();
+    if (dernierTap && t - dernierTap.t < 350 && Math.hypot(ev.clientX - dernierTap.x, ev.clientY - dernierTap.y) < 40) { dernierTap = null; ajuster(); moved = true; }
+    else dernierTap = { t, x: ev.clientX, y: ev.clientY };
+  };
+  addG(window, 'pointerup', fin); addG(window, 'pointercancel', fin);
   corps.addEventListener('click', ev => { if (etatVerif) return; if (moved) { ev.stopPropagation(); ev.preventDefault(); moved = false; return; }
     const k = ev.target.closest('[data-carte]'); if (k) { ouvrirDetailCarte(k.dataset.carte); return; }
     const o = ev.target.closest('[data-eq]'); if (o && o.dataset.eq) ouvrirDetail(o.dataset.eq); }, true);
@@ -2294,7 +2315,7 @@ const instance = {
   marquerEnregistre() { BROUILLON_IA = instantane(); majBarre(); habillage(); },
   estModifie: () => estModifie(),
   importerTexte: (txt) => importerTexte(txt),
-  ajuster, zoomer,
+  ajuster, zoomer, cadrer,
   interne: INTERNE,
   destroy() { ecouteurs.forEach(f => f()); observateur.disconnect(); fermerDetail(); fermerSelecteur(); clearTimeout(minuteurPousser); clearTimeout(minuteurControle); root.querySelectorAll('.voile,.ed-popup,#toasts,.pal-fantome').forEach(n => n.remove()); },
 };

@@ -11,3 +11,11 @@
 .syn-root:not(.syn-plein) .zoomb { opacity: 0; transition: opacity .15s; }
 .syn-root:not(.syn-plein):hover .zoomb { opacity: 1; }
 .syn-root.mode-edition .edbar { flex: none; }
+/* consultation sans geste (tuile de tablette) : la page défile et zoome normalement par-dessus le dessin */
+.syn-root.syn-sans-geste .synbody { touch-action: auto; cursor: default; }
+.syn-root.syn-sans-geste .zoomb { display: none; }
+/* plein écran mobile : le dessin reçoit tous les gestes (pincement, déplacement), boutons de zoom plus larges au doigt */
+.syn-root.syn-mobile .synbody { touch-action: none; }
+.syn-root.syn-mobile .zoomb { right: max(10px, env(safe-area-inset-right)); bottom: max(10px, env(safe-area-inset-bottom)); }
+.syn-root.syn-mobile .zoomb button { width: 44px; height: 44px; }
+.syn-root.syn-mobile .legende { display: none; }
