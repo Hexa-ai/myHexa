@@ -69,6 +69,8 @@ const markers = computed<MarkerInput[]>(() => {
       label: d.name ?? undefined,
       online: isOnline(d.last_connection_at),
       severity: maxActiveAlarmSeverity(d.status_payload),
+      fromBox: d.location_source === 'box',
+      accuracyM: d.location_source === 'box' ? d.location_accuracy_m : null,
     }))
   return [...out, ...singles]
 })

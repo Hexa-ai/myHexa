@@ -319,6 +319,8 @@ const mapMarkers = computed<MarkerInput[]>(() => {
       lng: Number(d.longitude),
       label: d.name ?? undefined,
       online: isOnline(d.last_connection_at),
+      fromBox: d.location_source === 'box',
+      accuracyM: d.location_source === 'box' ? d.location_accuracy_m : null,
     }
     if (src.var) {
       const look = lamp(liveOf(src.device, src.var))

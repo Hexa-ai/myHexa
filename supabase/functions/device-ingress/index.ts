@@ -18,6 +18,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { issueRealtimeToken } from "../_shared/realtimeToken.ts";
+import { parseLocation } from "../_shared/location.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -92,6 +93,33 @@ async function provision(req: Request): Promise<Response> {
   return json(500, { error: "unknown state" });
 }
 
+// Position 4G de la box (clé « location » du statut et du journalier) : remplace les coordonnées
+// saisies à la main. Clé absente ou null : rien n'est touché. Ne doit jamais faire échouer l'ingestion.
+async function applyLocation(
+  payload: Record<string, unknown>,
+  deviceId: string | null,
+  hostname: string,
+): Promise<void> {
+  try {
+    const p = parseLocation(payload);
+    if (p.kind === "absent") return;
+    if (p.kind === "invalid") {
+      console.warn("ingress location ignorée", hostname, p.reason);
+      return;
+    }
+    if (!deviceId) return;
+    const { data, error } = await admin.rpc("apply_device_location", {
+      p_device: deviceId,
+      p_loc: p.loc,
+      p_at: p.loc.resolved_at ?? new Date().toISOString(),
+    });
+    if (error) console.error("apply_device_location", hostname, error.message);
+    else if (data?.applied) console.log("position box mise à jour", hostname);
+  } catch (e) {
+    console.error("applyLocation", hostname, String(e));
+  }
+}
+
 async function ingest(
   req: Request,
   hostname: string,
@@ -111,6 +139,7 @@ async function ingest(
     });
     if (error) console.error("ingest_status", hostname, error.message);
     else if (!data) console.warn("ingress status: jeton inconnu", hostname);
+    else await applyLocation(payload, data as string, hostname);
     // Pilotage à distance : la box n'envoie le bloc remote que si « Enable remote management » est actif.
     // Sans bloc remote -> réponse historique (les anciens firmwares ignorent le corps).
     const remote = payload.remote;
@@ -150,6 +179,10 @@ async function ingest(
   if (error) {
     console.error("ingest_report", hostname, period, error.message);
     return;
+  }
+  if (reportId) {
+    const { data: rep } = await admin.from("reports").select("device_id").eq("id", reportId).maybeSingle();
+    await applyLocation(payload, (rep?.device_id as string | undefined) ?? null, hostname);
   }
   if (!reportId) {
     console.warn(

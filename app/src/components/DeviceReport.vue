@@ -11,6 +11,10 @@ interface Device {
   address: string | null
   latitude: number | null
   longitude: number | null
+  /** 'box' = position 4G transmise par la box ; sinon saisie à la main */
+  location_source?: string | null
+  location_accuracy_m?: number | null
+  location_at?: string | null
 }
 
 interface StatusPayload {
@@ -53,6 +57,7 @@ const props = withDefaults(
     role?: string
     expiresAt?: string | null
     canEditLocation?: boolean
+    track?: Array<[number, number]>
     vncHost?: string | null
     vncPort?: number | null
     canEditVnc?: boolean
@@ -90,8 +95,23 @@ const mapMarkers = computed(() => {
       lng: Number(d.longitude),
       label: d.name ?? undefined,
       online: online.value,
+      fromBox: fromBox.value,
+      accuracyM: fromBox.value ? (d.location_accuracy_m ?? null) : null,
     },
   ]
+})
+
+// position transmise par la box (4G) : remplace la saisie manuelle à chaque envoi
+const fromBox = computed(() => props.device.location_source === 'box')
+const boxPositionText = computed(() => {
+  const d = props.device
+  const acc =
+    d.location_accuracy_m != null
+      ? d.location_accuracy_m >= 1000
+        ? `±${(d.location_accuracy_m / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km`
+        : `±${d.location_accuracy_m} m`
+      : 'précision inconnue'
+  return `Position transmise par la box (4G, ${acc}, ${formatRelative(d.location_at)}) — remplace la saisie manuelle à chaque envoi`
 })
 
 watch(activeTab, async (t) => {
@@ -410,11 +430,20 @@ async function copyTailscaleIp(ip: string) {
             Adresse
           </div>
           <div class="text-sm">{{ device.address || '—' }}</div>
+          <p
+            v-if="fromBox"
+            class="mt-2 flex items-start gap-2 font-mono text-[11px] text-muted-foreground"
+            data-testid="box-position-note"
+          >
+            <span class="mt-1 size-1.5 shrink-0 rounded-full bg-signal" />
+            {{ boxPositionText }}
+          </p>
         </div>
         <DeviceMap
           v-if="mapMarkers.length"
           ref="mapRef"
           :markers="mapMarkers"
+          :track="track"
           height="240px"
           :zoom="14"
         />
@@ -877,6 +906,15 @@ async function copyTailscaleIp(ip: string) {
           <div class="text-sm mb-5 break-words">
             {{ device.address || 'Aucune adresse renseignée.' }}
           </div>
+          <p
+            v-if="fromBox"
+            class="mb-5 -mt-3 flex items-start gap-2 font-mono text-[11px] text-muted-foreground"
+            data-testid="box-position-config"
+          >
+            <span class="mt-1 size-1.5 shrink-0 rounded-full bg-signal" />
+            {{ boxPositionText }}. Une adresse saisie ici sera remplacée au prochain envoi de la
+            box.
+          </p>
 
           <template v-if="canEditLocation">
             <form class="space-y-3" @submit.prevent="submitAddress">

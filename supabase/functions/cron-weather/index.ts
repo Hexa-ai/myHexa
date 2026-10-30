@@ -118,8 +118,18 @@ Deno.serve(async (req) => {
     }
     return Response.json({ backfill_days: daysBack, sites: res })
   }
+  // Sites devenus orphelins (box déplacée, désactivée ou supprimée) : jamais interrogés (la liste vient
+  // des box) et supprimés de weather_sites après 24 h sans mise à jour. Un site NOUVEAU n'a pas encore
+  // de ligne : forecast_at absent -> prévisions demandées tout de suite (voir plus bas).
+  let purged = 0
+  const orphans = (known ?? []).map((k) => k.site_key as string).filter((k) => !sites.has(k))
+  if (orphans.length) {
+    const stale = new Date(Date.now() - 24 * 3600e3).toISOString()
+    const { error: pe, count } = await admin.from('weather_sites').delete({ count: 'exact' }).in('site_key', orphans).lt('updated_at', stale)
+    if (!pe) purged = count ?? 0
+  }
   const ts = slot(Date.now())
-  const out = { provider: PROVIDER, sites: sites.size, ok: 0, failed: 0, forecasts: 0, boxes: 0, errors: [] as string[] }
+  const out = { purged, orphans: orphans.length - purged, provider: PROVIDER, sites: sites.size, ok: 0, failed: 0, forecasts: 0, boxes: 0, errors: [] as string[] }
   for (const [key, s] of sites) {
     const withForecast = !!body.forecast || Date.now() - (fAt.get(key) ?? 0) > FORECAST_EVERY_MS - 60e3
     try {
