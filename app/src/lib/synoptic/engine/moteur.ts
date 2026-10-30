@@ -426,7 +426,7 @@ function symImage(e, g) {
 }
 function symRaccord(e, g) {
   return { cls: 'raccord', corps: [s('rect', { x: 0, y: 0, width: 34, height: 34, rx: 9, class: 'corps' }),
-    s('path', { d: 'M9 17 H25 M19 11 L25 17 L19 23', class: 'trait', style: 'stroke:#9aa8b3' })], box: [-4, -4, 42, 42] };
+    s('path', { d: 'M9 17 H25 M19 11 L25 17 L19 23', class: 'trait', style: 'stroke:var(--muted-foreground)' })], box: [-4, -4, 42, 42] };
 }
 function symIsole(e, g) {
   const st = etat(e), cx = g.cx, cy = g.cy, r = g.r;
@@ -644,7 +644,7 @@ function dessiner() {
     const zz = (M.zones || []).find(q => q.id === z.id) || {};
     gZ.append(s('g', { class: 'zone-g', 'data-zone': z.id },
       s('rect', { x: z.x, y: z.y, width: z.w, height: z.h, rx: 16, class: 'zone' + (zz.hors_umt ? ' hors' : '') }),
-      s('circle', { cx: z.x + 22, cy: z.y + 23, r: 3, fill: '#00d4aa', opacity: .75 }),
+      s('circle', { cx: z.x + 22, cy: z.y + 23, r: 3, style: 'fill:var(--signal)', opacity: .75 }),
       s('text', { x: z.x + 32, y: z.y + 27, class: 'zone-t', text: z.titre })));
   }
   // conduites
@@ -807,10 +807,10 @@ function courbeSvg(arr, binaire, seuil) {
   let d = ''; arr.forEach((v, i) => { d += (i ? (binaire ? `H${X(i)} V${Y(v)}` : ` L${X(i)} ${Y(v)}`) : `M${X(i)} ${Y(v)}`); });
   const a = s('svg', { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none' });
   const gid = 'g' + Math.floor(Math.random() * 1e6);
-  a.append(s('defs', {}, s('linearGradient', { id: gid, x1: 0, y1: 0, x2: 0, y2: 1 }, s('stop', { offset: 0, 'stop-color': '#00d4aa', 'stop-opacity': .28 }), s('stop', { offset: 1, 'stop-color': '#00d4aa', 'stop-opacity': 0 }))));
-  [0, .5, 1].forEach(f => a.append(s('line', { x1: pad, x2: W - pad, y1: 8 + f * (H - 18), y2: 8 + f * (H - 18), stroke: '#1d2832', 'stroke-width': 1 })));
-  if (seuil != null) a.append(s('line', { x1: pad, x2: W - pad, y1: Y(seuil), y2: Y(seuil), stroke: '#ff7a7a', 'stroke-dasharray': '4 4', 'stroke-width': 1, opacity: .7 }));
-  a.append(s('path', { d: d + ` L${X(arr.length - 1)} ${H - 8} L${X(0)} ${H - 8} Z`, fill: `url(#${gid})` }), s('path', { d, fill: 'none', stroke: '#00d4aa', 'stroke-width': 1.8, 'vector-effect': 'non-scaling-stroke', 'stroke-linejoin': 'round' }));
+  a.append(s('defs', {}, s('linearGradient', { id: gid, x1: 0, y1: 0, x2: 0, y2: 1 }, s('stop', { offset: 0, style: 'stop-color:var(--signal)', 'stop-opacity': .28 }), s('stop', { offset: 1, 'stop-color': '#00d4aa', 'stop-opacity': 0 }))));
+  [0, .5, 1].forEach(f => a.append(s('line', { x1: pad, x2: W - pad, y1: 8 + f * (H - 18), y2: 8 + f * (H - 18), style: 'stroke:var(--border)', 'stroke-width': 1 })));
+  if (seuil != null) a.append(s('line', { x1: pad, x2: W - pad, y1: Y(seuil), y2: Y(seuil), style: 'stroke:var(--offline)', 'stroke-dasharray': '4 4', 'stroke-width': 1, opacity: .7 }));
+  a.append(s('path', { d: d + ` L${X(arr.length - 1)} ${H - 8} L${X(0)} ${H - 8} Z`, fill: `url(#${gid})` }), s('path', { d, fill: 'none', style: 'stroke:var(--signal)', 'stroke-width': 1.8, 'vector-effect': 'non-scaling-stroke', 'stroke-linejoin': 'round' }));
   a.append(s('text', { x: pad, y: H - 0.5, text: '00:00' }), s('text', { x: W - pad, y: H - 0.5, 'text-anchor': 'end', text: 'maintenant' }));
   return a;
 }
@@ -880,7 +880,7 @@ function ouvrirDetailCarte(cid) {
     const eq = EQ[id], se = etat(eq); const lignes = [];
     for (const [nom, sp] of Object.entries(eq.slots || {})) {
       if (!slotRelie(sp, nom)) continue; const t = texteSlot(eq, nom); if (t == null) continue;
-      lignes.push(`<span class="mn" style="display:inline;margin-right:10px">${libEmpl(eq, nom)} : <b style="color:#e6edf3">${t}</b></span>`);
+      lignes.push(`<span class="mn" style="display:inline;margin-right:10px">${libEmpl(eq, nom)} : <b style="color:var(--foreground)">${t}</b></span>`);
     }
     const r = h('div', 'etat', `<div>${eq.id} · ${eq.libelle}${aVerifier(eq) ? '<span class="badge-v">à vérifier</span>' : ''}<span class="mn">${lignes.join('') || 'aucun emplacement relié : état inconnu'}</span></div><div class="v"><span class="pill ${se}" style="margin:0"><i></i>${ST_FR[se] || se}</span></div>`);
     r.style.cursor = 'pointer'; r.onclick = () => ouvrirDetail(id); sec.append(r);
@@ -1777,7 +1777,7 @@ function feRendre() {
   const sv = byId('fe-svg'); if (!sv) return; const b = feBoite();
   sv.setAttribute('viewBox', `${b.x} ${b.y} ${b.w} ${b.h}`); sv.style.width = Math.min(640, b.w * FE_ECH) + 'px'; sv.style.aspectRatio = `${b.w} / ${b.h}`; sv.innerHTML = '';
   const g = FE.grille;
-  const defs = s('defs', {}, s('pattern', { id: 'fe-pat', width: g, height: g, patternUnits: 'userSpaceOnUse' }, s('path', { d: `M${g} 0V${g}H0`, fill: 'none', stroke: '#1d2832', 'stroke-width': .3 })));
+  const defs = s('defs', {}, s('pattern', { id: 'fe-pat', width: g, height: g, patternUnits: 'userSpaceOnUse' }, s('path', { d: `M${g} 0V${g}H0`, fill: 'none', style: 'stroke:var(--border)', 'stroke-width': .3 })));
   sv.append(defs, s('rect', { x: 0, y: 0, width: FE.W, height: FE.H, fill: 'url(#fe-pat)', class: 'fe-grille' }), s('rect', { x: 0, y: 0, width: FE.W, height: FE.H, class: 'fe-cadre' }));
   if (FE.zone && FE.zone.type) sv.append(s('rect', { x: FE.zone.x, y: FE.zone.y, width: FE.zone.w, height: FE.zone.h, class: 'fe-zone', rx: 1.5 }), s('text', { x: FE.zone.x + 1.5, y: FE.zone.y + 4, class: 'fe-zone-t', text: FE.zone.type === 'rotor' ? 'partie tournante' : 'niveau' }));
   const sil = (p) => ({ largeur: FE.W, hauteur: FE.H, primitives: [p] });
