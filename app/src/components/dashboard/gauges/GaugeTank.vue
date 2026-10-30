@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// Cuve cylindrique en verre remplie d'un liquide animé : vagues sur 3 couches, bulles qui montent,
-// ménisque, reflets. Animations 100 % CSS (transform/opacity, compositées) : pas de boucle JS ;
+// Cuve au style plat du portail (inspiration Teenage Engineering / Nothing) : contour fin, liquide en aplat
+// tramé de points, une ligne de surface qui ondule doucement, bulles = petits points pleins. Pas de reflets
+// ni de dégradés. Animations 100 % CSS (transform/opacity, compositées) : pas de boucle JS ;
 // mises en pause hors écran / onglet caché ; statique si « réduire les animations ».
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type { Threshold } from '@/composables/useDashboards'
@@ -48,10 +49,10 @@ function wave(periods: number, amp: number, phase: number, h = 12) {
   }
   return { top, fill: `${top}L${W} ${h}L0 ${h}Z` }
 }
+// deux couches seulement : une ombre de vague discrète derrière, la surface devant
 const waves = [
-  { cls: 'w1', ...wave(1, 4.2, 0.8), op: 0.38 },
-  { cls: 'w2', ...wave(2, 3.3, 2.4), op: 0.62 },
-  { cls: 'w3', ...wave(3, 2.2, 4.1), op: 1 },
+  { cls: 'w2', ...wave(1, 2.6, 2.4), op: 0.45 },
+  { cls: 'w3', ...wave(2, 1.6, 4.1), op: 1 },
 ]
 
 // bulles : tailles, vitesses, positions et oscillations tirées au hasard une fois par cuve
@@ -61,14 +62,14 @@ const bubbleList = computed(() => {
   return bubbleSeed.value
 })
 const bubbleSeed = ref(
-  Array.from({ length: 16 }, (_, i) => ({
+  Array.from({ length: 10 }, (_, i) => ({
     i,
-    x: rnd(8, 90),
-    s: rnd(3, 9),
-    d: rnd(4.2, 9.5),
-    dl: -rnd(0, 9),
-    sw: rnd(1.1, 2.6),
-    a: rnd(2, 7),
+    x: rnd(10, 88),
+    s: Math.round(rnd(2, 4)),
+    d: rnd(5.5, 10),
+    dl: -rnd(0, 10),
+    sw: rnd(1.6, 3),
+    a: rnd(1, 3),
   })),
 )
 
@@ -107,20 +108,9 @@ const marks = computed(() =>
               aria-hidden="true"
             >
               <path :d="w.fill" :fill-opacity="w.op" />
-              <path
-                v-if="w.cls === 'w3'"
-                :d="w.top"
-                fill="none"
-                stroke="#fff"
-                stroke-opacity=".6"
-                stroke-width="1"
-                vector-effect="non-scaling-stroke"
-              />
             </svg>
           </div>
           <div class="gtank-body" data-testid="tank-body" />
-          <i class="gtank-men gtank-men-l" />
-          <i class="gtank-men gtank-men-r" />
         </div>
         <div v-if="bubbleList.length" class="gtank-bubbles" data-testid="tank-bubbles">
           <span
@@ -139,9 +129,6 @@ const marks = computed(() =>
             ><i
           /></span>
         </div>
-        <div class="gtank-shade" />
-        <div class="gtank-streak" />
-        <div class="gtank-rim" />
       </div>
       <div class="gtank-scale font-mono" aria-hidden="true">
         <i
@@ -207,70 +194,52 @@ const marks = computed(() =>
   width: var(--w);
   height: var(--h);
   container-type: size;
-  border-radius: 50% / 6%;
+  border-radius: 6px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--muted-foreground) 9%, transparent);
-  box-shadow:
-    inset 0 0 0 1.5px color-mix(in srgb, var(--muted-foreground) 45%, transparent),
-    0 8px 16px -10px rgb(0 0 0 / 0.4);
+  background: color-mix(in srgb, var(--muted-foreground) 6%, transparent);
+  box-shadow: inset 0 0 0 1px var(--hairline);
   isolation: isolate;
 }
 .gtank-liquid {
   position: absolute;
   inset: 0;
   transform: translateY(calc((1 - var(--lv)) * 100%));
-  --body-top: color-mix(in srgb, var(--lc) 88%, #fff);
 }
+/* aplat + trame de points (dot-matrix), sans dégradé */
 .gtank-body {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(120% 60% at 30% 0%, rgb(255 255 255 / 0.22), transparent 60%),
-    linear-gradient(180deg, var(--lc) 0%, color-mix(in srgb, var(--lc) 66%, #02121c) 100%);
+  background-color: var(--lc);
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--background) 32%, transparent) 0.9px,
+    transparent 1.3px
+  );
+  background-size: 6px 6px;
+  background-position: 1px 1px;
 }
 .gtank-surface {
   position: absolute;
   left: 0;
   right: 0;
-  top: -11px;
-  height: 12px;
-  transform-origin: 50% 100%;
-  animation: tank-slosh 6.5s ease-in-out infinite alternate;
+  top: -5px;
+  height: 6px;
 }
 .gtank-wave {
   position: absolute;
   bottom: 0;
   left: 0;
   width: 200%;
-  height: 12px;
+  height: 6px;
   fill: var(--lc);
   will-change: transform;
 }
-.w1 {
-  animation: tank-drift 9s linear infinite reverse;
-  bottom: 2px;
-  fill: var(--body-top);
-}
 .w2 {
-  animation: tank-drift 6s linear infinite;
+  animation: tank-drift 11s linear infinite reverse;
   bottom: 1px;
 }
 .w3 {
-  animation: tank-drift 4.2s linear infinite reverse;
-}
-.gtank-men {
-  position: absolute;
-  top: -6px;
-  width: 7px;
-  height: 7px;
-}
-.gtank-men-l {
-  left: 0;
-  background: radial-gradient(circle at 100% 0, transparent 6px, var(--lc) 6.6px);
-}
-.gtank-men-r {
-  right: 0;
-  background: radial-gradient(circle at 0 0, transparent 6px, var(--lc) 6.6px);
+  animation: tank-drift 7s linear infinite;
 }
 .gtank-bubbles {
   position: absolute;
@@ -286,61 +255,14 @@ const marks = computed(() =>
   animation: tank-rise var(--d) linear var(--dl) infinite;
   will-change: transform, opacity;
 }
+/* bulle = point plein, comme un pixel de la trame */
 .bub i {
   display: block;
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  border: 1px solid rgb(255 255 255 / 0.75);
-  background: radial-gradient(
-    circle at 32% 30%,
-    rgb(255 255 255 / 0.9),
-    rgb(255 255 255 / 0.12) 48%,
-    rgb(255 255 255 / 0.04)
-  );
+  background: color-mix(in srgb, var(--background) 55%, transparent);
   animation: tank-sway var(--sw) ease-in-out infinite alternate;
-}
-.gtank-shade {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    90deg,
-    rgb(0 0 0 / 0.2),
-    rgb(0 0 0 / 0) 20%,
-    rgb(255 255 255 / 0.1) 62%,
-    rgb(255 255 255 / 0) 78%,
-    rgb(255 255 255 / 0.16) 90%,
-    rgb(0 0 0 / 0.22)
-  );
-}
-.gtank-streak {
-  position: absolute;
-  left: 15%;
-  top: 11%;
-  bottom: 9%;
-  width: 7%;
-  border-radius: 999px;
-  pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    rgb(255 255 255 / 0.7),
-    rgb(255 255 255 / 0.1) 70%,
-    transparent
-  );
-  opacity: 0.8;
-}
-.gtank-rim {
-  position: absolute;
-  left: 1.5px;
-  right: 1.5px;
-  top: 1px;
-  height: 11%;
-  border-radius: 50%;
-  pointer-events: none;
-  border: 1.5px solid rgb(255 255 255 / 0.55);
-  border-top-color: rgb(255 255 255 / 0.25);
-  background: linear-gradient(180deg, rgb(255 255 255 / 0.1), transparent);
 }
 .gtank-scale {
   position: relative;
@@ -389,28 +311,19 @@ const marks = computed(() =>
     transform: translateX(-50%);
   }
 }
-@keyframes tank-slosh {
-  from {
-    transform: translateY(0.8px) rotate(-0.5deg);
-  }
-  to {
-    transform: translateY(-1.2px) rotate(0.5deg);
-  }
-}
 @keyframes tank-rise {
   0% {
-    transform: translateY(0) scale(0.5);
+    transform: translateY(0);
     opacity: 0;
   }
-  6% {
-    opacity: 0.9;
-    transform: translateY(-1cqh) scale(1);
+  8% {
+    opacity: 1;
   }
-  88% {
-    opacity: 0.85;
+  85% {
+    opacity: 1;
   }
   100% {
-    transform: translateY(calc(max(0px, var(--lv) * 100cqh - 3cqh - 6px) * -1)) scale(1.3);
+    transform: translateY(calc(max(0px, var(--lv) * 100cqh - 3cqh - 4px) * -1));
     opacity: 0;
   }
 }
@@ -433,9 +346,6 @@ const marks = computed(() =>
   .gtank * {
     animation: none !important;
     transition: none !important;
-  }
-  .w1 {
-    transform: translateX(-12%);
   }
   .w2 {
     transform: translateX(-30%);
