@@ -18,7 +18,10 @@
 // deno-lint-ignore no-explicit-any
 type Admin = { rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: any; error: any }> };
 
-const TTL_S = () => Number(Deno.env.get("RT_TOKEN_TTL_S") ?? "1800"); // 30 min
+// 6 h : chaque renouvellement est une requête HTTPS complète (~8 ko en 4G) ; à 30 min (renouvelé toutes les 20 min)
+// cela coûtait ~18 Mo/mois par box, plus que le heartbeat. Contrepartie : une box mise au rebut garde au plus 6 h
+// l'accès à SON canal (rien d'autre) ; le renouvellement, lui, est refusé immédiatement.
+const TTL_S = () => Number(Deno.env.get("RT_TOKEN_TTL_S") ?? "21600");
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -110,10 +113,14 @@ export async function issueRealtimeToken(req: Request, admin: Admin): Promise<Re
     apikey: Deno.env.get("SUPABASE_ANON_KEY") ?? "", // clé publique anon, exigée par la passerelle (pas un secret)
     // paramètres pilotés par le serveur (modifiables sans mise à jour du firmware)
     params: {
-      heartbeat_s: 30,
-      fast_interval_ms: 1000, // mode rapide (spectateur « fast »), limité à max_direct_s
+      heartbeat_s: 60, // repos : le heartbeat domine la data 4G (30 s auparavant)
+      heartbeat_kind: "ws", // ping WebSocket (10 o) plutôt qu'un message Phoenix (~100 o aller-retour)
+      fast_interval_ms: 2000, // mode rapide (spectateur « fast »), limité à max_direct_s
+      fast_deadband_pct: 0.1, // le bruit de mesure invisible ne part pas
       slow_interval_ms: 10000, // mode lent (affichage permanent)
       slow_deadband_pct: 0.5, // bande morte du mode lent
+      sig_digits: 5, // arrondi des flottants
+      fmt: 2, // format compact autorisé (utilisé seulement si tous les spectateurs le comprennent)
       max_msgs_per_s: 2,
       max_direct_s: 900,
     },
