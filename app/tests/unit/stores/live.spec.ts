@@ -284,4 +284,18 @@ describe('liveStore', () => {
     expect(f.chans[0].viewer).toMatchObject({ role: 'viewer', mode: 'fast', fmt: 2 })
     r()
   })
+  it('la présence liste les variables affichées par box, et se met à jour', () => {
+    const r = live.watch(['a', 'b'])
+    live.setWanted({ a: ['TT02', 'TT01', 'TT01'], b: null })
+    live.start(['a', 'b'], 'fast')
+    join(f.chans[0])
+    join(f.chans[1])
+    expect(f.chans[0].viewer).toMatchObject({ vars: ['TT01', 'TT02'] })
+    expect(f.chans[1].viewer).not.toHaveProperty('vars') // pas de liste = toutes (compatibilité)
+    const before = f.chans[1].viewer
+    live.setWanted({ a: ['TT03'], b: null })
+    expect(f.chans[0].viewer).toMatchObject({ vars: ['TT03'] })
+    expect(f.chans[1].viewer).toBe(before) // box b inchangée : pas de nouvelle annonce
+    r()
+  })
 })

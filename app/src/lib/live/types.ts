@@ -12,6 +12,8 @@ export interface ViewerMeta {
   since: number
   /** format « valeurs » compris par ce portail (2 = compact) ; la box n'utilise v2 que si TOUS les spectateurs l'annoncent */
   fmt?: number
+  /** variables affichées sur cette box : la box ne publie que l'union de celles des spectateurs (absent = toutes) */
+  vars?: string[]
 }
 
 export type LiveValue = number | string | boolean | null

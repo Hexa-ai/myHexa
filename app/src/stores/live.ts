@@ -93,18 +93,39 @@ export const useLiveStore = defineStore('live', () => {
   // ───────── canaux (un par box) ─────────
   const needed = (id: string) => (watchCount.get(id) ?? 0) > 0 || sessionIds.has(id)
 
-  function viewerKey(): string | null {
-    return isActive.value ? `${mode.value}:${announceTs.value}` : null
+  /**
+   * variables réellement affichées, par box (économie de data 4G) : la box ne publie que celles-là.
+   * Absent = toutes (compatibilité, ou écran qui afficherait des variables non déclarées).
+   */
+  const wanted = new Map<string, string[]>()
+  function setWanted(map: Record<string, string[] | null | undefined>) {
+    const before = new Map(wanted)
+    wanted.clear()
+    for (const [id, names] of Object.entries(map)) if (names) wanted.set(id, [...new Set(names)].sort())
+    const changed = new Set([...before.keys(), ...wanted.keys()])
+    for (const id of changed) {
+      if ((before.get(id) ?? []).join('\u0001') !== (wanted.get(id) ?? []).join('\u0001') || before.has(id) !== wanted.has(id))
+        applyViewer(id)
+    }
+  }
+
+  function viewerKey(id: string): string | null {
+    if (!isActive.value) return null
+    const w = wanted.get(id)
+    return `${mode.value}:${announceTs.value}:${w ? w.join('\u0001') : '*'}`
   }
 
   function applyViewer(id: string) {
     const e = entries.get(id)
     if (!e?.ch || !dev(id).joined) return
-    const want = sessionIds.has(id) ? viewerKey() : null
+    const want = sessionIds.has(id) ? viewerKey(id) : null
     if (want === e.sent) return
     e.sent = want
+    const vars = wanted.get(id)
     e.ch.setViewer(
-      want ? { role: 'viewer', mode: mode.value as LiveRate, since: announceTs.value, fmt: 2 } : null,
+      want
+        ? { role: 'viewer', mode: mode.value as LiveRate, since: announceTs.value, fmt: 2, ...(vars ? { vars } : {}) }
+        : null,
     )
   }
   const applyAll = () => sessionIds.forEach(applyViewer)
@@ -352,6 +373,7 @@ export const useLiveStore = defineStore('live', () => {
 
   function reset() {
     stop()
+    wanted.clear()
     for (const e of entries.values()) {
       if (e.retry) clearTimeout(e.retry)
       e.ch?.close()
@@ -410,6 +432,7 @@ export const useLiveStore = defineStore('live', () => {
     trail,
     reset,
     setSource,
+    setWanted,
     /** diagnostic / tests */
     _openChannels: () => [...entries.entries()].filter(([, e]) => e.ch).map(([id]) => id),
     _trailSize: () => [...trails.values()].reduce((n, t) => n + t.length, 0),
