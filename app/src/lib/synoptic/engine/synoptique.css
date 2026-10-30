@@ -555,3 +555,6 @@
 .syn-root .ed-module-b{display:flex;gap:3px;flex:none}
 .syn-root .ed-module .ed-in{width:100%}
 .syn-root .ed-module .sm{font-size:11px}
+
+/* CVC : cartouche des valeurs posé sur la pièce centrale d'un module double */
+.syn-root .cv-cartouche{fill:var(--syn-fond);stroke:var(--border);stroke-width:1}

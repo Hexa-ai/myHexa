@@ -128,34 +128,47 @@ function batterie(s, c, genre) {
   return o
 }
 
-/** module double 120×320 : repère local, étage haut y 0..160, étage bas y 160..320 */
+/** module double 120×320 : repère local, étage haut y 0..160 (gaine 30..130), étage bas y 160..320 (gaine 190..290).
+ * Les deux gaines restent dessinées ; la pièce centrale (au carré, jamais étirée) chevauche les deux et masque leurs parois intérieures. */
+const CX = 60, CY = 160
 const DOUBLE = {
+  // échangeur à plaques à flux croisés : carré posé sur la pointe, diagonales en X (les deux flux qui se croisent), plaques fines
   recup_plaques: (s, c) => {
-    const o = [s('path', { d: 'M60 46 L106 160 L60 274 L14 160 Z', class: 'cv-corps' })]
-    // plaques : lignes parallèles à l'arête haut → droite
-    for (let i = 1; i < 8; i++) {
-      const t = i / 8
-      o.push(s('line', { x1: 14 + t * 46, y1: 160 - t * 114, x2: 60 + t * 46, y2: 274 - t * 114, class: 'cv-trait fin' }))
+    const r = 56   // demi-diagonale : carré de 79 px de côté
+    const losange = `M${CX} ${CY - r} L${CX + r} ${CY} L${CX} ${CY + r} L${CX - r} ${CY} Z`
+    const o = [s('path', { d: losange, class: 'cv-corps' })]
+    for (let i = 1; i < 6; i++) {   // plaques parallèles aux deux côtés, dans chaque demi-carré
+      const t = (i / 6) * r
+      o.push(s('line', { x1: CX - r + t, y1: CY - t, x2: CX + t, y2: CY + r - t, class: 'cv-trait fin', opacity: 0.45 }))
     }
-    o.push(s('path', { d: 'M60 46 L106 160 L60 274 L14 160 Z', class: 'cv-trait cv-act' }))
+    o.push(s('line', { x1: CX, y1: CY - r, x2: CX, y2: CY + r, class: 'cv-trait fin' }), s('line', { x1: CX - r, y1: CY, x2: CX + r, y2: CY, class: 'cv-trait fin' }))
+    o.push(s('path', { d: losange, class: 'cv-trait cv-act' }))
     return o
   },
+  // roue de récupération : disque qui chevauche les deux gaines, rayons qui tournent
   recup_roue: (s, c) => {
-    const o = [s('circle', { cx: 60, cy: 160, r: 54, class: 'cv-corps' })]
+    const R = 52
+    const o = [s('circle', { cx: CX, cy: CY, r: R, class: 'cv-corps' })]
     const rayons = []
-    for (let i = 0; i < 12; i++) rayons.push(s('line', { x1: 60, y1: 160, x2: 60, y2: 110, transform: rot(i * 30, 60, 160), class: 'cv-trait fin cv-act' }))
+    for (let i = 0; i < 12; i++) rayons.push(s('line', { x1: CX, y1: CY, x2: CX, y2: CY - R + 4, transform: rot(i * 30, CX, CY), class: 'cv-trait fin cv-act' }))
     const dureeStyle = c.dureeRotor ? `animation-duration:${c.dureeRotor * 3}s` : null
-    o.push(s('g', { class: 'cv-rotor', style: dureeStyle }, s('circle', { cx: 60, cy: 160, r: 54, class: 'cv-cadre' }), ...rayons, s('circle', { cx: 60, cy: 160, r: 41, class: 'cv-trait cv-act', 'stroke-dasharray': '4 6' })))
-    o.push(s('circle', { cx: 60, cy: 160, r: 54, class: 'cv-trait cv-act' }), s('circle', { cx: 60, cy: 160, r: 8, class: 'cv-corps cv-act' }))
+    o.push(s('g', { class: 'cv-rotor', style: dureeStyle }, s('circle', { cx: CX, cy: CY, r: R - 2, class: 'cv-cadre' }), ...rayons, s('circle', { cx: CX, cy: CY, r: R - 13, class: 'cv-trait cv-act', 'stroke-dasharray': '4 6' })))
+    o.push(s('line', { x1: CX - R - 4, y1: CY, x2: CX + R + 4, y2: CY, class: 'cv-trait' }))   // cloison entre les deux flux
+    o.push(s('circle', { cx: CX, cy: CY, r: R, class: 'cv-trait cv-act' }))
     return o
   },
+  // caisson de mélange : passage vertical entre les deux gaines, registre de recyclage dedans (lames verticales = ouvert)
   caisson_melange: (s, c) => {
     const p = c.pos
     const a = p == null ? 45 : 90 * (p / 100)
-    const o = [s('rect', { x: 28, y: 104, width: 64, height: 112, rx: 3, class: 'cv-corps' })]
-    for (let i = 0; i < 5; i++) { const cy = 120 + 20 * i; o.push(s('line', { x1: 36, x2: 84, y1: cy, y2: cy, transform: rot(a, 60, cy), class: 'cv-trait cv-act cv-lame' }), s('circle', { cx: 60, cy, r: 1.6, class: 'cv-pivot' })) }
-    o.push(s('circle', { cx: 104, cy: 160, r: 7, class: 'cv-corps' }))
-    o.fixe = [['M', 104, 160.5, 'cv-lettre']]
+    // passage à gauche de la colonne, valeurs à droite (le cartouche ne cache pas les lames)
+    const xc = 38, x0 = 18, x1 = 58, y0 = 118, y1 = 202
+    const o = [s('rect', { x: x0, y: y0, width: x1 - x0, height: y1 - y0, class: 'cv-gaine', style: 'stroke:none' })]
+    o.push(s('line', { x1: x0, y1: y0, x2: x0, y2: y1, class: 'cv-trait' }), s('line', { x1: x1, y1: y0, x2: x1, y2: y1, class: 'cv-trait' }))
+    for (const cy of [140, 160, 180]) o.push(s('line', { x1: x0 + 5, x2: x1 - 5, y1: cy, y2: cy, transform: rot(a, xc, cy), class: 'cv-trait cv-act cv-lame' }), s('circle', { cx: xc, cy, r: 1.6, class: 'cv-pivot' }))
+    o.push(s('line', { x1: x0, x2: 13, y1: 140, y2: 140, class: 'cv-trait fin' }), s('circle', { cx: 9, cy: 140, r: 6, class: 'cv-corps' }))
+    o.fixe = [['M', 9, 140.5, 'cv-lettre']]
+    o.valeursX = 90
     return o
   },
 }
@@ -226,24 +239,26 @@ export function dessinerCta(s, params, ctx) {
       const etat = etatModule(m, lire)
       gr.classList.add('m-' + etat)
       const w = cell.w
-      // deux gaines et le corps du module qui les relie
-      gr.append(s('rect', { x: 0, y: GAINE.haut, width: w, height: GAINE.bas - GAINE.haut, class: 'cv-gaine' }), s('rect', { x: 0, y: HAUTEUR_ETAGE + GAINE.haut, width: w, height: GAINE.bas - GAINE.haut, class: 'cv-gaine' }), s('rect', { x: 0, y: GAINE.bas - 1, width: w, height: 2 * HAUTEUR_ETAGE - 2 * GAINE.haut - (GAINE.bas - GAINE.haut) + 2 - 0, class: 'cv-gaine', style: 'stroke:none' }))
-      const corpsMod = s('rect', { x: 0, y: GAINE.haut, width: w, height: 2 * HAUTEUR_ETAGE - 2 * GAINE.haut, class: 'cv-gaine' })
-      gr.append(corpsMod)
+      // les deux gaines, comme les autres colonnes ; la pièce centrale est posée par-dessus
+      gr.append(s('rect', { x: 0, y: GAINE.haut, width: w, height: GAINE.bas - GAINE.haut, class: 'cv-gaine' }), s('rect', { x: 0, y: HAUTEUR_ETAGE + GAINE.haut, width: w, height: GAINE.bas - GAINE.haut, class: 'cv-gaine' }))
       const iAir = g.cellules.findIndex((q) => q.double)
       gr.append(s('line', { x1: 3, x2: w - 3, y1: AXE, y2: AXE, class: `cv-flux a-${m.air_haut || 'rejete'}${marcheGlobale ? ' actif' : ''}`, style: 'transform:scaleX(-1);transform-box:fill-box;transform-origin:center' }))
       gr.append(s('line', { x1: 3, x2: w - 3, y1: HAUTEUR_ETAGE + AXE, y2: HAUTEUR_ETAGE + AXE, class: `cv-flux a-${m.air || 'souffle'}${marcheGlobale ? ' actif' : ''}` }))
       const dessin = DOUBLE[m.k]
+      let vx = 60
       if (dessin) {
         const c = { w, etat, pos: positionModule(m.id, lire), clip: `cvc_${ctx.uid}_${m.id}`.replace(/\W/g, '_'), dureeRotor: dureeRotor(m, lire) }
         const els = dessin(s, c)
+        if (els.valeursX) vx = els.valeursX
         els.forEach((e) => gr.append(e))
         ;(els.fixe || []).forEach(([t, x, y, cls]) => gr.append(s('text', { x, y, class: cls, text: t })))
       }
       // étiquettes : valeurs entre les deux étages (au centre), nom sous l'ensemble
       const vs = []
       for (const b of def.mesures) { const x = lire(m.id, b); if (x != null && vs.length < 2) vs.push(texteValeur('cta', b, x, ctx.fr)) }
-      vs.forEach((t, i) => gr.append(s('text', { x: 60, y: 158 + i * 0, dy: i ? '1.15em' : 0, class: i ? 'cv-v2 centre' : 'cv-v1 centre', text: t })))
+      // valeurs au centre, sur un cartouche pour rester lisibles par-dessus le dessin
+      if (vs.length) gr.append(s('rect', { x: vx - 30, y: 147, width: 60, height: vs.length > 1 ? 28 : 17, rx: 3, class: 'cv-cartouche' }))
+      vs.forEach((t, i) => gr.append(s('text', { x: vx, y: 158 + i * 0, dy: i ? '1.15em' : 0, class: i ? 'cv-v2 centre' : 'cv-v1 centre', text: t })))
       const nom = libelleModule(m, 'cta')
       if (nom) nomSvg(s, nom, w / 2, w, null, HAUTEUR_ETAGE).forEach((e) => gr.append(e))
       if (etat === 'defaut') gr.append(pastille(s, w - 9, 2 * HAUTEUR_ETAGE - 20))
