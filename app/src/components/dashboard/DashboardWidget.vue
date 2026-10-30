@@ -28,6 +28,13 @@ const knobHand = (f: number, r = 30) => {
 }
 import HistoryChart from '@/components/HistoryChart.vue'
 import SynopticTile from '@/components/synoptic/SynopticTile.vue'
+import GaugeBar from '@/components/dashboard/gauges/GaugeBar.vue'
+import GaugeTank from '@/components/dashboard/gauges/GaugeTank.vue'
+import {
+  crossedColor,
+  DEFAULT_BAR_COLOR,
+  DEFAULT_TANK_COLOR,
+} from '@/components/dashboard/gauges/gaugeUtil'
 import type { DeviceWithStatus } from '@/composables/useDevices'
 import type { HistPoint, HistVar } from '@/composables/useHistory'
 import {
@@ -288,6 +295,13 @@ const items = computed<Item[]>(() => {
   return Array.from({ length: n }, (_, i) => build(i)).filter((x): x is Item => !!x)
 })
 const many = computed(() => items.value.length > 1 && !w.value.options.combine)
+/** style de jauge (rond par défaut : les tableaux existants ne changent pas) */
+const gStyle = computed(() => w.value.options.gaugeStyle ?? 'dial')
+/** couleur de la barre / du liquide : seuil franchi > choix du widget > défaut du style */
+const gColor = (it: Item) =>
+  crossedColor(it.value, w.value.options.thresholds ?? []) ??
+  w.value.options.gaugeColor ??
+  (gStyle.value === 'tank' ? DEFAULT_TANK_COLOR : DEFAULT_BAR_COLOR)
 
 /** voyant en synthèse : un seul état calculé + la liste des variables actives */
 const combined = computed(() => {
@@ -633,8 +647,44 @@ const tableRows = computed(() =>
         "
       >
         <div v-for="it in items" :key="it.label" class="min-w-0" data-testid="gauge-item">
-          <div v-if="appareil" :class="['flex items-center gap-3', many ? 'flex-col' : '']">
-            <svg viewBox="0 0 120 120" :class="['shrink-0', many ? 'w-[96px]' : 'w-[118px]']">
+          <GaugeTank
+            v-if="gStyle === 'tank'"
+            :f="it.f"
+            :text="fmtValue(it.value, w.options.decimals)"
+            :unit="it.unit"
+            :lo="it.lo"
+            :hi="it.hi"
+            :lo-text="fmtValue(it.lo)"
+            :hi-text="fmtValue(it.hi)"
+            :mid-text="fmtValue((it.lo + it.hi) / 2)"
+            :color="gColor(it)"
+            :bubbles="w.options.gaugeBubbles !== false"
+            :thresholds="w.options.thresholds ?? []"
+            :compact="many"
+          />
+          <GaugeBar
+            v-else-if="gStyle === 'bar-h' || gStyle === 'bar-v'"
+            :orient="gStyle === 'bar-h' ? 'h' : 'v'"
+            :f="it.f"
+            :text="fmtValue(it.value, w.options.decimals)"
+            :unit="it.unit"
+            :lo="it.lo"
+            :hi="it.hi"
+            :lo-text="fmtValue(it.lo)"
+            :hi-text="fmtValue(it.hi)"
+            :mid-text="fmtValue((it.lo + it.hi) / 2)"
+            :color="gColor(it)"
+            :thresholds="w.options.thresholds ?? []"
+            :compact="many"
+          />
+          <div
+            v-else-if="appareil"
+            :class="['flex items-center gap-3', many ? 'flex-col' : '']"
+          >
+            <svg
+              data-testid="gauge-dial"
+              viewBox="0 0 120 120"
+              :class="['shrink-0', many ? 'w-[96px]' : 'w-[118px]']">
               <line
                 v-for="t in KNOB_TICKS"
                 :key="t.i"
@@ -696,6 +746,7 @@ const tableRows = computed(() =>
           </div>
           <svg
             v-else
+            data-testid="gauge-dial"
             viewBox="0 0 120 70"
             :class="['w-full mx-auto', many ? 'max-w-[150px]' : 'max-w-[220px]']"
           >

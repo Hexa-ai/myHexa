@@ -117,6 +117,12 @@ export interface WidgetOptions {
   text?: string
   min?: number | null
   max?: number | null
+  /** jauge : 'dial' (ronde, défaut), barre horizontale / verticale ou cuve (bêta) */
+  gaugeStyle?: 'dial' | 'bar-h' | 'bar-v' | 'tank'
+  /** jauge barre / cuve : couleur de la barre ou du liquide (hex) */
+  gaugeColor?: string
+  /** jauge cuve : bulles (défaut oui) */
+  gaugeBubbles?: boolean
   decimals?: number
   /** blocs d'alarmes : alarmes retenues (vide = toutes), gravités, nb de lignes, graphique en barres */
   alarms?: string[]

@@ -1,4 +1,12 @@
 <script setup lang="ts">
+import { useFeature } from '@/composables/useFeature'
+import {
+  GAUGE_COLORS,
+  GAUGE_STYLES,
+  DEFAULT_BAR_COLOR,
+  DEFAULT_TANK_COLOR,
+  type GaugeStyle,
+} from '@/components/dashboard/gauges/gaugeUtil'
 import {
   WEATHER_DEFAULT_FIELDS,
   WEATHER_FIELDS,
@@ -201,6 +209,26 @@ function toggleStatusDevice(id: string) {
     ? w.value.sources.filter((s) => s.device !== id)
     : [...w.value.sources, { device: id, var: '' }]
 }
+function setGaugeStyle(g: GaugeStyle) {
+  if (g === 'dial') {
+    delete w.value.options.gaugeStyle
+    delete w.value.options.gaugeColor
+    delete w.value.options.gaugeBubbles
+  } else {
+    w.value.options.gaugeStyle = g
+  }
+}
+const betaWidgets = useFeature('widgets_beta')
+/** le choix du style de jauge n'est proposé que si la bêta est active (ou si le style est déjà posé) */
+const showGaugeStyle = computed(
+  () => w.value.type === 'gauge' && (betaWidgets.value || !!w.value.options.gaugeStyle),
+)
+const gaugeStyle = computed(() => w.value.options.gaugeStyle ?? 'dial')
+const showThresholds = computed(
+  () =>
+    ['curve', 'bars'].includes(w.value.type) ||
+    (w.value.type === 'gauge' && gaugeStyle.value !== 'dial'),
+)
 const isChart = computed(() => ['curve', 'bars'].includes(w.value.type))
 // seuils d'une courbe : trait horizontal + libellé
 function addThreshold() {
@@ -496,7 +524,7 @@ function save() {
         </label>
       </div>
       <!-- seuils (courbes, barres) -->
-      <div v-if="isChart" class="mb-3" data-testid="threshold-editor">
+      <div v-if="showThresholds" class="mb-3" data-testid="threshold-editor">
         <div class="flex items-center gap-2 mb-1">
           <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
             >Seuils</span
@@ -643,6 +671,72 @@ function save() {
         </div>
       </div>
 
+      <div
+        v-if="showGaugeStyle"
+        class="mb-3 rounded-sm border border-border p-3 space-y-2"
+        data-testid="gauge-style-editor"
+      >
+        <div class="flex items-center gap-2">
+          <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+            >Style de la jauge</span
+          >
+          <span
+            class="font-mono text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-full border border-signal/50 text-signal"
+            data-testid="beta-badge"
+            >bêta</span
+          >
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          <button
+            v-for="g in GAUGE_STYLES"
+            :key="g.value"
+            type="button"
+            :data-testid="`gauge-style-${g.value}`"
+            :class="[
+              'px-2.5 py-1 rounded-sm border text-sm',
+              gaugeStyle === g.value
+                ? 'border-signal bg-signal-soft'
+                : 'border-border hover:bg-muted',
+            ]"
+            @click="setGaugeStyle(g.value)"
+          >
+            {{ g.label }}
+          </button>
+        </div>
+        <div v-if="gaugeStyle !== 'dial'" class="flex flex-wrap items-center gap-2">
+          <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{{
+            gaugeStyle === 'tank' ? 'Liquide' : 'Couleur'
+          }}</span>
+          <button
+            v-for="c in GAUGE_COLORS"
+            :key="c.color"
+            type="button"
+            :title="c.label"
+            :data-testid="`gauge-color-${c.label}`"
+            :class="[
+              'h-6 w-6 rounded-full border-2',
+              (w.options.gaugeColor ??
+                (gaugeStyle === 'tank' ? DEFAULT_TANK_COLOR : DEFAULT_BAR_COLOR)) === c.color
+                ? 'border-foreground'
+                : 'border-transparent',
+            ]"
+            :style="{ background: c.color }"
+            @click="w.options.gaugeColor = c.color"
+          />
+          <span class="text-[11px] text-muted-foreground"
+            >le rouge se règle par un seuil (ci-dessous)</span
+          >
+        </div>
+        <label v-if="gaugeStyle === 'tank'" class="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            data-testid="gauge-bubbles"
+            :checked="w.options.gaugeBubbles !== false"
+            @change="w.options.gaugeBubbles = ($event.target as HTMLInputElement).checked"
+          />
+          Bulles
+        </label>
+      </div>
       <div v-if="['value', 'gauge'].includes(w.type)" class="grid sm:grid-cols-2 gap-3 mb-3">
         <label class="text-sm">
           <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"

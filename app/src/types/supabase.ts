@@ -180,6 +180,7 @@ export type Database = {
       companies: {
         Row: {
           address: string | null
+          beta_features: string[]
           contact_email: string | null
           contact_name: string | null
           created_at: string
@@ -196,6 +197,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          beta_features?: string[]
           contact_email?: string | null
           contact_name?: string | null
           created_at?: string
@@ -212,6 +214,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          beta_features?: string[]
           contact_email?: string | null
           contact_name?: string | null
           created_at?: string
