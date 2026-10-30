@@ -35,17 +35,56 @@ export function boxPresent(state: Record<string, PresenceMeta[]>): boolean {
   )
 }
 
-/** valide un message « valeurs » reçu (ne jamais faire confiance au réseau) */
+const isLiveValue = (v: unknown): v is ValuesMessage['d'][string][0] =>
+  v === null || ['number', 'string', 'boolean'].includes(typeof v)
+
+/**
+ * Décodeur d'un canal : formats v1 ({ nom: [valeur, ts] }) et v2 compact (économie de data 4G) :
+ *   { v: 2, e: époque, s, t, f?: 1, k?: { index: nom }, d: [index, valeur, index, valeur, …] }
+ * Les noms ne voyagent qu'une fois (k) ; le dictionnaire vit par canal et par époque (redémarrage du service de la
+ * box = nouvelle numérotation : on l'oublie et on attend l'instantané). Un index inconnu est ignoré.
+ */
+export function createValuesDecoder() {
+  let epoch: unknown = undefined
+  let names = new Map<number, string>()
+  return (p: unknown): ValuesMessage | null => {
+    const o = p as { v?: unknown } | null
+    if (!o || typeof o !== 'object') return null
+    if (o.v !== 2) return parseValues(p)
+    const m = p as { e?: unknown; t?: unknown; f?: unknown; k?: unknown; d?: unknown }
+    if (!Array.isArray(m.d)) return null
+    if (m.e !== epoch) {
+      epoch = m.e
+      names = new Map()
+    }
+    if (m.k && typeof m.k === 'object') {
+      for (const [i, n] of Object.entries(m.k as Record<string, unknown>)) {
+        const idx = Number(i)
+        if (Number.isInteger(idx) && typeof n === 'string' && n) names.set(idx, n)
+      }
+    }
+    const t = typeof m.t === 'number' && Number.isFinite(m.t) ? m.t : Date.now()
+    const d: ValuesMessage['d'] = {}
+    for (let j = 0; j + 1 < m.d.length; j += 2) {
+      const name = names.get(m.d[j] as number)
+      const v = m.d[j + 1]
+      if (name && isLiveValue(v)) d[name] = [v, t]
+    }
+    return { t, full: m.f === 1 || m.f === true, d }
+  }
+}
+
+/** valide un message « valeurs » v1 reçu (ne jamais faire confiance au réseau) */
 export function parseValues(p: unknown): ValuesMessage | null {
   const o = p as { t?: unknown; full?: unknown; d?: unknown } | null
-  if (!o || typeof o !== 'object' || !o.d || typeof o.d !== 'object') return null
+  if (!o || typeof o !== 'object' || !o.d || typeof o.d !== 'object' || Array.isArray(o.d)) return null
   const d: ValuesMessage['d'] = {}
   for (const [name, e] of Object.entries(o.d as Record<string, unknown>)) {
     if (!Array.isArray(e) || e.length < 1) continue
     const v = e[0]
-    if (v !== null && !['number', 'string', 'boolean'].includes(typeof v)) continue
+    if (!isLiveValue(v)) continue
     const ts = typeof e[1] === 'number' && Number.isFinite(e[1]) ? e[1] : Number(o.t) || Date.now()
-    d[name] = [v as ValuesMessage['d'][string][0], ts]
+    d[name] = [v, ts]
   }
   return { t: typeof o.t === 'number' ? o.t : Date.now(), full: !!o.full, d }
 }
@@ -56,10 +95,11 @@ export const supabaseLiveSource: LiveSource = {
     const ch: RealtimeChannel = supabase.channel(boxTopic(deviceId), {
       config: { private: true, presence: { key: TAB_KEY }, broadcast: { self: false } },
     })
+    const decode = createValuesDecoder()
     const syncBox = () => h.onBox(boxPresent(ch.presenceState() as Record<string, PresenceMeta[]>))
     ch.on('presence', { event: 'sync' }, syncBox)
       .on('broadcast', { event: 'valeurs' }, (m) => {
-        const v = parseValues((m as { payload?: unknown }).payload)
+        const v = decode((m as { payload?: unknown }).payload)
         if (v) h.onValues(v)
       })
       .on('broadcast', { event: 'etat' }, (m) => {

@@ -6,7 +6,7 @@ vi.mock('@/lib/supabase', () => ({ supabase: {} }))
 
 import { useLiveStore, backoffMs, TRAIL_MAX_POINTS, TRAIL_MS } from '@/stores/live'
 import type { LiveChannel, LiveHandlers, LiveSource, ViewerMeta } from '@/lib/live/types'
-import { parseValues, boxPresent } from '@/lib/live/supabaseSource'
+import { parseValues, boxPresent, createValuesDecoder } from '@/lib/live/supabaseSource'
 import { FAST_DURATION_MS } from '@/lib/live'
 
 interface FakeChan extends LiveChannel {
@@ -257,5 +257,31 @@ describe('liveStore', () => {
     expect(boxPresent({ k: [{ role: 'box', caps: ['valeurs'] }] })).toBe(true)
     expect(boxPresent({ k: [{ role: 'box', caps: ['cmd'] }] })).toBe(false)
     expect(boxPresent({ k: [{ role: 'box' }] })).toBe(true)
+  })
+
+  it('format v2 compact : dictionnaire par époque, index inconnus ignorés, v1 toujours lu', () => {
+    const dec = createValuesDecoder()
+    // delta reçu avant l'instantané (spectateur arrivé en cours) : rien d'exploitable
+    expect(dec({ v: 2, e: 7, s: 1, t: 100, d: [0, 1.5] })!.d).toEqual({})
+    const full = dec({ v: 2, e: 7, s: 2, t: 200, f: 1, k: { 0: 'TT01', 1: 'POMPE' }, d: [0, 20.5, 1, true] })!
+    expect(full.full).toBe(true)
+    expect(full.d).toEqual({ TT01: [20.5, 200], POMPE: [true, 200] })
+    expect(dec({ v: 2, e: 7, s: 3, t: 300, d: [0, 21] })!.d).toEqual({ TT01: [21, 300] })
+    // nouvelle variable : nom une fois, puis index seul
+    expect(dec({ v: 2, e: 7, s: 4, t: 400, k: { 2: 'NIV' }, d: [2, 3] })!.d).toEqual({ NIV: [3, 400] })
+    expect(dec({ v: 2, e: 7, s: 5, t: 500, d: [2, 4, 9, 1, 0, { x: 1 }] })!.d).toEqual({ NIV: [4, 500] })
+    // la box a redémarré (autre époque) : ancien dictionnaire oublié
+    expect(dec({ v: 2, e: 8, s: 1, t: 600, d: [0, 99] })!.d).toEqual({})
+    expect(dec({ v: 2, e: 8, s: 2, t: 700, d: 'x' })).toBeNull()
+    // un ancien firmware (v1) sur le même canal
+    expect(dec({ v: 1, t: 10, full: false, d: { A: [1, 5] } })!.d).toEqual({ A: [1, 5] })
+  })
+
+  it('la présence annonce le format compact (fmt 2)', () => {
+    const r = live.watch(['a'])
+    live.start(['a'], 'fast')
+    join(f.chans[0])
+    expect(f.chans[0].viewer).toMatchObject({ role: 'viewer', mode: 'fast', fmt: 2 })
+    r()
   })
 })

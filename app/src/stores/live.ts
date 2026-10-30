@@ -104,7 +104,7 @@ export const useLiveStore = defineStore('live', () => {
     if (want === e.sent) return
     e.sent = want
     e.ch.setViewer(
-      want ? { role: 'viewer', mode: mode.value as LiveRate, since: announceTs.value } : null,
+      want ? { role: 'viewer', mode: mode.value as LiveRate, since: announceTs.value, fmt: 2 } : null,
     )
   }
   const applyAll = () => sessionIds.forEach(applyViewer)
