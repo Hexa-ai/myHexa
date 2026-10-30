@@ -3,6 +3,7 @@
 // Les états suivent la même logique que le moteur (engine/moteur.ts) : sans variable reçue, un état reste « inconnu ».
 import type { SynopticDocument, SynopticEquipement } from './engine/types'
 import { appliquerRegle } from './regles'
+import { cartesCvc, estTypeCvc, modulesDe, etatModule, texteAlarmeModule, UNITES_SLOT, type FamillePictoCvc, type ParamsCta, type ParamsHydro } from './engine/cvc-modele'
 
 export type EtatOuvrage = 'marche' | 'arret' | 'defaut' | 'ok' | 'inconnu'
 
@@ -28,8 +29,8 @@ export interface CadreDessin {
 }
 
 /** famille de pictogramme affichable dans une carte */
-export type FamillePicto = 'pompe' | 'moteur' | 'ventilateur' | 'vanne' | 'cuve'
-export type EtatPicto = 'marche' | 'arret' | 'defaut' | 'ouvert' | 'ferme' | 'inconnu'
+export type FamillePicto = 'pompe' | 'moteur' | 'ventilateur' | 'vanne' | 'cuve' | FamillePictoCvc
+export type EtatPicto = 'marche' | 'arret' | 'defaut' | 'ouvert' | 'ferme' | 'modulant' | 'inconnu'
 
 export interface PictoResume {
   id: string
@@ -195,7 +196,9 @@ const centre = (p: Position) => ({ x: p.x + p.w / 2, y: p.y + p.h / 2 })
 /** construit le résumé : alarmes actives puis cartes (les cartes en alarme d'abord) */
 export function construireResume(doc: SynopticDocument, values: Valeurs): ResumeSynoptique {
   const modele = doc.modele
-  const equipements = (modele.equipements ?? []).filter((e) => e.type !== 'raccord')
+  const tous = (modele.equipements ?? []).filter((e) => e.type !== 'raccord')
+  const equipementsCvc = tous.filter((e) => estTypeCvc(e.type))
+  const equipements = tous.filter((e) => !estTypeCvc(e.type))
   const positions = new Map<string, Position>()
   for (const n of doc.layout?.noeuds ?? []) {
     positions.set(n.id, { x: n.x, y: n.y, w: Number(n.w) || 0, h: Number(n.h) || 0 })
@@ -230,9 +233,41 @@ export function construireResume(doc: SynopticDocument, values: Valeurs): Resume
   }
 
   const cartes = groupes.map((g) => carte(g, values, positions, alarmes))
+  for (const e of equipementsCvc) cartes.push(...cartesElementCvc(e, values, positions, alarmes))
   // les cartes en alarme passent devant ; l'ordre du document est conservé sinon
   cartes.sort((a, b) => Number(b.alarmes > 0) - Number(a.alarmes > 0))
   return { alarmes, ouvrages: cartes }
+}
+
+/** cartes d'un bandeau CTA ou d'une ligne hydraulique : une carte par fonction (soufflage, reprise, récupération, batteries, départs…) */
+function cartesElementCvc(
+  e: SynopticEquipement,
+  v: Valeurs,
+  positions: Map<string, Position>,
+  alarmes: AlarmeResume[],
+): CarteResume[] {
+  const type = e.type as 'cta' | 'hydro'
+  const params = e.params as (ParamsCta & ParamsHydro) | undefined
+  const lecteur = (idModule: string, base: string) => lire(e, `${idModule}:${base}`, v)
+  const p = positions.get(e.id)
+  const cadre: CadreDessin | null = p ? { x: p.x, y: p.y, w: p.w, h: p.h } : null
+  const cartes = cartesCvc(type, params, lecteur, e.libelle)
+  // sans aucune valeur reçue, une carte reste « inconnu » (pas de « marche » inventée)
+  return cartes.map((c) => {
+    const titreAlarme = c.titre
+    for (const m of modulesDe(type, params).filter(({ m: mod }) => c.modules.includes(mod.id))) {
+      if (etatModule(m.m, lecteur) === 'defaut') alarmes.push({ id: `${e.id}:${m.m.id}`, texte: texteAlarmeModule(m.m, type, lecteur), ouvrage: titreAlarme })
+    }
+    return {
+      id: c.id,
+      titre: c.titre,
+      etat: c.etat === 'ok' ? 'ok' : c.etat,
+      alarmes: c.defauts.length,
+      pictos: c.pictos.map((q) => ({ id: q.id, famille: q.famille, etat: q.etat === 'ok' ? 'inconnu' : (q.etat as EtatPicto), libelle: q.libelle, niveau: null })),
+      valeurs: c.valeurs.map((x) => ({ libelle: x.libelle, texte: `${formaterNombre(x.valeur)}${UNITES_SLOT[x.base] ? ' ' + UNITES_SLOT[x.base] : ''}` })),
+      cadre,
+    }
+  })
 }
 
 /** regroupe les équipements : une carte par zone ; une zone qui contient plusieurs ouvrages est scindée par ouvrage */

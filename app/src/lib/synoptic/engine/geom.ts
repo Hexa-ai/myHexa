@@ -4,6 +4,7 @@
 // Géométrie des symboles : UNE seule source de vérité, utilisée par la mise en page (node) et par le rendu (navigateur).
 // Entrée : un équipement du modele.json + ses éléments rattachés. Sortie : taille du nœud, ports de raccordement,
 // positions relatives des éléments (moteur d'agitateur, annexes, vannes de trémie, étiquette). Aucune coordonnée absolue.
+import { disposerCta, disposerHydro, portsCvc } from './cvc-modele'
 const G: any = {};
 G.CELL_W = 86; G.CELL_H = 84;   // cellule d'un instrument en ligne (sur une conduite)
 G.ANNEXE_W = 74; G.ANNEXE_H = 66; // cellule d'une annexe (sonde, poire) sous un récipient
@@ -133,6 +134,11 @@ G.mesurer = function (eq, ctx) {
     const w = 34, h = 34;
     g.w = w; g.h = h; g.ports = { in: { x: 0, y: h / 2, side: 'W' }, out: { x: w, y: h / 2, side: 'E' }, nord: { x: w / 2, y: 0, side: 'N' } };
     g.lignesRaccord = G.coupe(eq.libelle, 15); g.label = { x: w / 2, y: -8 }; g.ancre = 'milieu';
+  } else if (t === 'cta' || t === 'hydro') {   // famille CVC : bandeau de CTA / lignes hydrauliques, géométrie dans cvc-modele.ts
+    const gg = t === 'cta' ? disposerCta(eq.params) : disposerHydro(eq.params);
+    g.cvc = true; g.w = Math.max(60, gg.w); g.h = gg.h; g.cx = g.w / 2; g.cy = gg.h / 2; g.label = null; g.lignes = [];
+    g.ports = portsCvc(t, eq.params);
+    g.ports.nord = { x: g.w / 2, y: 0, side: 'N' };
   } else if (G.EXTRA[t]) {   // symboles de la passe 7 : 2 ports W / E sur l'axe du symbole (+ p3, p4 selon le type)
     const X = G.EXTRA[t], rw = X.rw * f, rh = X.rh * f, w = Math.max(2 * (rw + 14), lblW), cy = rh + 12 + (t === 'vanne_man' || t === 'vanne_3v' ? 12 * f : 0);
     g.rw = rw; g.rh = rh; g.cx = w / 2; g.cy = cy; g.w = w; g.aVal = !!X.val;

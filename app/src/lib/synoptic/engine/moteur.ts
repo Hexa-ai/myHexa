@@ -6,6 +6,8 @@
  * donc une tuile, sa vue agrandie et l'éditeur peuvent exister en même temps. La structure interne est celle du prototype,
  * découpée en sections « MODULE : … » ; voir docs/flux/synoptique.md (carte des sections et marche à suivre pour ajouter un symbole).
  */
+import * as CVC from './cvc-modele'
+import { dessinerCta, dessinerHydro } from './cvc-dessin'
 import GEOM from './geom'
 import { appliquerRegle, estEmplacementEtat, OPERATEURS } from '../regles'
 import type { SynopticDocument, SynopticHost, SynopticInstance, SynopticOptions } from './types'
@@ -102,12 +104,19 @@ function genererDemo(M) {
   const premiereAlarmeMesure = M.equipements.find(e => e.type === 'mesure' && e.params && e.params.seuils && e.params.seuils.haut != null && e.slots && e.slots.valeur && e.slots.valeur.variable);
   for (const e of M.equipements) {
     const sl = e.slots || {}; const p = e.params || {};
-    for (const [nom, sp] of Object.entries(sl)) {
-      if (!sp || !sp.variable) continue; const v = sp.variable;
+    for (const [nom0, sp] of Object.entries(sl)) {
+      if (!sp || !sp.variable) continue; const v = sp.variable; const nom = CVC.baseSlot(nom0);
       if (['declenche', 'colmatage'].includes(nom)) set(v, 0);
       else if (nom === 'dp') set(v, 0.4);
       else if (nom === 'entree_t') set(v, 12.4);
       else if (nom === 'sortie_t') set(v, 18.7);
+      else if (nom === 'humidite') set(v, 45);
+      else if (nom === 'co2') set(v, 620);
+      else if (nom === 'pression') set(v, 1.6);
+      else if (nom === 'debit') set(v, 4200);
+      else if (nom === 'puissance') set(v, 38);
+      else if (nom === 'energie') set(v, 12840);
+      else if (nom === 'antigel') set(v, 0);
       else if (nom === 'frequence') set(v, 42);
       else if (nom === 'temperature') set(v, 54);
       else if (nom === 'sorti') set(v, 1);
@@ -155,6 +164,7 @@ const slotRelie = (sp, nom) => !!(sp && (sp.variable || (sp.derive && !deduitIgn
 // Règle d'un emplacement posée dans l'éditeur : { op: 'eq'|'ne'|'gt'|'ge'|'lt'|'le', val } → 1 / 0 pour les états ; { min, max } pour les niveaux et valeurs.
 const OPS = OPERATEURS;
 const estTor = estEmplacementEtat;
+const lireMod = (eq) => (idMod, base) => lire(eq, idMod + ':' + base);
 function lire(eq, nom, prof = 0) {
   const sp = slot(eq, nom); if (!sp || prof > 4) return undefined;
   if (sp.variable) return appliquerRegle(sp, nom, V[sp.variable]);
@@ -181,7 +191,9 @@ function niveau(eq) {            // → { frac, texte, qualitatif }
   return null;
 }
 const COMPORTEMENT_TYPE = { pompe: 'pompe', vanne: 'vanne', cuve: 'cuve', libre: 'libre' };
-function etatExtra(eq, t) {   // symboles de la passe 7 : états optionnels -> « normal » sans variable, jamais « en marche » sans retour
+function etatExtra(eq, t) {
+  if (CVC.estTypeCvc(t)) return CVC.etatGlobal(t, eq.params, lireMod(eq));
+   // symboles de la passe 7 : états optionnels -> « normal » sans variable, jamais « en marche » sans retour
   const d = lire(eq, 'defaut') === 1;
   if (t === 'vanne_man') { if (d) return 'defaut'; const o = lire(eq, 'ouvert'); return o === 1 ? 'ouvert' : o === 0 ? 'ferme' : 'ok'; }
   if (t === 'vanne_3v') { if (d) return 'defaut'; const o = lire(eq, 'ouvert'), p = lire(eq, 'position'); if (o != null) return o === 1 ? 'ouvert' : 'ferme'; if (p != null) return p > 2 ? 'ouvert' : 'ferme'; return 'inconnu'; }
@@ -227,6 +239,7 @@ function collecteAlarmes() {
   const t0 = new Date(Date.now() - 12 * 60000 - 25 * 60000);
   const hh = t0.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   for (const e of M.equipements) {
+    if (CVC.estTypeCvc(e.type)) { const lm = lireMod(e); CVC.modulesDe(e.type, e.params).forEach(({ m }) => { if (CVC.etatModule(m, lm) === 'defaut') ALARMES.push({ id: e.id, texte: CVC.texteAlarmeModule(m, e.type, lm), depuis: hh }); }); continue; }
     const st = etat(e);
     if (st === 'alarme') {
       let txt = (e.params && e.params.libelle_alarme) || e.libelle;
@@ -509,6 +522,11 @@ const TRI = (cx, cy, k, pts) => 'M' + pts.map(p => `${cx + p[0] * k} ${cy + p[1]
 function valeurSym(e, g, nom, unite, d) {
   const x = lire(e, nom); return x == null ? null : fr(x, d == null ? 1 : d) + ' ' + unite;
 }
+function symCvc(e, g, n) {   // bandeau de CTA / lignes hydrauliques : le dessin vit dans cvc-dessin.ts
+  const ctx = { lire: lireMod(e), fr, uid: e.id };
+  const r = e.type === 'cta' ? dessinerCta(s, e.params, ctx) : dessinerHydro(s, e.params, ctx);
+  return { corps: r.corps, box: r.box, nobox: false, cls: 'cvc-obj etat-' + etat(e), verif: null };
+}
 function symExtra(e, g) {
   const st = etat(e), t = e.type, cx = g.cx, cy = g.cy, k = g.f || 1, rw = g.rw, rh = g.rh, o = [];
   const fils = (demi) => { o.push(s('path', { d: `M${cx - rw - 8} ${cy} H${cx - demi} M${cx + demi} ${cy} H${cx + rw + 8}`, class: 'trait' })); };
@@ -663,6 +681,7 @@ function dessiner() {
     else if (e.type === 'silhouette') r = symSilhouette(e, g);
     else if (e.type === 'raccord') r = symRaccord(e, g);
     else if (e.type === 'image') r = symImage(e, g);
+    else if (CVC.estTypeCvc(e.type)) r = symCvc(e, g, n);
     else if (G.EXTRA[e.type]) r = symExtra(e, g);
     else r = symIsole(e, g);
     const gr = s('g', { transform: `translate(${n.x} ${n.y})`, class: 'obj ' + (r.cls || ''), 'data-eq': e.id, 'data-node': e.id });
@@ -1058,11 +1077,17 @@ Object.assign(BIBLIO, {
 /* Mesure par grandeur : une seule entrée de palette ; la grandeur préremplit l'unité et le préfixe de repère ISA (modifiables ensuite). */
 const GRANDEURS = { debit: { nom: 'Débit', unite: 'm³/h', pref: 'FIT' }, pression: { nom: 'Pression', unite: 'bar', pref: 'PIT' }, niveau: { nom: 'Niveau', unite: 'm', pref: 'LIT' },
   temperature: { nom: 'Température', unite: '°C', pref: 'TIT' }, ph: { nom: 'pH', unite: 'pH', pref: 'AIT' }, generique: { nom: 'Générique', unite: '', pref: 'IT' } };
+Object.assign(BIBLIO, {
+  cta_simple:  { nom: 'CTA simple flux',   pref: 'CTA', lib: 'Centrale de traitement d’air', type: 'cta',  slots: [], famille_pal: 'cvc',   params: CVC.GABARIT_CTA_SIMPLE() },
+  cta_double:  { nom: 'CTA double flux',   pref: 'CTA', lib: 'Centrale double flux',          type: 'cta',  slots: [], famille_pal: 'cvc',   params: CVC.GABARIT_CTA_DOUBLE() },
+  chaufferie:  { nom: 'Bloc chaufferie',   pref: 'CHF', lib: 'Chaufferie',                    type: 'hydro', slots: [], famille_pal: 'chauf', params: CVC.GABARIT_CHAUFFERIE() },
+  collecteur:  { nom: 'Collecteur 2 départs', pref: 'COL', lib: 'Collecteur',                 type: 'hydro', slots: [], famille_pal: 'chauf', params: CVC.GABARIT_COLLECTEUR() }
+});
 const SLOTS_TYPE = { pompe: ['marche', 'defaut', 'vitesse'], moteur: ['marche', 'defaut', 'vitesse'], vanne: ['ouvert', 'ferme', 'defaut'], vanne_reg: ['position', 'defaut'],
   cuve: ['niveau'], parametre: ['niveau'], mesure: ['valeur'], voyant: ['etat'], silhouette: [], raccord: [], image: ['etat'] };
 Object.values(BIBLIO).forEach(b => { if (b.famille_pal) SLOTS_TYPE[b.type] = b.slots; });
-const SLOT_TOR = ['marche', 'defaut', 'ouvert', 'ferme', 'etat', 'colmatage', 'sorti', 'rentre', 'declenche'];
-const estTorSlot = (nom) => SLOT_TOR.includes(nom) || String(nom).startsWith('s_');
+const SLOT_TOR = ['marche', 'defaut', 'ouvert', 'ferme', 'etat', 'colmatage', 'sorti', 'rentre', 'declenche', 'antigel'];
+const estTorSlot = (nom) => { const b = CVC.baseSlot(nom); return SLOT_TOR.includes(b) || String(b).startsWith('s_'); };
 const cleSymbole = (e) => e.type === 'moteur' && e.role === 'agitateur' ? 'agitateur' : e.type === 'parametre' ? 'decanteur' : e.type;
 const typeBase = (e) => e.type === 'image' ? (e.type_origine || 'voyant') : e.type;
 const estOuvrage = (e) => !!e && (e.type === 'cuve' || e.type === 'parametre');
@@ -1128,6 +1153,7 @@ function creerEquipement(cle, opt) {
   if (b.params) e.params = copie(b.params);
   if (gr) { e.grandeur = opt.grandeur || 'generique'; e.params.unite = gr.unite; e.libelle = gr.nom === 'Générique' ? 'Mesure' : 'Mesure ' + gr.nom.toLowerCase(); }
   b.slots.forEach(nom => { e.slots[nom] = slotVide(); });
+  if (CVC.estTypeCvc(e.type)) CVC.synchroniserSlots(e.type, e.params, e.slots, slotVide);
   e.rang = TYPES_PRINCIPAUX.includes(e.type) ? 'principal' : 'secondaire';
   M.equipements.push(e); EQ[id] = e; return e;
 }
@@ -1399,7 +1425,11 @@ function modifierDessin(id, d) {
   e.slots = e.slots || {}; slotsSymbole({ comportement: e.comportement || 'pompe', etats: e.etats }).forEach(nm => { if (e.comportement && !e.slots[nm]) e.slots[nm] = slotVide(); });
   remesurerFamille(id);
 }
-const libEmpl = (e, nom) => SLOT_FR[nom] || ((e && e.etats) || []).reduce((r, x) => r || (x.cle === nom ? x.nom : null), null) || nom;
+function libEmplMod(e, nom) {   // « F1:dp » → « Filtre plan · Pression différentielle »
+  const m = CVC.trouverModule(e.type, e.params, CVC.moduleDeSlot(nom)), b = CVC.baseSlot(nom);
+  return (m ? CVC.libelleModule(m, e.type) + ' · ' : '') + (CVC.SLOT_CVC_FR[b] || SLOT_FR[b] || b);
+}
+const libEmpl = (e, nom) => String(nom).includes(':') ? libEmplMod(e, nom) : SLOT_FR[nom] || ((e && e.etats) || []).reduce((r, x) => r || (x.cle === nom ? x.nom : null), null) || nom;
 
 
 /* ======================================================================
@@ -1938,7 +1968,7 @@ function feEnregistrer() {
 const esc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const sansAccent = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const panneauEl = byId('proprietes');
-const TYPE_ED = { pompe: 'Pompe', moteur: 'Moteur', vanne: 'Vanne', vanne_reg: 'Vanne de régulation', cuve: 'Cuve', parametre: 'Décanteur paramétré', mesure: 'Mesure', voyant: 'Voyant', silhouette: 'Silhouette', raccord: 'Raccord', image: 'Image' };
+const TYPE_ED = { cta: 'Centrale de traitement d’air', hydro: 'Hydraulique / chaufferie', pompe: 'Pompe', moteur: 'Moteur', vanne: 'Vanne', vanne_reg: 'Vanne de régulation', cuve: 'Cuve', parametre: 'Décanteur paramétré', mesure: 'Mesure', voyant: 'Voyant', silhouette: 'Silhouette', raccord: 'Raccord', image: 'Image' };
 Object.assign(TYPE_ED, { vanne_man: 'Vanne manuelle', vanne_3v: 'Vanne 3 voies', clapet: 'Clapet anti-retour', filtre: 'Filtre', echangeur: 'Échangeur', compresseur: 'Compresseur', ventilateur: 'Ventilateur', convoyeur: 'Convoyeur', verin: 'Vérin', disjoncteur: 'Disjoncteur', transformateur: 'Transformateur', variateur: 'Variateur' });
 const OPS_FR = { eq: '=', ne: '≠', gt: '>', ge: '≥', lt: '<', le: '≤' };
 const DEFAUT_EMPL = { marche: 'Marche', defaut: 'Défaut', vitesse: 'Vitesse', ouvert: 'Ouverte', ferme: 'Fermée', position: 'Position', niveau: 'Niveau', valeur: 'Valeur', etat: 'État' };
@@ -1961,6 +1991,52 @@ function htmlEmplacement(e, nom) {
   if (sp.variable && !tor) corps += `<div class="ed-regle">Échelle <input class="ed-in sm" data-f="regle-min" data-slot="${nom}" type="number" step="any" placeholder="min" value="${rg.min != null ? rg.min : ''}"> à <input class="ed-in sm" data-f="regle-max" data-slot="${nom}" type="number" step="any" placeholder="max" value="${rg.max != null ? rg.max : ''}"></div>`;
   return `<div class="ed-slot" data-slot-ligne="${nom}"><div class="ed-slot-h"><b>${esc(libEmpl(e, nom))}</b>${ver ? '<span class="ed-pastille" title="À vérifier"></span>' : ''}${sp.variable || sp.derive || sp.derive_tor ? '' : '<span class="ed-vide">vide</span>'}${ver ? bouton('valider-slot', 'Valider', 'xs', `data-slot="${nom}"`) : ''}</div>${corps}</div>`;
 }
+/* Panneau « Modules » d'un bandeau CVC : ajout, suppression, ordre, libellé ; les emplacements suivent les modules. */
+function htmlModulesCvc(e) {
+  const type = e.type, defs = CVC.defsDe(type), places = CVC.modulesDe(type, e.params), double = type === 'cta' && (e.params.flux || 'simple') === 'double';
+  let h = '</section><section class="ed-sec"><h4>Modules <span class="mono">' + places.length + '</span></h4>';
+  if (type === 'cta') h += champ('Type de CTA', `<select class="ed-in" data-f="cvc-flux">${[['simple', 'Simple flux (un étage)'], ['double', 'Double flux (deux étages)']].map(([v, tx]) => `<option value="${v}" ${(e.params.flux || 'simple') === v ? 'selected' : ''}>${tx}</option>`).join('')}</select>`, 'Les modules posés sur un étage masqué reviennent en changeant de type.');
+  places.forEach(({ m, etage, rangee, libelleRangee }, i) => {
+    const d = defs[m.k] || {};
+    h += `<div class="ed-module" data-mod-ligne="${esc(m.id)}"><div class="ed-module-h"><b>${esc(m.id)}</b><span>${esc(d.nom || m.k)}${etage === 'haut' ? ' · extraction' : etage === 'bas' && double ? ' · soufflage' : ''}${libelleRangee ? ' · ' + esc(libelleRangee) : ''}</span>`
+      + `<span class="ed-module-b">${bouton('cvc-gauche', '◀', 'xs', `data-mod="${esc(m.id)}" aria-label="Déplacer ${esc(m.id)} vers la gauche"`)}${bouton('cvc-droite', '▶', 'xs', `data-mod="${esc(m.id)}" aria-label="Déplacer ${esc(m.id)} vers la droite"`)}${bouton('cvc-del', '✕', 'xs danger', `data-mod="${esc(m.id)}" aria-label="Retirer ${esc(m.id)}"`)}</span></div>`
+      + input('cvc-lib', m.libelle || '', 'text', `data-mod="${esc(m.id)}" placeholder="${esc(d.court || d.nom || '')}" aria-label="Libellé de ${esc(m.id)}"`)
+      + (d.ligne ? `<select class="ed-in sm" data-f="cvc-ligne" data-mod="${esc(m.id)}" aria-label="Ligne de ${esc(m.id)}"><option value="aller" ${m.ligne !== 'retour' ? 'selected' : ''}>sur l’aller</option><option value="retour" ${m.ligne === 'retour' ? 'selected' : ''}>sur le retour</option></select>` : '')
+      + (d.largeurLibre ? `<select class="ed-in sm" data-f="cvc-w" data-mod="${esc(m.id)}" aria-label="Largeur de ${esc(m.id)}"><option value="60" ${m.w !== 120 ? 'selected' : ''}>courte (60)</option><option value="120" ${m.w === 120 ? 'selected' : ''}>longue (120)</option></select>` : '')
+      + '</div>';
+  });
+  const groupes = type === 'cta' ? [['Air et sondes', ['air_neuf', 'reprise', 'soufflage', 'rejet', 'sonde', 'gaine']], ['Traitement', ['registre', 'filtre_plan', 'filtre_poches', 'batterie_chaude', 'batterie_froide', 'batterie_elec', 'humidificateur', 'piege_son']], ['Mouvement et récupération', ['ventilateur', 'recup_plaques', 'recup_roue', 'caisson_melange']]]
+    : [['Production', ['chaudiere', 'pac', 'echangeur', 'bouteille', 'ballon_ecs']], ['Circulation', ['pompe', 'vanne_2v', 'vanne_3v', 'isolement', 'clapet', 'pot_boue', 'filtre']], ['Mesure et réseau', ['compteur', 'sonde_t', 'vase', 'depart', 'arrivee', 'tuyau']]];
+  h += `<label class="ed-champ"><span>Ajouter un module</span><select class="ed-in" data-f="cvc-nouveau"><option value="">— choisir —</option>${groupes.map(([g, ks]) => `<optgroup label="${g}">${ks.map(k => `<option value="${k}">${esc(defs[k].nom)}</option>`).join('')}</optgroup>`).join('')}</select></label>`;
+  if (double) h += champ('Étage du nouveau module', `<select class="ed-in" data-f="cvc-etage"><option value="bas" ${ED.cvcEtage !== 'haut' ? 'selected' : ''}>Soufflage (bas)</option><option value="haut" ${ED.cvcEtage === 'haut' ? 'selected' : ''}>Extraction (haut)</option></select>`);
+  if (type === 'hydro') {
+    const n = (e.params.rangees || []).length;
+    h += champ('Départ du nouveau module', `<select class="ed-in" data-f="cvc-rangee">${(e.params.rangees || []).map((r, i) => `<option value="${i}" ${+ED.cvcRangee === i ? 'selected' : ''}>${esc(r.libelle || r.id || 'Départ ' + (i + 1))}</option>`).join('')}</select>`)
+      + `<div class="ed-btns">${bouton('cvc-add-rangee', '+ Départ')}${n > 1 ? bouton('cvc-del-rangee', '− Dernier départ') : ''}</div>`;
+  }
+  return h;
+}
+function majModulesCvc(id) { const e = EQ[id]; CVC.synchroniserSlots(e.type, e.params, e.slots, slotVide); remesurerFamille(id); }
+function actionCvc(id, act, mod) {
+  const e = EQ[id], p = e.params;
+  if (act === 'cvc-gauche' || act === 'cvc-droite') { const d = act === 'cvc-gauche' ? -1 : 1; if (e.type === 'cta') CVC.deplacerModuleCta(p, mod, d); else CVC.deplacerModuleHydro(p, mod, d); }
+  else if (act === 'cvc-del') { if (e.type === 'cta') CVC.supprimerModuleCta(p, mod); else CVC.supprimerModuleHydro(p, mod); }
+  else if (act === 'cvc-add-rangee') { CVC.ajouterRangeeHydro(p); ED.cvcRangee = p.rangees.length - 1; }
+  else if (act === 'cvc-del-rangee') CVC.supprimerRangeeHydro(p, p.rangees.length - 1);
+  majModulesCvc(id);
+}
+function champCvc(id, f, v, mod) {
+  const e = EQ[id], p = e.params;
+  if (f === 'cvc-flux') p.flux = v === 'double' ? 'double' : 'simple';
+  else if (f === 'cvc-etage') ED.cvcEtage = v;
+  else if (f === 'cvc-rangee') ED.cvcRangee = +v || 0;
+  else if (f === 'cvc-nouveau') { if (!v) return; if (e.type === 'cta') CVC.ajouterModuleCta(p, v, ED.cvcEtage === 'haut' ? 'haut' : 'bas'); else CVC.ajouterModuleHydro(p, v, +ED.cvcRangee || 0); }
+  else { const m = CVC.trouverModule(e.type, p, mod); if (!m) return;
+    if (f === 'cvc-lib') { if (v.trim()) m.libelle = v.trim(); else delete m.libelle; }
+    else if (f === 'cvc-ligne') m.ligne = v === 'retour' ? 'retour' : 'aller';
+    else if (f === 'cvc-w') m.w = +v === 120 ? 120 : 60; }
+  majModulesCvc(id);
+}
 function htmlEquipement(k) {
   const id = k.slice(3), e = EQ[id], n = leNoeud(id), t = typeBase(e), p = e.params || {};
   const ver = aVerifier(e);
@@ -1970,6 +2046,7 @@ function htmlEquipement(k) {
   if (n && !e.carte && !estOuvrage(e) || n && estOuvrage(e)) h += champ('Taille', `<select class="ed-in" data-f="taille">${Object.entries(TAILLES_FR).map(([v, t]) => `<option value="${v}" ${tailleDe(e) === v ? 'selected' : ''}>${t}</option>`).join('')}</select>`, estOuvrage(e) ? 'Applique la taille tout de suite ; les poignées affinent le corps.' : 'S’applique tout de suite au dessin et aux conduites.');
   if (n && peutEtreCarte(e) || e.carte) h += `<label class="ed-champ ed-case"><input type="checkbox" data-f="en-carte" ${e.carte ? 'checked' : ''}> <span>Afficher en carte</span><small>Carte reliée en pointillé à l’ouvrage, comme les réactifs.</small></label>`;
   if (e.type === 'mesure') h += champ('Grandeur', `<select class="ed-in" data-f="grandeur">${Object.entries(GRANDEURS).map(([v, g]) => `<option value="${v}" ${e.grandeur === v ? 'selected' : ''}>${g.nom}</option>`).join('')}${e.grandeur && !GRANDEURS[e.grandeur] ? `<option selected>${esc(e.grandeur)}</option>` : ''}</select>`, 'Préremplit l’unité (modifiable).');
+  if (CVC.estTypeCvc(e.type)) h += htmlModulesCvc(e);
   if (e.type === 'parametre') h += champ('Nombre de trémies', input('tremies', p.tremies || 4, 'number', 'min="1" max="8"')) + champ('Lamelles', input('lamelles', p.lamelles || 0, 'number', 'min="0" max="60"'));
   if (estOuvrage(e)) h += champ('Niveau maximal', input('niveau_max', p.niveau_max != null ? p.niveau_max : '', 'number', 'step="any" placeholder="100"')) + champ('Unité du niveau', input('unite_niveau', p.unite_niveau || '', 'text', 'placeholder="%"'));
   if (e.type === 'mesure') h += champ('Unité', input('unite', p.unite || '')) + `<div class="ed-2">${champ('Min', input('min', p.min != null ? p.min : 0, 'number', 'step="any"'))}${champ('Max', input('max', p.max != null ? p.max : 100, 'number', 'step="any"'))}</div>`
@@ -2064,6 +2141,7 @@ function appliquerChamp(el) {
     if (f === 'variante') return valider(() => { if (v) e.variante = v; else delete e.variante; remesurerFamille(id); });
     if (f === 'symbole' && v) return valider(() => remplacerSymbole(id, v));
     if (f === 'comportement') return valider(() => comportementImage(id, v));
+    if (f && f.startsWith('cvc-') && CVC.estTypeCvc(e.type)) return valider(() => champCvc(id, f, v, el.dataset.mod));
     const nom = el.dataset.slot;
     if (f && f.startsWith('regle-')) return valider(() => {
       const sp = e.slots[nom], rg = Object.assign({}, sp.regle || {});
@@ -2089,6 +2167,7 @@ panneauEl.addEventListener('click', ev => {
   else if (act === 'valider-eq') valider(() => validerEquipement(id, true));
   else if (act === 'valider-slot') valider(() => validerEmplacement(id, b.dataset.slot));
   else if (act === 'ajout-slot') valider(() => ajouterEmplacement(id, b.dataset.slot));
+  else if (act.startsWith('cvc-')) valider(() => actionCvc(id, act, b.dataset.mod));
   else if (act === 'choisir') ouvrirSelecteur(id, b.dataset.slot, b);
   else if (act === 'couleur') valider(() => colorerAretes(ED.sel.filter(c => c.startsWith('ar:')).map(c => c.slice(3)), b.dataset.c || null));
   else if (act === 'modifier-dessin') ouvrirEditeurFormes({ equipement: id });
@@ -2157,6 +2236,8 @@ const ICONES = {   // pictogrammes de la palette (même trait que les symboles :
   texte: '<path d="M5 6h14M12 6v13M9 19h6"/>', zone: '<rect x="3" y="4" width="18" height="16" rx="3" stroke-dasharray="3 3"/>', image: '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M4 18l5-5 4 4 3-3 4 4"/>'
 };
 Object.assign(ICONES, {
+  cta_simple: '<rect x="2" y="8" width="20" height="8" rx="1.5"/><path d="M8 8v8M14 8v8M18 12h-3"/>', cta_double: '<rect x="2" y="3" width="20" height="7" rx="1.5"/><rect x="2" y="14" width="20" height="7" rx="1.5"/><path d="M9 3l6 18M15 3L9 21"/>',
+  chaufferie: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M12 8c2 3 4 4 4 7a4 4 0 01-8 0c0-2 1-3 2-4 1 1 1 1 2-3z"/>', collecteur: '<path d="M5 3v18M9 3v18M9 8h12M9 16h12"/><circle cx="5" cy="8" r="1.2"/><circle cx="5" cy="16" r="1.2"/>',
   vanne_man: '<path d="M4 9l8 6-8 6zM20 9l-8 6 8 6z"/><path d="M12 15V6M8 6h8"/>', vanne_3v: '<path d="M3 7l8 5-8 5zM21 7l-8 5 8 5z"/><path d="M12 12l-4 8h8z"/>',
   clapet: '<circle cx="12" cy="12" r="8"/><path d="M9 8l6 4-6 4zM17 7v10"/>', filtre: '<rect x="6" y="3" width="12" height="18" rx="3"/><path d="M6 17L18 7M6 12l8-6M10 21l8-6"/>',
   echangeur: '<rect x="2" y="6" width="20" height="12" rx="5"/><path d="M5 14l3-4 3 4 3-4 3 4"/>', compresseur: '<circle cx="12" cy="12" r="8"/><path d="M6 8l12 4M6 16l12-4"/>',
@@ -2168,6 +2249,8 @@ Object.assign(ICONES, {
 });
 const FAMILLES_PALETTE = [
   ['proc', 'Procédé', ['cuve', 'decanteur', 'silo', 'bassin', 'pompe', 'compresseur', 'ventilateur', 'vanne', 'vanne_reg', 'vanne_man', 'vanne_3v', 'clapet', 'filtre', 'echangeur']],
+  ['cvc', 'CVC (traitement d’air)', ['cta_simple', 'cta_double']],
+  ['chauf', 'Chaufferie', ['chaufferie', 'collecteur']],
   ['mach', 'Machine', ['moteur', 'agitateur', 'convoyeur', 'verin']],
   ['elec', 'Électrique', ['disjoncteur', 'transformateur', 'variateur']],
   ['gen', 'Génériques', ['mesure', 'voyant', 'carte', 'texte', 'zone', 'image']]
