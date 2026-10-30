@@ -20,6 +20,7 @@ import {
   STAT_LABEL,
   STATUS_FIELDS,
   THRESHOLD_COLORS,
+  DEFAULT_SIZE,
   WIDGET_LABEL,
   isAlarmWidget,
   type Op,
@@ -28,6 +29,7 @@ import {
   type WidgetType,
   type WidgetWidth,
 } from '@/composables/useDashboards'
+import { LEGACY_COLS, setSize, widgetCols } from '@/lib/dashboardGrid'
 
 import SynopticWidgetOptions from '@/components/synoptic/SynopticWidgetOptions.vue'
 
@@ -59,6 +61,15 @@ async function pickImage(ev: Event, set: (url: string) => void) {
   }
 }
 const WIDTHS: WidgetWidth[] = ['1/4', '1/3', '1/2', '2/3', 'full']
+/** élargit la tuile à `cols` colonnes si elle est plus étroite (types qui ont besoin de place) */
+function widenTo(cols: number) {
+  if (widgetCols(w.value) < cols) setSize(w.value, { w: cols })
+}
+/** taille par défaut propre au type (ex. synoptique grand), si le type en déclare une */
+function applyDefaultSize(t: WidgetType) {
+  const size = DEFAULT_SIZE[t]
+  if (size) setSize(w.value, size)
+}
 const needsVars = computed(
   () =>
     !['status', 'image', 'text', 'map', 'document', 'interventions', 'weather', 'synoptic'].includes(
@@ -98,6 +109,7 @@ const units = computed(() => [
 ])
 
 function setType(t: WidgetType) {
+  if (t !== w.value.type) applyDefaultSize(t)
   w.value.type = t
   if (t === 'indicator') {
     initStates()
@@ -105,7 +117,7 @@ function setType(t: WidgetType) {
   }
   if (t === 'map') {
     w.value.op = null
-    if (w.value.width === '1/4' || w.value.width === '1/3') w.value.width = '1/2'
+    widenTo(6)
     w.value.sources = props.devices.map((d) => ({ device: d.id, var: '' }))
     initStates()
   } else if (isAlarmWidget(t)) {
@@ -114,8 +126,7 @@ function setType(t: WidgetType) {
       w.value.sources = props.devices.map((d) => ({ device: d.id, var: '' }))
     w.value.options.severities ??= ['error', 'warning']
     w.value.options.compare ??= null
-    if (w.value.width === '1/4' || w.value.width === '1/3')
-      w.value.width = t === 'alarm_history' ? 'full' : '1/2'
+    widenTo(t === 'alarm_history' ? 12 : 6)
   } else if (t === 'interventions') {
     w.value.op = null
     if (!w.value.sources.length || w.value.sources.some((s) => s.var))
@@ -124,7 +135,7 @@ function setType(t: WidgetType) {
     w.value.options.openOnly ??= true
     w.value.options.photos ??= true
     w.value.options.limit ??= 5
-    if (w.value.width === '1/4' || w.value.width === '1/3') w.value.width = '1/2'
+    widenTo(6)
   } else if (t === 'weather') {
     w.value.op = null
     if (!w.value.sources.length || w.value.sources.some((s) => s.var))
@@ -141,7 +152,7 @@ function setType(t: WidgetType) {
   } else if (['image', 'text'].includes(t)) w.value.sources = []
   else if (t === 'document') {
     w.value.sources = []
-    if (w.value.width === '1/4' || w.value.width === '1/3') w.value.width = '1/2'
+    widenTo(6)
     w.value.options.docs ??= []
     void loadDocs()
   } else w.value.sources = w.value.sources.filter((s) => s.var)
@@ -284,7 +295,7 @@ function save() {
         </label>
         <div>
           <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
-            >Largeur (grand écran)</span
+            >Largeur (grand écran) · {{ widgetCols(w) }}/12<span class="normal-case tracking-normal"> — taille libre : poignée en bas à droite de la tuile</span></span
           >
           <div class="mt-1 flex gap-1">
             <button
@@ -292,9 +303,11 @@ function save() {
               :key="x"
               :class="[
                 'flex-1 text-xs py-1.5 rounded border font-mono',
-                w.width === x ? 'border-signal text-signal' : 'border-border text-muted-foreground',
+                widgetCols(w) === LEGACY_COLS[x]
+                  ? 'border-signal text-signal'
+                  : 'border-border text-muted-foreground',
               ]"
-              @click="w.width = x"
+              @click="setSize(w, { w: LEGACY_COLS[x] })"
             >
               {{ x === 'full' ? 'pleine' : x }}
             </button>
