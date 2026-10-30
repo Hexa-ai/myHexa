@@ -647,8 +647,14 @@ export interface Gap {
   missing_ms: number
 }
 /** Les journaliers reçus couvrent-ils [from, to) ? Seules les box qui ont envoyé un journalier ces 7 derniers
- *  jours sont attendues (une box qui n'en envoie pas ne bloque pas). `pending` = jours encore à verser dans l'historique. */
-export async function coverage(devIds: string[], from: number, to: number, now = Date.now()) {
+ *  jours sont attendues (une box qui n'en envoie pas ne bloque pas). `pending` = jours DE LA PÉRIODE encore à verser
+ *  dans l'historique (le jour courant, toujours en cours de remplissage, ne doit pas retarder le rapport de la veille). */
+export function periodDays(from: number, to: number, tz = 'Europe/Paris'): [string, string] {
+  const f = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
+  return [f.format(new Date(from)), f.format(new Date(Math.max(from, to - 1)))]
+}
+
+export async function coverage(devIds: string[], from: number, to: number, now = Date.now(), tz = 'Europe/Paris') {
   if (!devIds.length) return { gaps: [] as Gap[], pending: 0 }
   const stop = Math.min(to, now)
   const { data: reps, error } = await admin
@@ -680,7 +686,13 @@ export async function coverage(devIds: string[], from: number, to: number, now =
     if (cur < stop) missing += stop - cur
     if (missing > 5 * 60e3) gaps.push({ device: d, name: names?.find((x) => x.id === d)?.name ?? d, missing_ms: missing })
   }
-  const { count } = await admin.from('ts_dirty').select('device_id', { count: 'exact', head: true }).in('device_id', [...active])
+  const [d0, d1] = periodDays(from, Math.min(to, now), tz)
+  const { count } = await admin
+    .from('ts_dirty')
+    .select('device_id', { count: 'exact', head: true })
+    .in('device_id', [...active])
+    .gte('day', d0)
+    .lte('day', d1)
   return { gaps, pending: count ?? 0 }
 }
 
@@ -689,7 +701,7 @@ async function buildReport(dash: any, freq: string, tz: string, from: number, to
   const logo = await loadLogo(company?.logo_path)
   const { ws, devIds, scopeName: sn } = await dashScope(dash)
   let scopeName = sn
-  const cov = await coverage(devIds, from, to)
+  const cov = await coverage(devIds, from, to, Date.now(), tz)
   const { data: devRows, error: de } = await admin.from('devices').select('id, name, last_connection_at, latitude').in('id', devIds)
   if (de) throw new Error(de.message)
   const devs = await Promise.all(
@@ -914,7 +926,7 @@ Deno.serve(async (req) => {
       const at = tpl.next_run_at as string
       const [pf, pt] = await periodFor(tpl.frequency, tpl.tz, at)
       const { data: dash } = await admin.from('dashboards').select('*').eq('id', tpl.dashboard_id).single()
-      const cov = dash ? await coverage((await dashScope(dash)).devIds, pf, pt) : { gaps: [], pending: 0 }
+      const cov = dash ? await coverage((await dashScope(dash)).devIds, pf, pt, Date.now(), tpl.tz || 'Europe/Paris') : { gaps: [], pending: 0 }
       const late = Date.now() - Date.parse(at)
       if ((cov.gaps.length || cov.pending) && late < WAIT_MS) {
         out.push({ template: tpl.id, waiting: cov.gaps.map((g) => g.name), pending: cov.pending, late_min: Math.round(late / 60e3) })
