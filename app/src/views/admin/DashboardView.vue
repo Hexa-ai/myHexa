@@ -275,6 +275,18 @@ const liveIds = computed(() => {
   return [...s].sort()
 })
 const liveKey = computed(() => liveIds.value.join(','))
+/** variables affichées par box : seules celles-ci voyagent en direct (data 4G) */
+const liveVars = computed(() => {
+  const m: Record<string, string[]> = {}
+  for (const id of liveIds.value) m[id] = []
+  for (const w of widgets.value) for (const src of w.sources) if (src.device && src.var) (m[src.device] ??= []).push(src.var)
+  return m
+})
+watch(
+  () => JSON.stringify(liveVars.value),
+  () => live.setWanted(liveVars.value),
+  { immediate: true },
+)
 let releaseLive: (() => void) | null = null
 watch(
   liveKey,

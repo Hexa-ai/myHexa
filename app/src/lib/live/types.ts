@@ -10,6 +10,10 @@ export interface ViewerMeta {
   mode: LiveRate
   /** horodatage de l'annonce : un « Continuer » ré-annonce la présence (méta modifiée), la box relance son délai de 15 min */
   since: number
+  /** format « valeurs » compris par ce portail (2 = compact) ; la box n'utilise v2 que si TOUS les spectateurs l'annoncent */
+  fmt?: number
+  /** variables affichées sur cette box : la box ne publie que l'union de celles des spectateurs (absent = toutes) */
+  vars?: string[]
 }
 
 export type LiveValue = number | string | boolean | null
