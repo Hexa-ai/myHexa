@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Éditeur de synoptique en plein cadre (toute la zone de contenu de l'application, menu latéral conservé).
 // Enregistrer = nouvelle version ; « Retour » revient au tableau d'où l'on vient (query `retour`).
-import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useDevices } from '@/composables/useDevices'
 import { useSynoptic, useSynopticLive } from '@/composables/useSynoptic'
@@ -11,12 +11,15 @@ import SynopticCanvas from '@/components/synoptic/SynopticCanvas.vue'
 import SynopticFrame from '@/components/synoptic/SynopticFrame.vue'
 import SynopticBar from '@/components/synoptic/SynopticBar.vue'
 import SynopticSpotlight from '@/components/synoptic/SynopticSpotlight.vue'
-import { entrees2d, entreesIso } from '@/lib/synoptic/catalogue-symboles'
+import SynopticExplorateur from '@/components/synoptic/SynopticExplorateur.vue'
+import { entrees2d, entreesBibliotheques, entreesIso } from '@/lib/synoptic/catalogue-symboles'
+import { lireBibliotheques, type Bibliotheque } from '@/lib/synoptic/bibliotheque'
 import { catalogue as catalogueIso } from '@/lib/synoptic/iso/lib'
 import type { Entree } from '@/lib/synoptic/recherche'
 import SynopticResumeEditor from '@/components/synoptic/SynopticResumeEditor.vue'
 import type { ResumeConfig } from '@/lib/synoptic/engine/types'
 import { isoVide, normaliserIso, variablesIso, vueInitiale, type IsoSection, type VueSynoptique } from '@/lib/synoptic/iso/format'
+import { EVT_EXPLORATEUR } from '@/lib/synoptic/explorateur'
 import { valeursDuStatut } from '@/lib/synoptic/variables'
 
 // l'éditeur isométrique (et la bibliothèque de dessin) ne se charge que si on ouvre la vue Iso
@@ -58,6 +61,7 @@ const isoComp = ref<{
   lierVariableSelection(v: string): boolean
 } | null>(null)
 const spotlight = ref<InstanceType<typeof SynopticSpotlight> | null>(null)
+const explorateur = ref<InstanceType<typeof SynopticExplorateur> | null>(null)
 // ── vue isométrique : la section `iso` du document est tenue ici (le moteur 2D ne la connaît pas) et fusionnée à l'enregistrement
 const vueEdition = ref<VueSynoptique>('2d')
 const iso = ref<IsoSection>(isoVide())
@@ -150,7 +154,30 @@ onBeforeRouteLeave(() => {
 })
 
 // ── recherche Spotlight (Ctrl+K) : symboles 2D / iso, éléments du synoptique courant, variables de la box
-const symbolesRecherche = computed<Entree[]>(() => [...entreesIso(catalogueIso()), ...entrees2d()])
+// bibliothèques importées (stockage local) : leurs symboles se trouvent, se prévisualisent et se posent comme les autres
+const typeIsoConnu = (base: string): boolean => catalogueIso().some((d) => d.id === base)
+const bibliotheques = ref<Bibliotheque[]>(lireBibliotheques(typeIsoConnu))
+const symbolesRecherche = computed<Entree[]>(() => [...entreesIso(catalogueIso()), ...entrees2d(), ...entreesBibliotheques(bibliotheques.value)])
+/** explorateur de la bibliothèque (Ctrl+Maj+K, « Tout voir… » du Spotlight, bouton « Bibliothèque » des palettes) */
+function ouvrirExplorateur() {
+  spotlight.value?.fermer()
+  explorateur.value?.ouvrir()
+}
+function toucheExplorateur(ev: KeyboardEvent) {
+  if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && ev.key.toLowerCase() === 'k') {
+    ev.preventDefault()
+    if (explorateur.value?.ouvert) explorateur.value.fermer()
+    else ouvrirExplorateur()
+  }
+}
+onMounted(() => {
+  window.addEventListener('keydown', toucheExplorateur)
+  window.addEventListener(EVT_EXPLORATEUR, ouvrirExplorateur)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', toucheExplorateur)
+  window.removeEventListener(EVT_EXPLORATEUR, ouvrirExplorateur)
+})
 const elementsRecherche = computed(() =>
   vueEdition.value === 'iso' ? (isoComp.value?.elements() ?? iso.value.composants.map((c) => ({ id: c.id, nom: c.libelle || c.tag || c.id, type: c.type }))) : (canvas.value?.instance?.elements?.() ?? []),
 )
@@ -265,7 +292,9 @@ defineExpose({ recharger })
           editing
           full-frame
           @change="iso = $event"
+          :symboles="symbolesRecherche"
           @recherche="spotlight?.ouvrir()"
+          @explorateur="ouvrirExplorateur"
           @save="enregistrer()"
         />
         <SynopticCanvas
@@ -294,6 +323,17 @@ defineExpose({ recharger })
       @symbole="rechercheSymbole"
       @element="rechercheElement"
       @variable="rechercheVariable"
+      @explorateur="ouvrirExplorateur"
+    />
+    <SynopticExplorateur
+      v-if="doc"
+      ref="explorateur"
+      :contexte="vueEdition"
+      :symboles="symbolesRecherche"
+      :bibliotheques="bibliotheques"
+      :icone2d="(c: string) => canvas?.instance?.icone?.(c) ?? ''"
+      @poser="rechercheSymbole"
+      @bibliotheques="bibliotheques = $event"
     />
   </div>
 </template>

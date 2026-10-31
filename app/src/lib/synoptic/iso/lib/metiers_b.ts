@@ -7,6 +7,8 @@ import { Builder } from './iso'
 import type { Params } from './types'
 import { PL5, PL2, VAR_COULEUR, teinte, ancres, conteneur, voiture, r2, l2, p2, c2 } from './metiers_commun'
 
+/** décale un dessin de face dans le plan (x, z) pour le poser sur une boîte qui ne part pas de l'origine */
+const plan = (x0: number, z0: number, svg: string): string => `<g transform="translate(${x0} ${z0})">${svg}</g>`
 const centre = (b: Builder, W: number, D: number, h: number) => b.anchor('badge', [W / 2, D / 2, h])
 
 // ───────────────────────────── Informatique et réseau (échelle agrandie pour rester lisible sur un plan)
@@ -29,14 +31,15 @@ it('reseau.serveur_tour', 'Serveur tour', [12, 22, 30], (b) => {
   b.pl('xz', 22.05, r2(1.5, 20, 9, 3, 'fm', 0.4) + r2(1.5, 3, 9, 14, 'fk', 0.4), c)
   b.led([6, 22, 26], c, 1.6)
 })
-it('reseau.pc_bureau', 'PC de bureau (unité centrale et écran)', [40, 22, 26], (b) => {
+it('reseau.pc_bureau', 'PC de bureau (unité centrale et écran)', [50, 22, 26], (b) => {
+  // la tour à gauche, l'écran nettement à droite sur son pied : rien ne se superpose à l'écran
   const u = b.box(0, 4, 0, 10, 16, 22, 'md'); b.led([5, 20, 18], u, 1.5)
-  b.box(18, 8, 0, 14, 8, 2, 'mm'); b.box(23, 11, 2, 4, 2, 6, 'mm')
-  const e = b.box(14, 8, 8, 26, 2.5, 16, 'md'); b.pl('xz', 10.55, r2(1.5, 1.5, 23, 13, 'fk', 0.6), e)
+  b.box(26, 8, 0, 14, 8, 2, 'mm'); b.box(31, 11, 2, 4, 2, 6, 'mm')
+  const e = b.box(22, 8, 8, 26, 2.5, 16, 'md'); b.pl('xz', 10.55, plan(22, 8, r2(1.5, 1.5, 23, 13, 'fk', 0.6)), e)
 })
 it('reseau.ecran', 'Écran (moniteur)', [28, 12, 22], (b) => {
   b.box(8, 4, 0, 12, 6, 2, 'mm'); b.box(12, 6, 2, 4, 2, 6, 'mm')
-  const e = b.box(0, 5, 8, 28, 2.5, 14, 'md'); b.pl('xz', 7.55, r2(1.5, 1.5, 25, 11, 'fk', 0.6), e)
+  const e = b.box(0, 5, 8, 28, 2.5, 14, 'md'); b.pl('xz', 7.55, plan(0, 8, r2(1.5, 1.5, 25, 11, 'fk', 0.6)), e)
 })
 it('reseau.tv_murale', 'TV / écran mural', [50, 6, 32], (b) => {
   const e = b.box(0, 0, 0, 50, 3, 29, 'md'); b.pl('xz', 3.05, r2(2, 2, 46, 25, 'fk', 0.6) + l2(6, 24, 22, 8, 'ed2'), e)
@@ -44,13 +47,13 @@ it('reseau.tv_murale', 'TV / écran mural', [50, 6, 32], (b) => {
 })
 it('reseau.pc_portable', 'PC portable', [26, 18, 20], (b) => {
   b.box(0, 0, 0, 26, 18, 2, 'mm')
-  const e = b.box(0, 0, 2, 26, 1.6, 16, 'md'); b.pl('xz', 1.65, r2(1.5, 1.5, 23, 13, 'fk', 0.6), e)
+  const e = b.box(0, 0, 2, 26, 1.6, 16, 'md'); b.pl('xz', 1.65, plan(0, 2, r2(1.5, 1.5, 23, 13, 'fk', 0.6)), e)
 })
 it('reseau.smartphone', 'Smartphone', [10, 4, 20], (b) => {
-  b.box(0, 0, 0, 10, 4, 1.4, 'md'); const e = b.box(0.5, 1.4, 1.4, 9, 1.2, 16, 'md'); b.pl('xz', 2.65, r2(1, 1.5, 7, 12, 'fk', 0.8), e)
+  b.box(0, 0, 0, 10, 4, 1.4, 'md'); const e = b.box(0.5, 1.4, 1.4, 9, 1.2, 16, 'md'); b.pl('xz', 2.65, plan(0.5, 1.4, r2(1, 1.5, 7, 12, 'fk', 0.8)), e)
 })
 it('reseau.tablette', 'Tablette', [22, 6, 17], (b) => {
-  b.box(0, 0, 0, 22, 4, 1.4, 'md'); const e = b.box(1, 1.4, 1.4, 20, 1.4, 14, 'md'); b.pl('xz', 2.85, r2(1.2, 1.2, 17.6, 11.6, 'fk', 0.8), e)
+  b.box(0, 0, 0, 22, 4, 1.4, 'md'); const e = b.box(1, 1.4, 1.4, 20, 1.4, 14, 'md'); b.pl('xz', 2.85, plan(1, 1.4, r2(1.2, 1.2, 17.6, 11.6, 'fk', 0.8)), e)
 })
 it('reseau.routeur', 'Routeur', [24, 14, 22], (b) => {
   const c = b.box(0, 0, 0, 24, 14, 5, 'mc'); b.led([4, 14, 2.5], c, 1.3); b.led([8, 14, 2.5], c, 1.3)
@@ -203,7 +206,7 @@ ix('exterieur.quai_chargement', 'Quai de chargement (portes, rampe)', [64, 30, 4
   const m = b.box(0, 0, 7, 64, 3, 30, 'mm')
   const nb = Math.max(1, Math.round(p.portes ?? 3)); let s = ''
   for (let i = 0; i < nb; i++) s += r2((64 / nb) * (i + 0.5) - 8, 0, 16, 20, 'fk', 0.6)
-  b.pl('xz', 3.05, s, m); b.box(-1.5, -2, 36, 67, 8, 2, 'md')
+  b.pl('xz', 3.05, plan(0, 7, s), m); b.box(-1.5, -2, 36, 67, 8, 2, 'md')
 }, { portes: 3 }, [])
 
 // ───────────────────────────── Eau

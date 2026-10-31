@@ -10,9 +10,12 @@ import { docLib, objetsIso, type IsoSection } from '@/lib/synoptic/iso/format'
 import { estAccessoireIso, familleIso } from '@/lib/synoptic/iso/familles'
 import { lireEtat, estLie } from '@/lib/synoptic/iso/etats'
 import {
-  abscisseCurviligne, ajouterAccessoire, deplacerComposant, poserComposant, reglerPlan, relierPorts, supprimerObjet, tourner,
+  abscisseCurviligne, ajouterAccessoire, deplacerComposant, poserComposant, poserComposition, reglerPlan, relierPorts, supprimerObjet, tourner,
 } from '@/lib/synoptic/iso/edition'
 import { PAS_AIMANT, auSol, boiteSol, deplacementSol, grilleSvg, projeter, solEffectif } from '@/lib/synoptic/iso/grille'
+import { estSymboleBibliotheque, lireBibliotheques, trouverSymbole } from '@/lib/synoptic/bibliotheque'
+import { cleEntree, type Entree } from '@/lib/synoptic/recherche'
+import { EVT_PREFERENCES, lireFavoris, lireRecents, noterRecent } from '@/lib/synoptic/recherche/preferences'
 import IsoProprietes from './IsoProprietes.vue'
 import '@/lib/synoptic/engine/synoptique.css'
 import '@/lib/synoptic/engine/adaptation.css'
@@ -31,14 +34,17 @@ const props = withDefaults(
     /** false = consultation sans geste (tuile de tablette) */
     gestes?: boolean
     mobile?: boolean
+    /** symboles connus (catalogue + bibliothèques importées) : alimente Favoris, Récents et « Ma bibliothèque » dans la palette */
+    symboles?: Entree[]
   }>(),
-  { catalogue: () => [], gestes: true },
+  { catalogue: () => [], gestes: true, symboles: () => [] },
 )
 const emit = defineEmits<{
   (e: 'change', iso: IsoSection): void
   (e: 'etat', etat: SynopticEtat): void
   (e: 'save'): void
   (e: 'recherche'): void
+  (e: 'explorateur'): void
   /** clic sur un symbole dont la carte renvoie vers un autre synoptique (lecture) */
   (e: 'naviguer', id: string): void
 }>()
@@ -368,6 +374,15 @@ function centreDe(type: string): [number, number] {
 function poserArme(type: string, e: { clientX: number; clientY: number }) {
   const [sx, sy] = svgPt(e)
   const [x, y] = auSol(sx, sy, 0)
+  if (estSymboleBibliotheque(type)) {
+    const sym = trouverSymbole(lireBibliotheques(typeIsoConnu), type)
+    if (!sym) { info.value = 'Symbole de bibliothèque introuvable'; return }
+    const ids = poserComposition(travail.value, sym, x, y, { aimant: aimant.value, centre: centreDe })
+    sel.value = { k: 'c', id: ids[0] }
+    info.value = `Posé : ${sym.nom} (${ids.length} élément${ids.length > 1 ? 's' : ''})`
+    valider()
+    return
+  }
   const id = poserComposant(travail.value, type, x, y, { aimant: aimant.value, centre: centreDe(type) })
   sel.value = { k: 'c', id }
   info.value = `Posé : ${id}`
@@ -456,6 +471,7 @@ function planSel(p: 'avant' | 'arriere') {
 }
 function armer(type: string) {
   arme.value = arme.value === type ? null : type
+  if (arme.value) noterRecent(entreeCle(type))
   mode.value = 'sel'
   attente.value = null
   info.value = arme.value ? (estAccessoireIso(type) ? 'Cliquez sur un tuyau' : 'Cliquez sur la grille pour poser') : ''
@@ -464,6 +480,8 @@ function armer(type: string) {
 
 function touche(e: KeyboardEvent) {
   const t = e.target as HTMLElement | null
+  // un dialogue modal (explorateur) a le clavier pour lui
+  if (t?.closest?.('[aria-modal="true"]')) return
   const saisie = !!t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)
   // le dessin 2D reste monté sous la vue iso : il ne doit rien recevoir de ce qu'on tape ici
   if (!saisie) e.stopImmediatePropagation()
@@ -471,6 +489,7 @@ function touche(e: KeyboardEvent) {
   const ctrl = e.ctrlKey || e.metaKey
   const k = e.key.toLowerCase()
   // recherche Spotlight : Ctrl+K, « / » ou Espace (la vue la déclenche, car ce gestionnaire capture le clavier)
+  if (ctrl && e.shiftKey && k === 'k') { e.preventDefault(); emit('explorateur'); return }
   if ((ctrl && k === 'k') || (!ctrl && !e.altKey && (e.key === '/' || e.key === ' '))) { e.preventDefault(); emit('recherche'); return }
   if (ctrl && k === 'z' && !e.shiftKey) { e.preventDefault(); annuler(); return }
   if (ctrl && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); retablir(); return }
@@ -498,10 +517,12 @@ function touche(e: KeyboardEvent) {
 }
 function toucheRelachee(e: KeyboardEvent) {
   const t = e.target as HTMLElement | null
+  if (t?.closest?.('[aria-modal="true"]')) return
   if (!(t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) e.stopImmediatePropagation()
 }
 
 onMounted(() => {
+  window.addEventListener(EVT_PREFERENCES, majPrefs)
   rendre(true)
   stage.value?.addEventListener('wheel', onWheel, { passive: false })
   if (props.editing) {
@@ -510,20 +531,37 @@ onMounted(() => {
   }
 })
 onBeforeUnmount(() => {
+  window.removeEventListener(EVT_PREFERENCES, majPrefs)
   window.removeEventListener('keydown', touche, true)
   window.removeEventListener('keyup', toucheRelachee, true)
   if (raf) cancelAnimationFrame(raf)
 })
 
-// ── palette
-const groupes = computed(() => {
+// ── palette : Favoris, Récents, puis les familles repliées (l'explorateur donne la vue d'ensemble)
+const typeIsoConnu = (base: string): boolean => catalogueIso().some((d) => d.id === base)
+const entreeCle = (id: string): string => cleEntree('symbole', 'iso', id)
+const favorisPal = ref<string[]>(lireFavoris())
+const recentsPal = ref<string[]>(lireRecents())
+const majPrefs = () => { favorisPal.value = lireFavoris(); recentsPal.value = lireRecents() }
+type ItemPal = { id: string; nom: string }
+/** symboles posables de la palette : le catalogue iso, puis les bibliothèques importées (présentes dans `symboles`) */
+const itemsPalette = computed<(ItemPal & { famille: string })[]>(() => [
+  ...catalogueIso().map((d) => ({ id: d.id, nom: d.nom, famille: estAccessoireIso(d.id) ? 'Sur un tuyau (vannes, capteurs)' : d.famille })),
+  ...(props.symboles ?? []).filter((e) => e.genre === 'symbole' && e.contexte === 'iso' && estSymboleBibliotheque(e.id)).map((e) => ({ id: e.id, nom: e.nom, famille: e.famille })),
+])
+const parCle = computed(() => new Map(itemsPalette.value.map((i) => [entreeCle(i.id), i])))
+const garderPal = (i: ItemPal & { famille?: string }): boolean => {
   const f = filtrePalette.value.trim().toLowerCase()
-  const par = new Map<string, { id: string; nom: string }[]>()
-  for (const d of catalogueIso()) {
-    if (f && !(d.nom + ' ' + d.id + ' ' + d.famille).toLowerCase().includes(f)) continue
-    const g = estAccessoireIso(d.id) ? 'Sur un tuyau (vannes, capteurs)' : d.famille
-    if (!par.has(g)) par.set(g, [])
-    par.get(g)!.push({ id: d.id, nom: d.nom })
+  return !f || (i.nom + ' ' + i.id + ' ' + (i.famille ?? '')).toLowerCase().includes(f)
+}
+const palFavoris = computed<ItemPal[]>(() => favorisPal.value.flatMap((c) => parCle.value.get(c) ?? []).filter(garderPal))
+const palRecents = computed<ItemPal[]>(() => recentsPal.value.flatMap((c) => parCle.value.get(c) ?? []).filter(garderPal).slice(0, 8))
+const groupes = computed(() => {
+  const par = new Map<string, ItemPal[]>()
+  for (const d of itemsPalette.value) {
+    if (!garderPal(d)) continue
+    if (!par.has(d.famille)) par.set(d.famille, [])
+    par.get(d.famille)!.push({ id: d.id, nom: d.nom })
   }
   const tous = [...par.entries()].map(([nom, items]) => ({ nom, items }))
   // les accessoires en premier : c'est ce que l'on cherche le plus souvent
@@ -591,8 +629,23 @@ void nextTick
     </div>
     <div class="synbody" :class="{ edition: editing }">
       <aside v-if="editing" class="ed-palette" aria-label="Palette isométrique" data-testid="iso-palette">
+        <button type="button" class="btn pal-biblio" data-testid="iso-palette-bibliotheque" title="Explorer toute la bibliothèque (Ctrl+Maj+K)" @click="emit('explorateur')">▦ Bibliothèque</button>
         <input v-model="filtrePalette" class="ed-in" type="search" placeholder="Chercher…" data-testid="iso-palette-filtre">
-        <details v-for="g in groupes" :key="g.nom" :open="g.nom.startsWith('Sur un') || g.nom === 'Pompes' || !!filtrePalette">
+        <details v-if="palFavoris.length" open data-testid="iso-palette-favoris">
+          <summary class="mono">★ Favoris</summary>
+          <button
+            v-for="i in palFavoris" :key="i.id" type="button" class="iso-pal" :class="{ on: arme === i.id }" draggable="true"
+            :data-testid="`iso-pal-fav-${i.id}`" :title="i.id" @click="armer(i.id)" @dragstart="$event.dataTransfer?.setData('text/plain', i.id)"
+          >{{ i.nom }}</button>
+        </details>
+        <details v-if="palRecents.length" open data-testid="iso-palette-recents">
+          <summary class="mono">Récents</summary>
+          <button
+            v-for="i in palRecents" :key="i.id" type="button" class="iso-pal" :class="{ on: arme === i.id }" draggable="true"
+            :data-testid="`iso-pal-rec-${i.id}`" :title="i.id" @click="armer(i.id)" @dragstart="$event.dataTransfer?.setData('text/plain', i.id)"
+          >{{ i.nom }}</button>
+        </details>
+        <details v-for="g in groupes" :key="g.nom" :open="!!filtrePalette" :data-testid="`iso-palette-famille`">
           <summary class="mono">{{ g.nom }}</summary>
           <button
             v-for="i in g.items" :key="i.id" type="button" class="iso-pal" :class="{ on: arme === i.id }" draggable="true"

@@ -955,7 +955,7 @@ addG(document, 'keydown', ev => { if (ev.key === 'Escape') fermerDetail(); });
    Le document édité = { modele, layout } : exactement le format produit par la chaîne (modele.json + layout_h.json),
    donc réimportable par `build.py --doc`. Rien n'est envoyé nulle part : tout reste dans le navigateur de l'utilisateur. */
 const SCHEMA = 'myhexa-synoptique-edition/1';
-const ED = { outil: 'selection', sel: [], fluide: 'procede', grandeur: 'generique', palQ: '', palReplie: [], pile: [], idx: -1, grille: 10, grilleVisible: true, aimant: true, restaure: false,
+const ED = { outil: 'selection', sel: [], fluide: 'procede', grandeur: 'generique', palQ: '', palReplie: ['proc', 'cvc', 'chauf', 'mach', 'elec', 'gen', 'ent'], pile: [], idx: -1, grille: 10, grilleVisible: true, aimant: true, restaure: false,
   attente: null, drag: null, armee: null, espace: false, onglet: 'proprietes', enregistre: null };
 let BROUILLON_IA = JSON.stringify({ modele: DATA.modele, layout: DATA.layout });   // instantané de la dernière version enregistrée
 const EMPREINTE = hash(BROUILLON_IA);
@@ -2280,13 +2280,27 @@ function itemPalette(c) {
   return `<div class="pal-item" role="button" tabindex="0" data-sym="${c}" data-nom="${esc(sansAccent(nom))}" aria-label="${esc(nom)}"><svg viewBox="0 0 24 24" aria-hidden="true">${iconeDe(c)}</svg><span>${esc(nom)}</span>${ent ? `<button type="button" class="pal-del" data-ent-del="${d.id}" title="Retirer de la bibliothèque" aria-label="Retirer ${esc(nom)} de la bibliothèque">×</button>` : ''}</div>`
     + (c === 'mesure' ? `<div class="pal-sub"><label for="pal-grandeur">Grandeur</label><select id="pal-grandeur" class="ed-in sm" aria-label="Grandeur de la mesure">${Object.entries(GRANDEURS).map(([v, g]) => `<option value="${v}" ${ED.grandeur === v ? 'selected' : ''}>${g.nom}</option>`).join('')}</select></div>` : '');
 }
+/* favoris et récents (partagés avec le Spotlight et l'explorateur : mêmes clés de stockage local, entrées « symbole:2d:<clé> ») */
+const CLE_FAV = 'myhexa.synoptique.favoris', CLE_REC = 'myhexa.synoptique.recents', EVT_PREFS = 'myhexa:preferences';
+const lsListe = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string') : []; } catch (e) { return []; } };
+const cles2d = (k) => lsListe(k).filter(c => c.startsWith('symbole:2d:')).map(c => c.slice(11)).filter(c => ICONES[c] && (BIBLIO[c] || c === 'image' || c === 'mesure'));
+function noter2d(cle) {   // un symbole armé ou posé passe en tête des récents
+  if (!ICONES[cle] || String(cle).startsWith('ent:')) return;
+  const c = 'symbole:2d:' + cle;
+  try { localStorage.setItem(CLE_REC, JSON.stringify([c, ...lsListe(CLE_REC).filter(x => x !== c)].slice(0, 12))); } catch (e) { /* stockage refusé : tant pis */ }
+  window.dispatchEvent(new Event(EVT_PREFS));
+}
 let sigBib = null;
+const sigPalette = () => JSON.stringify([biblioEnt().map(d => [d.id, d.nom, d.silhouette]), cles2d(CLE_FAV), cles2d(CLE_REC)]);
 function construirePalette() {
-  const bib = biblioEnt(); sigBib = JSON.stringify(bib.map(d => [d.id, d.nom, d.silhouette]));
+  const bib = biblioEnt(); sigBib = sigPalette();
   const fam = (id, titre, items, extra) => { const ferme = ED.palReplie.includes(id);
     return `<div class="pal-g" data-fam="${id}"><button type="button" class="pal-t pal-bascule" data-bascule="${id}" aria-expanded="${!ferme}"><span class="pal-chev">${ferme ? '▸' : '▾'}</span>${titre}</button><div class="pal-corps" ${ferme ? 'hidden' : ''}>${items.map(itemPalette).join('')}${extra || ''}</div></div>`; };
+  const groupe = (id, titre, cles) => cles.length ? fam(id, titre, cles) : '';
   paletteEl.innerHTML = '<h3 class="mono">Palette</h3>'
+    + '<button type="button" class="btn xs pal-biblio" id="pal-bibliotheque" data-testid="pal-bibliotheque" title="Explorer toute la bibliothèque (Ctrl+Maj+K)">▦ Bibliothèque</button>'
     + `<input class="ed-in" id="pal-recherche" type="search" placeholder="Rechercher un symbole…" aria-label="Rechercher un symbole" autocomplete="off" value="${esc(ED.palQ)}">`
+    + groupe('fav', '★ Favoris', cles2d(CLE_FAV)) + groupe('rec', 'Récents', cles2d(CLE_REC).slice(0, 8))
     + FAMILLES_PALETTE.map(([id, t, cles]) => fam(id, t, cles)).join('')
     + fam('ent', 'Bibliothèque de l’entreprise', bib.map(d => 'ent:' + d.id), `<button type="button" class="btn xs pal-nouveau" id="pal-nouveau"><svg viewBox="0 0 24 24" aria-hidden="true">${ICONES.nouveau}</svg>Nouveau symbole</button>${bib.length ? '' : '<p class="pal-aide">Aucun symbole personnalisé pour l’instant.</p>'}`)
     + '<p class="pal-aide">Glissez un symbole dans la scène (ou cliquez-le, puis cliquez la scène). Sur un ouvrage : agitateur, mesure et voyant s’y fixent. Sur une conduite : vanne, clapet et mesure s’y posent.</p><input type="file" accept="image/*" id="ed-pal-image" hidden>';
@@ -2302,14 +2316,16 @@ function filtrerPalette() {
     const nv = g.querySelector('.pal-nouveau'); if (nv) nv.hidden = !!q; });
 }
 function majPalette() {
-  if (JSON.stringify(biblioEnt().map(d => [d.id, d.nom, d.silhouette])) !== sigBib) construirePalette();
+  if (sigPalette() !== sigBib) construirePalette();
   paletteEl.querySelectorAll('.pal-item').forEach(i => i.classList.toggle('armee', i.dataset.sym === ED.armee)); corpsScene.classList.toggle('arme', !!ED.armee);
 }
+addG(window, EVT_PREFS, () => majPalette());
 paletteEl.addEventListener('input', ev => { if (ev.target.id === 'pal-recherche') { ED.palQ = ev.target.value; filtrerPalette(); } });
 paletteEl.addEventListener('change', ev => { if (ev.target.id === 'pal-grandeur') ED.grandeur = ev.target.value; });
 paletteEl.addEventListener('click', ev => {
   const bas = ev.target.closest('[data-bascule]');
   if (bas) { const id = bas.dataset.bascule; ED.palReplie = ED.palReplie.includes(id) ? ED.palReplie.filter(x => x !== id) : [...ED.palReplie, id]; construirePalette(); return; }
+  if (ev.target.closest('#pal-bibliotheque')) { window.dispatchEvent(new Event('myhexa:explorateur')); return; }
   if (ev.target.closest('#pal-nouveau')) { ouvrirEditeurFormes({}); return; }
   const del = ev.target.closest('[data-ent-del]');
   if (del) { ev.stopPropagation(); supprimerSymboleEnt(del.dataset.entDel); pousser(); construirePalette(); toast('Symbole retiré de la bibliothèque (les équipements déjà posés restent)', 'ok'); }
@@ -2324,14 +2340,14 @@ paletteEl.addEventListener('pointerdown', ev => {
   };
   const up = e => {
     window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); if (fantome) fantome.remove();
-    if (!actif) { if (cle === 'image') { byId('ed-pal-image').click(); return; } ED.armee = ED.armee === cle ? null : cle; majPalette(); return; }
+    if (!actif) { if (cle === 'image') { byId('ed-pal-image').click(); return; } ED.armee = ED.armee === cle ? null : cle; if (ED.armee) noter2d(cle); majPalette(); return; }
     const el = document.elementFromPoint(e.clientX, e.clientY); if (!el || !svg.contains(el)) return;
     if (cle === 'image') { creerImageA(monde(e), null); return; }
-    const [x, y] = monde(e); EDITEUR.deposer(cle, x, y, el);
+    const [x, y] = monde(e); noter2d(cle); EDITEUR.deposer(cle, x, y, el);
   };
   addG(window, 'pointermove', mv); addG(window, 'pointerup', up);
 });
-paletteEl.addEventListener('keydown', ev => { const it = ev.target.closest('.pal-item'); if (it && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); if (it.dataset.sym === 'image') byId('ed-pal-image').click(); else { ED.armee = it.dataset.sym; majPalette(); } } });
+paletteEl.addEventListener('keydown', ev => { const it = ev.target.closest('.pal-item'); if (it && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); if (it.dataset.sym === 'image') byId('ed-pal-image').click(); else { ED.armee = it.dataset.sym; noter2d(it.dataset.sym); majPalette(); } } });
 paletteEl.addEventListener('change', ev => { if (ev.target.id === 'ed-pal-image' && ev.target.files[0]) { creerImageA([L.w / 2, L.h / 2], ev.target.files[0]); ev.target.value = ''; } });
 function creerImageA(pt, fichier) {   // nouvel équipement « image » (cadre standard, état par pastille)
   const e = creerEquipement('voyant'); e.libelle = 'Image'; ajouterNoeud(e, pt[0], pt[1]); poserImage(e.id, null); e.type_origine = 'voyant'; delete e.image;
@@ -2414,7 +2430,7 @@ const instance = {
   marquerEnregistre() { BROUILLON_IA = instantane(); majBarre(); habillage(); },
   estModifie: () => estModifie(),
   /** recherche Spotlight : arme un symbole de la palette (le prochain clic sur la scène le pose) */
-  armer(cle) { if (!BIBLIO[cle] && cle !== 'image' && cle !== 'mesure' && !String(cle).startsWith('ent:')) return false; ED.armee = cle; majPalette(); toast('Cliquez sur la scène pour poser « ' + NOM_PAL(cle) + ' »', 'ok'); return true; },
+  armer(cle) { if (!BIBLIO[cle] && cle !== 'image' && cle !== 'mesure' && !String(cle).startsWith('ent:')) return false; ED.armee = cle; noter2d(cle); majPalette(); toast('Cliquez sur la scène pour poser « ' + NOM_PAL(cle) + ' »', 'ok'); return true; },
   /** recherche Spotlight : contenu SVG (24×24) du pictogramme d'un symbole de la palette */
   icone: (cle) => iconeDe(cle) || '',
   /** recherche Spotlight : éléments du synoptique (repère, nom, type) */

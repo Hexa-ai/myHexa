@@ -4,6 +4,11 @@
 export const CLE_FAVORIS = 'myhexa.synoptique.favoris'
 export const CLE_RECENTS = 'myhexa.synoptique.recents'
 export const MAX_RECENTS = 12
+/** évènement de fenêtre émis à chaque changement de favoris ou de récents : les palettes et l'explorateur se tiennent à jour */
+export const EVT_PREFERENCES = 'myhexa:preferences'
+const prevenir = (): void => {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(EVT_PREFERENCES))
+}
 
 export interface Stockage {
   getItem(k: string): string | null
@@ -32,6 +37,7 @@ export function basculerFavori(cle: string, s: Stockage | null = defaut()): stri
   const l = lireFavoris(s)
   const n = l.includes(cle) ? l.filter((x) => x !== cle) : [...l, cle]
   ecrire(s, CLE_FAVORIS, n)
+  prevenir()
   return n
 }
 
@@ -39,5 +45,6 @@ export function basculerFavori(cle: string, s: Stockage | null = defaut()): stri
 export function noterRecent(cle: string, s: Stockage | null = defaut()): string[] {
   const n = [cle, ...lireRecents(s).filter((x) => x !== cle)].slice(0, MAX_RECENTS)
   ecrire(s, CLE_RECENTS, n)
+  prevenir()
   return n
 }

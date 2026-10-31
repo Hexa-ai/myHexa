@@ -175,3 +175,12 @@ Tests : `tests/unit/lib/synoptic/iso-format.spec.ts` (format, rétrocompatibilit
 - Cadrage : `tests/unit/lib/cadrage.spec.ts` ; E2E `grille_libre.mjs` (enregistrement, rechargement, redimensionnement, retour à l'automatique).
 - E2E TEST : `~/depots/myHexa-tools/e2e/synopt_e2e.mjs` (tableau, tuile, import STEMI, agrandir, éditeur, conduite, variable, enregistrement, mobile).
 - E2E mobile : `~/depots/myHexa-tools/e2e/synopt_mobile.mjs` (`BASE=… node synopt_mobile.mjs`, tableau Démo STEMI) : résumé, défilement de la page par glissement, plein écran, gestes, croix / retour / Échap, paysage, tablette, thèmes clair et sombre ; captures `~/.hermes/cache/scratch/mobile_synopt_*.png`.
+
+## Explorateur de bibliothèque
+
+Grand dialogue (≈ 80 % de l'écran) `SynopticExplorateur.vue`, logique pure dans `lib/synoptic/explorateur.ts`. Ouvert par « Tout voir… » du Spotlight, par le bouton « ▦ Bibliothèque » des palettes 2D et iso, ou par Ctrl+Maj+K.
+- Arbre : Tout, Favoris, Récents, Familles (repliables, compteurs qui suivent recherche et filtre), Ma bibliothèque (une entrée par bibliothèque importée).
+- Recherche = index du Spotlight ; filtre 2D / Iso / Tout. Vignettes SVG rendues à la volée, en chargement paresseux (IntersectionObserver).
+- Détail : aperçu en grand, états (planche du symbole), variantes, mots-clés. Actions : ★ (touche F), « Poser » (↵, arme et ferme), glisser vers le dessin (iso).
+- Import / export JSON : `bibliotheque.ts` ; un symbole de bibliothèque se pose en composition (`poserComposition`).
+- Palettes : Favoris, puis Récents, puis familles repliées. Favoris et récents sont partagés (stockage local) ; l'évènement `myhexa:preferences` les tient à jour.

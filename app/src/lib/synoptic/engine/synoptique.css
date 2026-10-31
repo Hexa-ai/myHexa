@@ -558,3 +558,4 @@
 
 /* CVC : cartouche des valeurs posé sur la pièce centrale d'un module double */
 .syn-root .cv-cartouche{fill:var(--syn-fond);stroke:var(--border);stroke-width:1}
+.syn-root .pal-biblio { display: flex; align-items: center; gap: 6px; width: 100%; margin: 0 0 6px; text-align: left; }

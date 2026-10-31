@@ -6,6 +6,7 @@ import type { Port } from './lib/types'
 import type { IsoAccessoire, IsoComposant, IsoSection } from './format'
 import { familleIso } from './familles'
 import { aimanter } from './grille'
+import type { SymboleBibliotheque } from '../bibliotheque'
 
 /** identifiant libre construit sur un préfixe (« pompe1 », « pompe2 »…) */
 export function idLibre(iso: IsoSection, prefixe: string): string {
@@ -46,6 +47,24 @@ export function poserComposant(iso: IsoSection, type: string, x: number, y: numb
   }
   iso.composants.push(c)
   return id
+}
+
+/**
+ * pose un symbole de bibliothèque importée : ses parties (symboles existants) sont posées ensemble, décalées comme le fichier le demande.
+ * Le point visé est le centre de la première partie ; l'ensemble est aimanté une seule fois, les décalages restent exacts.
+ * Renvoie les identifiants posés (le premier sert à la sélection).
+ */
+export function poserComposition(iso: IsoSection, sym: SymboleBibliotheque, x: number, y: number, o: { aimant: number; centre?: (type: string) => [number, number] }): string[] {
+  const [cx, cy] = o.centre?.(sym.parties[0].base) ?? [0, 0]
+  const bx = aimanter(x - cx, o.aimant), by = aimanter(y - cy, o.aimant)
+  return sym.parties.map((p) => {
+    const id = poserComposant(iso, p.base, 0, 0, { aimant: 1, params: p.params, libelle: p.libelle, z: p.dz })
+    const c = iso.composants[iso.composants.length - 1]
+    c.x = bx + (p.dx ?? 0)
+    c.y = by + (p.dy ?? 0)
+    if (p.rot) c.rot = p.rot
+    return id
+  })
 }
 
 /** déplace un composant (aimanté) ; les tuyaux se recalculent au prochain dessin */
