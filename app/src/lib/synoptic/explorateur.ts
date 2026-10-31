@@ -36,6 +36,21 @@ export interface OptionsExplorateur {
   contexte: Contexte
 }
 
+/** Entrée supplémentaire (préréglage : symbole de base + paramètres) à brancher dans l'explorateur, le Spotlight et les palettes. */
+export interface EntreeSupplementaire extends Entree {
+  /** identifiant du symbole iso de base */
+  base: string
+  /** paramètres posés avec le symbole (variante, dn, dimensions…) */
+  params?: Record<string, unknown>
+}
+
+/** Ajoute des entrées supplémentaires (ex. préréglages de iso/presets.ts) à la liste des symboles connus, sans doublon de clé :
+ *  à appliquer sur `symbolesRecherche` avant de la passer à l'explorateur (les entrées de base l'emportent). */
+export function avecEntreesSupplementaires(entrees: readonly Entree[], supplementaires: readonly EntreeSupplementaire[]): Entree[] {
+  const vues = new Set(entrees.map((e) => e.cle))
+  return [...entrees, ...supplementaires.filter((e) => !vues.has(e.cle) && vues.add(e.cle))]
+}
+
 const estBiblio = (e: Entree): boolean => e.famille === FAMILLE_MA_BIBLIOTHEQUE
 /** identifiant de la bibliothèque importée d'une entrée (« lib:<biblio>/<symbole> ») */
 export const biblioDe = (e: Entree): string => /^lib:([^/]+)\//.exec(e.id)?.[1] ?? ''

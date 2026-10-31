@@ -4,6 +4,7 @@ import type { SymboleDef } from './iso/lib/types'
 import { estAccessoireIso } from './iso/familles'
 import { entreeSymbole, type Entree } from './recherche'
 import { FAMILLE_MA_BIBLIOTHEQUE, idSymboleBibliotheque, type Bibliotheque } from './bibliotheque'
+import { OPTIONS_STATUT_DEFAUT, estPropose, statutDe, type OptionsStatut } from './statut'
 
 /** nom court affiché : le nom du catalogue sans sa parenthèse descriptive */
 export const nomCourt = (nom: string): string => nom.replace(/\s*[(—].*$/, '').trim() || nom
@@ -45,8 +46,14 @@ export const PALETTE_2D: ReadonlyArray<{ cle: string; nom: string; famille: stri
 
 export const FAMILLE_ACCESSOIRES = 'Sur un tuyau (vannes, capteurs)'
 
-export function entreesIso(catalogue: readonly SymboleDef[]): Entree[] {
-  return catalogue.map((d) => entreeSymbole('iso', d.id, nomCourt(d.nom), d.famille, [d.nom, d.id, estAccessoireIso(d.id) ? 'sur tuyau accessoire' : '']))
+/** entrées de recherche des symboles iso proposés : les obsolètes n'y figurent pas (ils restent dessinables dans les documents existants) */
+export function entreesIso(catalogue: readonly SymboleDef[], o: OptionsStatut = OPTIONS_STATUT_DEFAUT): Entree[] {
+  return catalogue
+    .filter((d) => estPropose(d, o))
+    .map((d) => ({
+      ...entreeSymbole('iso', d.id, nomCourt(d.nom), d.famille, [d.nom, d.id, estAccessoireIso(d.id) ? 'sur tuyau accessoire' : '']),
+      statut: statutDe(d) as 'brouillon' | 'revu' | 'valide',
+    }))
 }
 
 export const entrees2d = (): Entree[] => PALETTE_2D.map((p) => entreeSymbole('2d', p.cle, p.nom, p.famille))

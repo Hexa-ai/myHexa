@@ -29,20 +29,21 @@ export const FLUIDES: Fl[] = [
   { id: 'neutre', v: '--iso-neutre', dark: '#8795a1', light: '#7b8890' },
 ]
 
-const vars = (t: 'dark' | 'light'): string => {
+/** `fixe` : valeurs de repli seules, sans les variables du portail (planche de revue, aperçu en grand à fond imposé) */
+const vars = (t: 'dark' | 'light', fixe = false): string => {
   const d = t === 'dark'
-  const p = (name: string, dark: string, light: string) => `--i-${name}:var(--${name},${d ? dark : light});`
+  const p = (name: string, dark: string, light: string) => (fixe ? `--i-${name}:${d ? dark : light};` : `--i-${name}:var(--${name},${d ? dark : light});`)
   return [
     p('background', '#0b0f13', '#f3f4f1').replace('--i-background', '--i-bg'),
-    `--i-fg:var(--foreground,${d ? '#e6edf3' : '#15191d'});`,
-    `--i-mut:var(--muted-foreground,${d ? '#8d9aa6' : '#6b7680'});`,
-    `--i-bd:var(--border,${d ? '#2a3745' : '#c9d0d4'});`,
+    fixe ? `--i-fg:${d ? '#e6edf3' : '#15191d'};` : `--i-fg:var(--foreground,${d ? '#e6edf3' : '#15191d'});`,
+    fixe ? `--i-mut:${d ? '#8d9aa6' : '#6b7680'};` : `--i-mut:var(--muted-foreground,${d ? '#8d9aa6' : '#6b7680'});`,
+    fixe ? `--i-bd:${d ? '#2a3745' : '#c9d0d4'};` : `--i-bd:var(--border,${d ? '#2a3745' : '#c9d0d4'});`,
     p('signal', '#00d4aa', '#00a885'), p('run', '#46c46a', '#2f9e52'), p('offline', '#ff6b6b', '#e04848'), p('warn', '#ffb347', '#e08a00'),
     `--i-body:${d ? '#3a4854' : '#f7f7f4'};--i-metal:${d ? '#566571' : '#dde1e1'};--i-dark:${d ? '#232c34' : '#8b969d'};--i-conc:${d ? '#404b54' : '#e3e2db'};--i-ink:${d ? '#0d1217' : '#27323a'};--i-white:${d ? '#e9eff3' : '#ffffff'};`,
     `--i-edge:${d ? '#92a2af' : '#56636c'};--i-edge2:${d ? '#5b6a76' : '#9aa6ae'};--i-sw:1px;`,
     `--i-lift:#fff;--i-lp:${d ? '11%' : '55%'};--i-shade:${d ? '#000' : '#26343f'};--i-sp:${d ? '30%' : '17%'};`,
     `--i-glass:${d ? 'rgba(130,185,215,.16)' : 'rgba(80,150,190,.14)'};--i-dot:${d ? '#27333d' : '#cdd3d1'};--i-off:${d ? '#52606c' : '#adb7be'};--i-flow:#fff;`,
-    ...FLUIDES.map((fl) => `--i-${fl.id}:var(${fl.v},${d ? fl.dark : fl.light});`),
+    ...FLUIDES.map((fl) => (fixe ? `--i-${fl.id}:${d ? fl.dark : fl.light};` : `--i-${fl.id}:var(${fl.v},${d ? fl.dark : fl.light});`)),
   ].join('')
 }
 
@@ -51,6 +52,7 @@ export function cssIso(): string {
   return `
 .iso-root{${vars('dark')}font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;color:var(--i-fg)}
 .light .iso-root,.iso-root.light{${vars('light')}}
+.iso-root.fond-clair{${vars('light', true)}}.iso-root.fond-sombre{${vars('dark', true)}}
 .iso-root .gl{opacity:.42}
 .iso-root .mb{--c:var(--i-body)}.iso-root .mm{--c:var(--i-metal)}.iso-root .md{--c:var(--i-dark)}.iso-root .mc{--c:var(--i-conc)}.iso-root .mk{--c:var(--i-ink)}
 .iso-root .ma{--c:var(--i-signal)}.iso-root .mr{--c:var(--i-offline)}.iso-root .mw{--c:var(--i-warn)}.iso-root .mg{--c:var(--i-run)}

@@ -1,0 +1,12 @@
+[
+  "bassin.beton|port-hors-boite",
+  "chaufferie.groupe_froid|port-hors-boite",
+  "chaufferie.pac|port-hors-boite",
+  "cta.bouche_murale|port-hors-boite",
+  "cta.melange|port-hors-boite",
+  "cta_e.batterie_chaude|port-hors-boite",
+  "cta_e.batterie_froide|port-hors-boite",
+  "cta_e.humidificateur|port-hors-boite",
+  "elec.box_hai|texte-miroir",
+  "traitement.echangeur_plaques|port-hors-boite"
+]

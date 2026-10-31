@@ -4,6 +4,7 @@
 // (lib/) ; ce composant ne fait que : état → document de la bibliothèque → SVG, et gestes → opérations d'édition (edition.ts).
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { catalogue as catalogueIso, construire, rendu0, cssIso } from '@/lib/synoptic/iso/lib'
+import { symbolesProposes } from '@/lib/synoptic/statut'
 import type { Resultat } from '@/lib/synoptic/iso/lib'
 import type { CatalogueVariable, SynopticEtat } from '@/lib/synoptic/engine/types'
 import { docLib, objetsIso, type IsoSection } from '@/lib/synoptic/iso/format'
@@ -546,7 +547,8 @@ const majPrefs = () => { favorisPal.value = lireFavoris(); recentsPal.value = li
 type ItemPal = { id: string; nom: string }
 /** symboles posables de la palette : le catalogue iso, puis les bibliothèques importées (présentes dans `symboles`) */
 const itemsPalette = computed<(ItemPal & { famille: string })[]>(() => [
-  ...catalogueIso().map((d) => ({ id: d.id, nom: d.nom, famille: estAccessoireIso(d.id) ? 'Sur un tuyau (vannes, capteurs)' : d.famille })),
+  // seul changement de ce fichier pour la qualité : les symboles `obsolete` ne sont plus proposés (ils restent dessinables)
+  ...symbolesProposes(catalogueIso()).map((d) => ({ id: d.id, nom: d.nom, famille: estAccessoireIso(d.id) ? 'Sur un tuyau (vannes, capteurs)' : d.famille })),
   ...(props.symboles ?? []).filter((e) => e.genre === 'symbole' && e.contexte === 'iso' && estSymboleBibliotheque(e.id)).map((e) => ({ id: e.id, nom: e.nom, famille: e.famille })),
 ])
 const parCle = computed(() => new Map(itemsPalette.value.map((i) => [entreeCle(i.id), i])))

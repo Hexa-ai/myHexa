@@ -2,8 +2,9 @@
 // Explorateur de la bibliothèque de symboles : grand dialogue (≈ 80 % de l'écran) ouvert par « Tout voir… » du Spotlight,
 // par le bouton « Bibliothèque » des palettes ou par Ctrl+Maj+K. Arbre des familles à gauche, grille de vignettes au centre,
 // détail (aperçu, états, variantes, mots-clés) à droite. Le composant cherche, montre et prévient (`poser`, `bibliotheques`) ;
-// la pose reste à l'éditeur. Entièrement utilisable au clavier.
-import { computed, nextTick, ref, watch } from 'vue'
+// la pose reste à l'éditeur. Entièrement utilisable au clavier. Seul le CLIC (ou le clavier) choisit un symbole : le survol ne fait
+// qu'un léger surlignage, pour ne pas perdre l'état choisi dans le détail. « Agrandir » (ou Espace) ouvre l'aperçu en grand.
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { Entree, Contexte } from '@/lib/synoptic/recherche'
 import { basculerFavori, lireFavoris, lireRecents, noterRecent } from '@/lib/synoptic/recherche/preferences'
 import { catalogue as catalogueIso } from '@/lib/synoptic/iso/lib'
@@ -16,6 +17,7 @@ import {
   LIBELLE_ETAT, NOEUD_BIBLIO, NOEUD_FAMILLES, NOEUD_FAVORIS, NOEUD_RECENTS, NOEUD_TOUT, aplatir, construireArbre, etatsDe, motsClesAffiches,
   noeudBiblio, selonNoeud, symbolesVisibles, variantesDe, type Filtre, type Noeud, type NoeudId,
 } from '@/lib/synoptic/explorateur'
+import { LIBELLE_STATUT, statutDe } from '@/lib/synoptic/statut'
 import ExplorateurVignette from './ExplorateurVignette.vue'
 
 const props = defineProps<{
@@ -41,7 +43,6 @@ const ouverts = ref<Set<string>>(new Set([NOEUD_FAMILLES]))
 const favoris = ref<string[]>([])
 const recents = ref<string[]>([])
 const selCle = ref('')
-const survolCle = ref('')
 const etatChoisi = ref('')
 const params = ref<Record<string, string | number>>({})
 const retour = ref<{ ok: boolean; textes: string[] } | null>(null)
@@ -64,7 +65,8 @@ const lignesArbre = computed(() => aplatir(arbre.value, ouverts.value))
 const titreNoeud = computed(() => lignesArbre.value.find((n) => n.id === noeud.value)?.libelle ?? 'Tout')
 
 const actuelle = computed<Entree | null>(() => liste.value.find((e) => e.cle === selCle.value) ?? liste.value[0] ?? null)
-const cible = computed<Entree | null>(() => (survolCle.value ? (liste.value.find((e) => e.cle === survolCle.value) ?? actuelle.value) : actuelle.value))
+/** le symbole affiché dans le détail : celui qui a été cliqué (ou atteint au clavier), jamais celui qui est survolé */
+const cible = actuelle
 
 const defCible = computed(() => (cible.value && cible.value.contexte === 'iso' && !estSymboleBibliotheque(cible.value.id) ? defDe(cible.value.id) : undefined))
 const etats = computed(() => etatsDe(defCible.value))
@@ -74,13 +76,12 @@ const motsCles = computed(() => (cible.value ? motsClesAffiches(cible.value) : [
 const symboleLib = computed(() => (cible.value && estSymboleBibliotheque(cible.value.id) ? trouverSymbole(props.bibliotheques, cible.value.id) : null))
 const estFavori = (e: Entree | null): boolean => !!e && favoris.value.includes(e.cle)
 
-watch(cible, () => {
-  // un autre symbole : on repart de son état et de ses variantes par défaut
+watch(() => cible.value?.cle, () => {
+  // un autre symbole : on repart de son état et de ses variantes par défaut (comparer la clé, pas l'objet : l'état choisi ne se perd pas tant que le symbole reste le même)
   etatChoisi.value = ''
   params.value = {}
 })
 watch([q, filtre, noeud], () => {
-  survolCle.value = ''
   if (!liste.value.some((e) => e.cle === selCle.value)) selCle.value = liste.value[0]?.cle ?? ''
 })
 
@@ -99,6 +100,94 @@ function choisirVariante(cle: string, v: string | number) {
   params.value = { ...params.value, [cle]: v }
 }
 
+// ───────────── aperçu en grand (bouton « Agrandir » ou Espace)
+const agrandi = ref(false)
+const fondAg = ref<'clair' | 'sombre'>('clair')
+const zoomAg = ref(1)
+const panAg = ref({ x: 0, y: 0 })
+const deplacement = ref(false)
+const agEl = ref<HTMLElement | null>(null)
+const agScene = ref<HTMLElement | null>(null)
+let avantAg: HTMLElement | null = null
+let depart: { x: number; y: number; px: number; py: number } | null = null
+const ZOOM_MIN = 0.4
+const ZOOM_MAX = 12
+
+/** le fond choisi impose aussi la palette du symbole (clair / sombre), indépendamment du thème du portail */
+const apercuAgrandi = computed(() => (apercuGrand.value ? apercuGrand.value.replace('class="iso-root', `class="iso-root fond-${fondAg.value}`) : ''))
+function razZoom() {
+  zoomAg.value = 1
+  panAg.value = { x: 0, y: 0 }
+}
+/** zoom autour d'un point de la scène (par défaut son centre) : le point visé reste sous le curseur */
+function zoomer(k: number, cx?: number, cy?: number) {
+  const el = agScene.value
+  const z0 = zoomAg.value
+  const z1 = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z0 * k))
+  if (z1 === z0) return
+  const px = cx ?? (el?.clientWidth ?? 0) / 2
+  const py = cy ?? (el?.clientHeight ?? 0) / 2
+  panAg.value = { x: px - ((px - panAg.value.x) * z1) / z0, y: py - ((py - panAg.value.y) * z1) / z0 }
+  zoomAg.value = z1
+  if (z1 === 1 && Math.abs(panAg.value.x) + Math.abs(panAg.value.y) < 1) panAg.value = { x: 0, y: 0 }
+}
+function molette(ev: WheelEvent) {
+  const r = agScene.value?.getBoundingClientRect()
+  zoomer(Math.exp(-ev.deltaY * 0.0016), r ? ev.clientX - r.left : undefined, r ? ev.clientY - r.top : undefined)
+}
+function debutDeplacement(ev: PointerEvent) {
+  if (ev.button !== 0) return
+  depart = { x: ev.clientX, y: ev.clientY, px: panAg.value.x, py: panAg.value.y }
+  deplacement.value = true
+  ;(ev.currentTarget as HTMLElement).setPointerCapture?.(ev.pointerId)
+}
+function deplacer(ev: PointerEvent) {
+  if (depart) panAg.value = { x: depart.px + ev.clientX - depart.x, y: depart.py + ev.clientY - depart.y }
+}
+function finDeplacement() {
+  depart = null
+  deplacement.value = false
+}
+function ouvrirAgrandi() {
+  if (!cible.value || agrandi.value) return
+  avantAg = (document.activeElement as HTMLElement | null) ?? null
+  razZoom()
+  agrandi.value = true
+  void nextTick(() => agEl.value?.focus())
+}
+function fermerAgrandi() {
+  if (!agrandi.value) return
+  agrandi.value = false
+  void nextTick(() => (avantAg?.isConnected ? avantAg : dialogue.value)?.focus?.())
+}
+function voisin(sens: 1 | -1) {
+  const l = liste.value
+  const i = l.findIndex((e) => e.cle === cible.value?.cle)
+  const n = l[Math.max(0, Math.min(l.length - 1, i + sens))]
+  if (n) selCle.value = n.cle
+}
+/** Échap / Espace ferment l'aperçu (et lui seul) ; Tab reste dans l'aperçu */
+function cleAgrandi(ev: KeyboardEvent) {
+  const k = ev.key
+  if (k === ' ' && (ev.target as HTMLElement).tagName === 'BUTTON') { ev.stopPropagation(); return }
+  if (k === 'Escape' || k === ' ') { ev.preventDefault(); ev.stopPropagation(); fermerAgrandi(); return }
+  if (k === '+' || k === '=') { ev.preventDefault(); zoomer(1.25) }
+  else if (k === '-') { ev.preventDefault(); zoomer(1 / 1.25) }
+  else if (k === '0') { ev.preventDefault(); razZoom() }
+  else if (k === 'ArrowRight') { ev.preventDefault(); voisin(1) }
+  else if (k === 'ArrowLeft') { ev.preventDefault(); voisin(-1) }
+  else if (k === 'Tab' && agEl.value) {
+    const f = [...agEl.value.querySelectorAll<HTMLElement>('button:not([disabled])')].filter((x) => x.offsetParent !== null)
+    if (!f.length) return
+    const premier = f[0], dernier = f[f.length - 1]
+    if (ev.shiftKey && (document.activeElement === premier || document.activeElement === agEl.value)) { ev.preventDefault(); dernier.focus() }
+    else if (!ev.shiftKey && document.activeElement === dernier) { ev.preventDefault(); premier.focus() }
+  }
+  ev.stopPropagation()
+}
+watch(() => cible.value?.cle, () => razZoom())
+onBeforeUnmount(finDeplacement)
+
 // ───────────── ouverture / fermeture
 function ouvrir(o: { requete?: string } = {}) {
   avant = (document.activeElement as HTMLElement | null) ?? null
@@ -108,13 +197,14 @@ function ouvrir(o: { requete?: string } = {}) {
   filtre.value = 'tout'
   noeud.value = NOEUD_TOUT
   retour.value = null
-  survolCle.value = ''
+  agrandi.value = false
   selCle.value = liste.value[0]?.cle ?? ''
   ouvert.value = true
   void nextTick(() => champ.value?.focus())
 }
 function fermer() {
   if (!ouvert.value) return
+  agrandi.value = false
   ouvert.value = false
   void nextTick(() => avant?.isConnected && avant.focus?.())
 }
@@ -209,6 +299,7 @@ function cleGrille(ev: KeyboardEvent) {
   else if (ev.key === 'PageDown') aller(i + n * 3)
   else if (ev.key === 'PageUp') aller(i - n * 3)
   else if (ev.key === 'Enter') { ev.preventDefault(); poser(l[i]) }
+  else if (ev.key === ' ' && (ev.target as HTMLElement).tagName !== 'BUTTON') { ev.preventDefault(); selCle.value = l[i].cle; ouvrirAgrandi() }
   else if ((ev.key === 'f' || ev.key === 'F') && !ev.ctrlKey && !ev.metaKey && !ev.altKey) { ev.preventDefault(); etoile(l[i]) }
 }
 function cleChamp(ev: KeyboardEvent) {
@@ -338,13 +429,14 @@ const modeleJson = (): void => telecharger('modele-bibliotheque.json', exporterB
             <div
               v-for="e in liste" :key="e.cle" class="expl-case" :class="{ on: actuelle?.cle === e.cle }" role="option" :aria-selected="actuelle?.cle === e.cle"
               :tabindex="actuelle?.cle === e.cle ? 0 : -1" :data-cle="e.cle" :data-testid="`explorateur-cell-${e.id}`" :draggable="glissable(e)"
-              @click="selCle = e.cle" @dblclick="poser(e)" @mouseenter="survolCle = e.cle" @focus="selCle = e.cle" @dragstart="glisser($event, e)"
+              @click="selCle = e.cle" @dblclick="poser(e)" @focus="selCle = e.cle" @dragstart="glisser($event, e)"
             >
               <button
                 type="button" class="expl-etoile" :class="{ on: estFavori(e) }" :aria-pressed="estFavori(e)" tabindex="-1"
                 :aria-label="estFavori(e) ? `Retirer ${e.nom} des favoris` : `Ajouter ${e.nom} aux favoris`" :data-testid="`explorateur-etoile-${e.id}`"
                 @click.stop="etoile(e)" @mousedown.stop @dblclick.stop
               >{{ estFavori(e) ? '★' : '☆' }}</button>
+              <span v-if="e.statut" class="expl-statut" :data-statut="e.statut" :title="`Statut : ${LIBELLE_STATUT[e.statut]}`" :data-testid="`explorateur-statut-${e.id}`" />
               <span class="expl-img"><ExplorateurVignette :fabrique="() => apercu(e)" :pictogramme="e.contexte === '2d'" /></span>
               <span class="expl-nom">{{ e.nom }}</span>
               <span class="expl-fam">{{ sous(e) }}</span>
@@ -362,6 +454,7 @@ const modeleJson = (): void => telecharger('modele-bibliotheque.json', exporterB
             <h3 class="expl-d-nom" data-testid="explorateur-d-nom">{{ cible.nom }}</h3>
             <p class="expl-d-fam">{{ sous(cible) }}</p>
             <p class="expl-d-id">{{ cible.id }}</p>
+            <p v-if="cible.statut" class="expl-d-statut" data-testid="explorateur-d-statut"><span class="expl-statut en-ligne" :data-statut="cible.statut" />{{ LIBELLE_STATUT[statutDe({ statut: cible.statut })] }}</p>
 
             <section v-if="cible.contexte === 'iso' && !symboleLib" aria-label="États">
               <h4>États</h4>
@@ -393,6 +486,7 @@ const modeleJson = (): void => telecharger('modele-bibliotheque.json', exporterB
               <ul class="expl-mots" data-testid="explorateur-mots"><li v-for="m in motsCles" :key="m">{{ m }}</li></ul>
             </section>
             <div class="expl-actions">
+              <button type="button" class="expl-btn" data-testid="explorateur-agrandir" title="Aperçu en grand (Espace)" @click="ouvrirAgrandi">⤢ Agrandir</button>
               <button
                 type="button" class="expl-btn" :class="{ actif: estFavori(cible) }" :aria-pressed="estFavori(cible)" data-testid="explorateur-favori" @click="etoile(cible)"
               >{{ estFavori(cible) ? '★ Favori' : '☆ Ajouter aux favoris' }}</button>
@@ -403,10 +497,59 @@ const modeleJson = (): void => telecharger('modele-bibliotheque.json', exporterB
         </aside>
 
         <footer class="expl-pied">
-          <span><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> naviguer</span><span><kbd>↵</kbd> poser</span><span><kbd>F</kbd> favori</span>
+          <span><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> naviguer</span><span><kbd>↵</kbd> poser</span><span><kbd>Espace</kbd> agrandir</span><span><kbd>F</kbd> favori</span>
           <span><kbd>Tab</kbd> zone suivante</span><span><kbd>Échap</kbd> fermer</span>
           <span class="expl-sp" /><span v-if="props.contexte === 'iso'">Glissez une vignette vers le dessin pour la poser.</span>
         </footer>
+      </div>
+
+      <div v-if="agrandi && cible" class="expl-ag-fond" data-testid="explorateur-agrandi" @mousedown.self="fermerAgrandi">
+        <div ref="agEl" class="expl-ag" role="dialog" aria-modal="true" :aria-label="`Aperçu en grand : ${cible.nom}`" tabindex="-1" @keydown="cleAgrandi">
+          <header class="expl-ag-tete">
+            <div class="expl-ag-titre">
+              <strong data-testid="explorateur-agrandi-nom">{{ cible.nom }}</strong>
+              <span class="expl-d-id">{{ cible.id }}</span>
+              <span v-if="cible.statut" class="expl-ag-st"><span class="expl-statut en-ligne" :data-statut="cible.statut" />{{ LIBELLE_STATUT[statutDe({ statut: cible.statut })] }}</span>
+            </div>
+            <div class="expl-ag-outils">
+              <div class="expl-filtre" role="group" aria-label="Fond de l’aperçu">
+                <button type="button" :aria-pressed="fondAg === 'clair'" data-testid="explorateur-agrandi-fond-clair" @click="fondAg = 'clair'">Fond clair</button>
+                <button type="button" :aria-pressed="fondAg === 'sombre'" data-testid="explorateur-agrandi-fond-sombre" @click="fondAg = 'sombre'">Fond sombre</button>
+              </div>
+              <button type="button" class="expl-btn" data-testid="explorateur-agrandi-moins" aria-label="Zoom arrière" @click="zoomer(1 / 1.25)">−</button>
+              <button type="button" class="expl-btn expl-ag-zoom" data-testid="explorateur-agrandi-zoom" title="Revenir à 100 %" @click="razZoom">{{ Math.round(zoomAg * 100) }} %</button>
+              <button type="button" class="expl-btn" data-testid="explorateur-agrandi-plus" aria-label="Zoom avant" @click="zoomer(1.25)">+</button>
+              <button type="button" class="expl-fermer" aria-label="Fermer l’aperçu" data-testid="explorateur-agrandi-fermer" @click="fermerAgrandi">✕</button>
+            </div>
+          </header>
+          <div
+            ref="agScene" class="expl-ag-scene" :class="[`fond-${fondAg}`, { deplace: deplacement }]" data-testid="explorateur-agrandi-scene"
+            @wheel.prevent="molette" @pointerdown="debutDeplacement" @pointermove="deplacer" @pointerup="finDeplacement" @pointercancel="finDeplacement" @dblclick="razZoom"
+          >
+            <div class="expl-ag-contenu" :style="{ transform: `translate(${panAg.x}px, ${panAg.y}px) scale(${zoomAg})` }">
+              <svg v-if="cible.contexte === '2d'" viewBox="0 0 24 24" class="expl-ag-picto" v-html="apercuGrand" />
+              <span v-else-if="apercuAgrandi" class="expl-ag-iso" data-testid="explorateur-agrandi-apercu" v-html="apercuAgrandi" />
+              <span v-else class="expl-sans">Aperçu indisponible</span>
+            </div>
+          </div>
+          <footer class="expl-ag-pied">
+            <div v-if="cible.contexte === 'iso' && !symboleLib" class="expl-puces" role="group" aria-label="État du symbole">
+              <button
+                v-for="s in etats" :key="s.etat" type="button" :aria-pressed="etatCourant?.etat === s.etat" :data-testid="`explorateur-agrandi-etat-${s.etat}`"
+                @click="etatChoisi = s.etat"
+              >{{ LIBELLE_ETAT[s.etat] ?? s.etat }}</button>
+            </div>
+            <div v-for="v in variantes" :key="v.cle" class="expl-puces" role="group" :aria-label="`Variante ${v.cle}`">
+              <span class="expl-ag-lib">{{ v.cle }}</span>
+              <button
+                v-for="x in v.valeurs" :key="String(x)" type="button" :aria-pressed="String(valeurVariante(v.cle)) === String(x)"
+                :data-testid="`explorateur-agrandi-var-${v.cle}-${x}`" @click="choisirVariante(v.cle, x)"
+              >{{ x }}</button>
+            </div>
+            <span class="expl-sp" />
+            <span class="expl-ag-aide"><kbd>Molette</kbd> zoom · glisser pour déplacer · <kbd>←</kbd><kbd>→</kbd> symbole voisin · <kbd>Espace</kbd> / <kbd>Échap</kbd> fermer</span>
+          </footer>
+        </div>
       </div>
     </div>
   </Teleport>
@@ -461,7 +604,13 @@ const modeleJson = (): void => telecharger('modele-bibliotheque.json', exporterB
 .expl-lien { text-decoration: underline; background: none; border: 0; }
 .expl-grille { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 14px 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); grid-auto-rows: 168px; gap: 10px; align-content: start; }
 .expl-case { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 1px; padding: 6px 8px 7px; border: 1px solid var(--border, #ddd); border-radius: 10px; cursor: pointer; background: var(--card, #fff); min-width: 0; }
-.expl-case:hover { border-color: color-mix(in oklab, var(--signal, #1e88e5) 55%, var(--border, #ddd)); }
+.expl-case:hover { background: color-mix(in oklab, var(--muted, #888) 9%, var(--card, #fff)); border-color: color-mix(in oklab, var(--signal, #1e88e5) 35%, var(--border, #ddd)); }
+.expl-statut { position: absolute; top: 7px; left: 8px; z-index: 1; width: 8px; height: 8px; border-radius: 50%; background: #9aa3ab; box-shadow: 0 0 0 1px color-mix(in oklab, var(--card, #fff) 80%, transparent); }
+.expl-statut[data-statut='revu'] { background: #2b83e0; }
+.expl-statut[data-statut='valide'] { background: #2e9e5b; }
+.expl-statut.en-ligne { position: static; display: inline-block; margin-right: 6px; vertical-align: 1px; }
+.expl-d-statut { margin: 2px 0 0; font-size: 12px; opacity: .8; }
+.expl-case.on:hover { background: color-mix(in oklab, var(--signal, #1e88e5) 7%, var(--card, #fff)); }
 .expl-case.on { border-color: var(--signal, #1e88e5); box-shadow: 0 0 0 1px var(--signal, #1e88e5); background: color-mix(in oklab, var(--signal, #1e88e5) 7%, var(--card, #fff)); }
 .expl-img { flex: 1; min-height: 0; display: block; position: relative; overflow: hidden; }
 .expl-img > .expl-vign { position: absolute; inset: 0; }
@@ -491,6 +640,30 @@ const modeleJson = (): void => telecharger('modele-bibliotheque.json', exporterB
 .expl-actions .expl-btn { flex: 1; padding: 8px 10px; }
 .expl-pied { grid-area: pied; display: flex; align-items: center; gap: 14px; padding: 7px 14px; border-top: 1px solid var(--border, #ddd); font-size: 11px; opacity: .85; }
 .expl-pied kbd { font-size: 10px; border: 1px solid var(--border, #bbb); border-radius: 4px; padding: 0 4px; margin-right: 2px; background: color-mix(in oklab, var(--muted, #888) 12%, transparent); }
+.expl-ag-fond { position: fixed; inset: 0; z-index: 5200; background: color-mix(in oklab, #000 35%, transparent); display: flex; align-items: center; justify-content: center; }
+.expl-ag {
+  width: min(max(70vw, 720px), calc(100vw - 16px)); height: min(max(70vh, 480px), calc(100vh - 16px)); display: flex; flex-direction: column; outline: 0;
+  border: 1px solid var(--border, #444); border-radius: 14px; background: var(--card, #fff); color: var(--foreground, #111); box-shadow: 0 28px 80px rgba(0, 0, 0, .55); overflow: hidden; font-size: 13px;
+}
+.expl-ag button { font: inherit; color: inherit; cursor: pointer; }
+.expl-ag :focus-visible { outline: 2px solid var(--signal, #1e88e5); outline-offset: 1px; }
+.expl-ag-tete { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border, #ddd); flex-wrap: wrap; }
+.expl-ag-titre { display: flex; align-items: baseline; gap: 10px; min-width: 0; flex: 1; flex-wrap: wrap; font-size: 15px; }
+.expl-ag-st { font-size: 12px; opacity: .8; }
+.expl-ag-outils { display: flex; align-items: center; gap: 6px; }
+.expl-ag-zoom { min-width: 58px; font-variant-numeric: tabular-nums; }
+.expl-ag-scene { position: relative; flex: 1; min-height: 0; overflow: hidden; cursor: grab; touch-action: none; user-select: none; }
+.expl-ag-scene.deplace { cursor: grabbing; }
+.expl-ag-scene.fond-clair { background: #f3f4f1; color: #15191d; }
+.expl-ag-scene.fond-sombre { background: #0b0f13; color: #e6edf3; }
+.expl-ag-contenu { position: absolute; inset: 0; transform-origin: 0 0; display: grid; place-items: center; padding: 18px; }
+.expl-ag-iso { position: absolute; inset: 18px; }
+.expl-ag-iso > svg { display: block; width: 100%; height: 100%; }
+.expl-ag-picto { width: 46%; height: 46%; fill: none; stroke: currentColor; stroke-width: 1.1; }
+.expl-ag-pied { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 8px 14px; border-top: 1px solid var(--border, #ddd); }
+.expl-ag-lib { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; opacity: .55; align-self: center; }
+.expl-ag-aide { font-size: 11px; opacity: .7; }
+.expl-ag-aide kbd { font-size: 10px; border: 1px solid var(--border, #bbb); border-radius: 4px; padding: 0 4px; margin-right: 2px; background: color-mix(in oklab, var(--muted, #888) 12%, transparent); }
 @media (max-width: 1000px) {
   .expl { grid-template-columns: 180px minmax(0, 1fr); grid-template-areas: 'tete tete' 'arbre centre' 'pied pied'; }
   .expl-detail { display: none; }

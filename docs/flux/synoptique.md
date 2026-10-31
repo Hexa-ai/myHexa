@@ -181,6 +181,42 @@ Tests : `tests/unit/lib/synoptic/iso-format.spec.ts` (format, rétrocompatibilit
 Grand dialogue (≈ 80 % de l'écran) `SynopticExplorateur.vue`, logique pure dans `lib/synoptic/explorateur.ts`. Ouvert par « Tout voir… » du Spotlight, par le bouton « ▦ Bibliothèque » des palettes 2D et iso, ou par Ctrl+Maj+K.
 - Arbre : Tout, Favoris, Récents, Familles (repliables, compteurs qui suivent recherche et filtre), Ma bibliothèque (une entrée par bibliothèque importée).
 - Recherche = index du Spotlight ; filtre 2D / Iso / Tout. Vignettes SVG rendues à la volée, en chargement paresseux (IntersectionObserver).
-- Détail : aperçu en grand, états (planche du symbole), variantes, mots-clés. Actions : ★ (touche F), « Poser » (↵, arme et ferme), glisser vers le dessin (iso).
+- Seul le **clic** (ou le clavier) sélectionne un symbole : le survol ne fait qu'un léger surlignage, donc l'état choisi dans le détail ne se perd pas. Pastille de statut sur chaque vignette iso : gris = brouillon, bleu = revu, vert = validé.
+- Détail : aperçu, états (planche du symbole), variantes, mots-clés. « ⤢ Agrandir » (ou Espace) ouvre l'aperçu en grand (≈ 70 % de l'écran) : symbole entier, états et variantes, fond clair ou sombre, zoom à la molette (glisser pour déplacer, double-clic = 100 %), ← → pour le symbole voisin. Actions : ★ (touche F), « Poser » (↵, arme et ferme), glisser vers le dessin (iso).
 - Import / export JSON : `bibliotheque.ts` ; un symbole de bibliothèque se pose en composition (`poserComposition`).
 - Palettes : Favoris, puis Récents, puis familles repliées. Favoris et récents sont partagés (stockage local) ; l'évènement `myhexa:preferences` les tient à jour.
+
+## Qualité des symboles
+
+La bibliothèque iso doit contenir **moins de symboles, mais mieux faits**. Le marché visé est la France (bâtiment tertiaire, industrie, énergie) : les références sont françaises et européennes.
+
+### Grille de critères
+
+Un symbole n'est « validé » que s'il respecte tous ces points :
+
+1. **Perspective juste** : tous les ronds sont des ellipses sur le plan xy, xz ou yz (jamais un `<circle>` plat).
+2. **Brides et tuyaux coaxiaux** : deux ports face à face d'un composant en ligne ont le même axe.
+3. **Parties cachées réellement cachées** : ce qui est derrière n'apparaît pas (roues, arrière des brides…).
+4. **Silhouette reconnaissable** au premier coup d'œil, à la taille d'une vignette.
+5. **3 tons, 2 à 3 détails signifiants**, pas de micro-détails.
+6. **Conforme à ce qu'on voit en France** (équipements, normes, repères européens).
+7. **Clair et sombre** : lisible sur les deux fonds.
+8. **États lisibles** : marche, défaut, etc. se distinguent sans légende.
+
+### Contrôles automatiques
+
+`app/src/lib/synoptic/iso/qualite/` ; test `tests/unit/lib/synoptic/qualite-symboles.spec.ts` ; rapport : `pnpm qualite:symboles` (JSON + Markdown dans `~/.hermes/cache/scratch/qualite/`, ou `--sortie`).
+Pour chaque symbole, dans chaque état et chaque variante (et 4 rotations) :
+- **erreurs dures** (le test échoue) : exception au rendu, taille ou SVG invalide, port hors de la boîte `taille()`, direction de port non unitaire, deux ports seuls face à face presque alignés mais décalés (≤ 15), texte rendu en miroir (déterminant négatif) ;
+- **avertissements** (rapport seulement) : pièces hors de la boîte, cercles non projetés (`<circle>` dont la transformation conserve les cercles, hors badges et LED), ports opposés très décalés (voulu ?), identifiants de port en double, mots-clés FR / EN absents, nom vide ou en doublon, dessin bien plus petit que la boîte.
+- Les erreurs dures déjà présentes à l'introduction du contrôle sont listées dans `tests/unit/lib/synoptic/fixtures/qualite-erreurs-connues.json` : le test échoue sur toute **nouvelle** erreur ; en corrigeant un symbole, on retire sa ligne (`pnpm qualite:symboles --maj-dette` réécrit la liste).
+
+### Planche de revue
+
+`pnpm qualite:revue` produit `revue.html` (page autonome) et une capture `revue_<famille>.png` par famille. Chaque symbole y est montré en grand, états marche et défaut, fond clair **et** sombre, avec son id, son nom, son statut et ses avertissements. Le relecteur coche « Validé » ou « À refaire », commente ; les décisions restent dans le navigateur (localStorage) et s'exportent en JSON (« Exporter »). `pnpm qualite:appliquer <revue-symboles-….json> [--dry]` les reporte dans le champ `statut` du fichier source du symbole (recherche de `id: '<id>'` ; une définition produite par une fabrique est signalée, à éditer à la main). « À refaire » remet le symbole en `brouillon`.
+
+### Cycle de vie
+
+`brouillon` (défaut) → `revu` (corrigé, en attente de validation) → `valide` (validé par la revue) ; `obsolete` = retiré des propositions (explorateur, Spotlight, palettes) mais toujours dessiné : un document existant qui l'utilise s'affiche comme avant (`remplacePar` indique le symbole de remplacement). Champs `statut` et `remplacePar` de `SymboleDef` ; règles de visibilité dans `lib/synoptic/statut.ts`.
+
+**Règle pour la diffusion publique : seuls les symboles « validés » seront proposés.** L'option existe (`OptionsStatut.seulementValides`, acceptée par `estPropose`, `symbolesProposes` et `entreesIso`) mais n'est **pas activée** : `OPTIONS_STATUT_DEFAUT.seulementValides = false`.

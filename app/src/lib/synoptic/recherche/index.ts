@@ -22,6 +22,8 @@ export interface Entree {
   /** ligne secondaire (type d'un élément, description d'une variable…) */
   detail?: string
   unite?: string
+  /** statut qualité d'un symbole iso (brouillon, revu, valide) : pastille de l'explorateur */
+  statut?: 'brouillon' | 'revu' | 'valide'
 }
 
 export interface Resultat {

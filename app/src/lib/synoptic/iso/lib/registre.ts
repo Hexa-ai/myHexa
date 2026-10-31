@@ -13,6 +13,11 @@ export const symbole = (id: string): SymboleDef => { const d = REG.get(id); if (
  *  @param etat    arret | marche | defaut | alarme | modulant | ouvert | ferme | inconnu | consigne | maintenance
  *  @param valeurs position %, niveau %, manuel, seuils, vitesse… */
 export function dessiner(type: string, params: Params = {}, etat: EtatNom = 'arret', valeurs: Valeurs = {}): Rendu {
+  return dessinerDetail(type, params, etat, valeurs).rendu
+}
+
+/** Comme `dessiner`, mais rend aussi le Builder (pièces, boîte locale) : sert aux contrôles qualité (iso/qualite). */
+export function dessinerDetail(type: string, params: Params = {}, etat: EtatNom = 'arret', valeurs: Valeurs = {}): { rendu: Rendu; builder: Builder; taille: [number, number, number] } {
   const d = symbole(type)
   const p: Params = { ...d.defauts, ...params }
   let [W, D, H] = d.taille(p)
@@ -21,7 +26,7 @@ export function dessiner(type: string, params: Params = {}, etat: EtatNom = 'arr
   else if (tilt === 'y' || tilt === 'yn') [D, H] = [H, D]
   const b = new Builder({ tilt, x: p.x ?? 0, y: p.y ?? 0, z: p.z ?? 0, rot: p.rot ?? 0, W, D, H, etat, val: valeurs, type, p })
   d.dessiner(b, p)
-  return b.finish()
+  return { rendu: b.finish(), builder: b, taille: [W, D, H] }
 }
 
 /** Dessine un symbole en alignant un de ses ports sur une cible (port ou point) — utile pour poser une vanne sur un tube. */

@@ -10,7 +10,10 @@
     "lint": "eslint . --fix",
     "format": "prettier --write src/",
     "typecheck": "vue-tsc --noEmit",
-    "test:unit": "vitest run"
+    "test:unit": "vitest run",
+    "qualite:symboles": "node scripts/qualite/lancer.mjs scripts/qualite/qualite-symboles.ts",
+    "qualite:revue": "node scripts/qualite/lancer.mjs scripts/qualite/revue.ts",
+    "qualite:appliquer": "node scripts/qualite/lancer.mjs scripts/qualite/appliquer_revue.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",
