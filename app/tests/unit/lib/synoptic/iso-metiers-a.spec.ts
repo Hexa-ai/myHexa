@@ -16,13 +16,21 @@ describe('toit à 2 pans', () => {
       const [a, b] = ['pan-av', 'pan-ar'].map((i) => g.faces.find((f) => f.id === i)!.pts)
       expect(a[0][2]).toBeCloseTo(b[0][2])
       expect(Math.hypot(a[0][0] - a[3][0], a[0][1] - a[3][1], a[0][2] - a[3][2])).toBeCloseTo(Math.hypot(b[0][0] - b[3][0], b[0][1] - b[3][1], b[0][2] - b[3][2]))
-      // fermé : chaque arête est partagée par exactement 2 faces
-      const k = (p: number[]) => p.map((x) => x.toFixed(4)).join(',')
-      const aretes = new Map<string, number>()
-      for (const f of g.faces) f.pts.forEach((p, i) => { const q = f.pts[(i + 1) % f.pts.length]; const e = [k(p), k(q)].sort().join('|'); aretes.set(e, (aretes.get(e) ?? 0) + 1) })
-      // les arêtes d'égout au mur (base des pignons) sont ouvertes sur le mur, toutes les autres sont à 2 faces
-      const seules = [...aretes.values()].filter((n) => n === 1).length
-      expect(seules).toBeLessThanOrEqual(6)
+      // alignement : les 3 sommets (coins du mur + faîtage) de chaque pignon sont dans le plan du pan qui le borde,
+      // donc les rampants du pignon prolongent exactement les pans (pas de décalage rampant / triangle)
+      for (const pan of ['pan-av', 'pan-ar']) {
+        const P = g.faces.find((f) => f.id === pan)!
+        const o = P.pts[2]
+        for (const pg of ['pignon-av', 'pignon-ar']) {
+          const G = g.faces.find((f) => f.id === pg)!
+          // coins du mur du côté de ce pan : le sommet du pignon (faîtage) et le coin dont le côté correspond au pan
+          const cote = (q: number[]) => (g.axe === 'x' ? Math.sign(q[1] - D / 2) : Math.sign(q[0] - W / 2))
+          const coteP = g.axe === 'x' ? Math.sign(P.pts[0][1] - D / 2) : Math.sign(P.pts[0][0] - W / 2)
+          for (const q of G.pts.filter((q) => cote(q) === coteP || cote(q) === 0)) {
+            expect(Math.abs((q[0] - o[0]) * P.n[0] + (q[1] - o[1]) * P.n[1] + (q[2] - o[2]) * P.n[2])).toBeLessThan(1e-6)
+          }
+        }
+      }
     })
     it(`le rampant passe par les coins du mur (${W}×${D})`, () => {
       const g = geomToit2Pans(W, D, 10, 8)
