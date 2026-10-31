@@ -4,7 +4,11 @@
 import type { CadreDessin, EtatOuvrage, ResumeSynoptique } from '@/lib/synoptic/resume'
 import SynopticPicto from './SynopticPicto.vue'
 
-defineProps<{ resume: ResumeSynoptique }>()
+defineProps<{
+  resume: ResumeSynoptique
+  /** vrai = toujours une colonne (aperçu 390 px de l'éditeur, quelle que soit la largeur de l'écran) */
+  telephone?: boolean
+}>()
 const emit = defineEmits<{ (e: 'ouvrir', cadre: CadreDessin | null): void }>()
 
 const LIBELLE_ETAT: Record<EtatOuvrage, string> = {
@@ -55,7 +59,7 @@ const PASTILLE: Record<EtatOuvrage, string> = {
       <span class="size-1.5 rounded-full bg-signal" />Aucune alarme active
     </p>
 
-    <div class="grid gap-2 sm:grid-cols-2">
+    <div class="grid gap-2" :class="telephone ? '' : 'sm:grid-cols-2'">
       <button
         v-for="c in resume.ouvrages"
         :key="c.id"

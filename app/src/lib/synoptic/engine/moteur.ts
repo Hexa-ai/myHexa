@@ -7,6 +7,7 @@
  * découpée en sections « MODULE : … » ; voir docs/flux/synoptique.md (carte des sections et marche à suivre pour ajouter un symbole).
  */
 import * as CVC from './cvc-modele'
+import { epingler as resumeEpingler } from '../resume-config'
 import { dessinerCta, dessinerHydro } from './cvc-dessin'
 import GEOM from './geom'
 import { appliquerRegle, estEmplacementEtat, OPERATEURS } from '../regles'
@@ -2054,6 +2055,11 @@ function htmlEquipement(k) {
   if (t === 'voyant') h += champ('Alarme si l’état vaut', `<select class="ed-in" data-f="alarme_si">${[['', 'jamais (information)'], ['1', '1'], ['0', '0']].map(([v, tx]) => `<option value="${v}" ${String(p.alarme_si == null ? '' : p.alarme_si) === v ? 'selected' : ''}>${tx}</option>`).join('')}</select>`);
   if (e.type === 'pompe') h += champ('Variante', `<select class="ed-in" data-f="variante">${[['', 'standard'], ['doseuse', 'doseuse'], ['vide_fut', 'vide-fût']].map(([v, tx]) => `<option value="${v}" ${(e.variante || '') === v ? 'selected' : ''}>${tx}</option>`).join('')}</select>`);
   h += '</section>';
+  // raccourci vers le résumé mobile (la liste complète des corrections est dans l'onglet « Résumé mobile » de l'éditeur)
+  if (!CVC.estTypeCvc(e.type) && e.type !== 'raccord') {
+    const co = M.resume && M.resume.equipements && M.resume.equipements[id] || {};
+    h += `<section class="ed-sec"><label class="ed-champ ed-case"><input type="checkbox" data-f="resume-epingle" data-testid="resume-epingle" ${co.epingle ? 'checked' : ''}> <span>Épingler dans le résumé mobile</span><small>${co.masque ? 'Masqué du résumé : épingler le remet. ' : ''}Toujours montré dans sa carte sur téléphone.</small></label></section>`;
+  }
   // emplacements
   const noms = [...new Set([...(SLOTS_TYPE[t] || []), ...Object.keys(e.slots || {})])];
   h += `<section class="ed-sec"><h4>Emplacements <span class="mono">${noms.length}</span></h4>${noms.map(nm => htmlEmplacement(e, nm)).join('') || '<div class="ed-desc">Aucun emplacement pour ce symbole.</div>'}`;
@@ -2128,6 +2134,7 @@ function appliquerChamp(el) {
     if (f === 'id') { const err = renommer(id, v); if (err) { byId('ed-err-id').textContent = err; return; } pousser(); redessinerTout(); return; }
     if (f === 'libelle') return valider(() => changerLibelle(id, v));
     if (f === 'taille') return valider(() => changerTaille(id, v));
+    if (f === 'resume-epingle') return valider(() => { const r = resumeEpingler(M.resume, id, !!el.checked); if (r) M.resume = r; else delete M.resume; });
     if (f === 'en-carte') return valider(() => { if (el.checked) enCarte(id); else depuisCarte(id); });
     if (f === 'grandeur') return valider(() => { e.grandeur = v; if (GRANDEURS[v]) e.params.unite = GRANDEURS[v].unite; });
     if (f === 'tremies') return valider(() => changerTremies(id, +v || 4));
@@ -2394,6 +2401,8 @@ const instance = {
   setCatalogue(c) { DATA.catalogue = c; },
   mode: basculerMode,
   getDoc: documentCourant,
+  /** remplace les corrections du résumé mobile (undefined = tout automatique) ; entre dans l'historique annuler / rétablir */
+  setResume(r) { if (r && Object.keys(r).length) M.resume = copie(r); else delete M.resume; pousser(); habillage(); },
   /** après un enregistrement réussi : le document courant devient la référence (plus « modifié ») */
   marquerEnregistre() { BROUILLON_IA = instantane(); majBarre(); habillage(); },
   estModifie: () => estModifie(),
