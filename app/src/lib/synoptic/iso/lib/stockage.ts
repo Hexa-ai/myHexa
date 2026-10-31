@@ -186,8 +186,11 @@ enregistrer({
     // agitateur
     if (p.agitateur) {
       const L = h - 12
-      agitateur(b, cx, cy, top + (p.toit === 'ouvert' ? 6 : 3), L + 3, !!(verre || p.toit === 'ouvert'), Math.min(18, r * 0.5), 1)
-      if (verre || p.toit === 'ouvert') tankRotors(b, cx, cy, top + 6, L + 3, Math.min(18, r * 0.5), p.helices ?? 1)
+      // UNE seule hélice par étage d'agitation : l'agitateur ne dessine que l'arbre (nbH = 0),
+      // les hélices visibles sont les rotors animés, posés sur le MÊME arbre (même zTop) — sinon doublon décalé.
+      const zAg = top + (p.toit === 'ouvert' ? 6 : 3), immerge = !!(verre || p.toit === 'ouvert')
+      agitateur(b, cx, cy, zAg, L + 3, immerge, Math.min(18, r * 0.5), 0)
+      if (immerge) tankRotors(b, cx, cy, zAg, L + 3, Math.min(18, r * 0.5), p.helices ?? 1)
     }
     // piquages : liste paramétrable (fond / paroi hauteur+angle / toit / trop-plein) ou jeu par défaut
     const zin = zl + h * 0.82, zout = zl + h * 0.12
