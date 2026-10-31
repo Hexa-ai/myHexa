@@ -79,9 +79,9 @@ function clavier(ev: KeyboardEvent) {
 
 /** raccourcis globaux : Ctrl+K partout ; « / » ou Espace seulement quand rien n'est en saisie */
 function global(ev: KeyboardEvent) {
-  if (ev.defaultPrevented) return
   if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'k') { ev.preventDefault(); ouvert.value ? fermer() : ouvrir(); return }
-  if (ouvert.value || ev.ctrlKey || ev.metaKey || ev.altKey) return
+  if (ouvert.value && ev.key === 'Escape') { ev.preventDefault(); fermer(); return }
+  if (ev.defaultPrevented || ouvert.value || ev.ctrlKey || ev.metaKey || ev.altKey) return
   if (ev.key !== '/' && ev.key !== ' ') return
   const t = document.activeElement as HTMLElement | null
   const saisie = !!t && (/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(t.tagName) || t.isContentEditable)
@@ -155,7 +155,7 @@ function glisser(ev: DragEvent, e: Entree) {
 </template>
 
 <style>
-.spot-fond { position: fixed; inset: 0; z-index: 300; background: color-mix(in oklab, #000 38%, transparent); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
+.spot-fond { position: fixed; inset: 0; z-index: 5000; background: color-mix(in oklab, #000 38%, transparent); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
 .spot { width: min(640px, 94vw); max-height: 70vh; display: flex; flex-direction: column; border: 1px solid var(--border, #444); border-radius: 12px; background: var(--card, #fff); color: var(--foreground, #111); box-shadow: 0 24px 60px rgba(0, 0, 0, .35); overflow: hidden; }
 .spot-tete { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border, #ddd); }
 .spot-loupe { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; opacity: .6; }

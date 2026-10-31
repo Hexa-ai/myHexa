@@ -38,6 +38,7 @@ const emit = defineEmits<{
   (e: 'change', iso: IsoSection): void
   (e: 'etat', etat: SynopticEtat): void
   (e: 'save'): void
+  (e: 'recherche'): void
 }>()
 
 // feuille de style des symboles : une seule fois dans la page
@@ -455,6 +456,8 @@ function touche(e: KeyboardEvent) {
   if (saisie) return
   const ctrl = e.ctrlKey || e.metaKey
   const k = e.key.toLowerCase()
+  // recherche Spotlight : Ctrl+K, « / » ou Espace (la vue la déclenche, car ce gestionnaire capture le clavier)
+  if ((ctrl && k === 'k') || (!ctrl && !e.altKey && (e.key === '/' || e.key === ' '))) { e.preventDefault(); emit('recherche'); return }
   if (ctrl && k === 'z' && !e.shiftKey) { e.preventDefault(); annuler(); return }
   if (ctrl && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); retablir(); return }
   if (ctrl && k === 's') { e.preventDefault(); emit('save'); return }

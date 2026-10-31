@@ -265,6 +265,7 @@ defineExpose({ recharger })
           editing
           full-frame
           @change="iso = $event"
+          @recherche="spotlight?.ouvrir()"
           @save="enregistrer()"
         />
         <SynopticCanvas
