@@ -1,9 +1,14 @@
 // Résumé lisible d'un synoptique (vue mobile) : alarmes actives + une carte par zone ou ouvrage principal.
 // Fonction pure construite depuis le document et les valeurs courantes, sans DOM ni moteur de dessin.
 // Les états suivent la même logique que le moteur (engine/moteur.ts) : sans variable reçue, un état reste « inconnu ».
-import type { SynopticDocument, SynopticEquipement } from './engine/types'
+// Les corrections de l'utilisateur (`modele.resume`, voir ResumeConfig) sont appliquées APRÈS le calcul automatique des groupes,
+// sans jamais retirer une alarme : un équipement masqué disparaît des pictogrammes et des valeurs, pas de la liste d'alarmes.
+import type { ResumeConfig, ResumeEquipement, SynopticDocument, SynopticEquipement } from './engine/types'
 import { appliquerRegle } from './regles'
-import { cartesCvc, estTypeCvc, modulesDe, etatModule, texteAlarmeModule, UNITES_SLOT, type FamillePictoCvc, type ParamsCta, type ParamsHydro } from './engine/cvc-modele'
+import { cartesCvc, estTypeCvc, modulesDe, etatModule, texteAlarmeModule, UNITES_SLOT, type ParamsCta, type ParamsHydro } from './engine/cvc-modele'
+import { familleDuType, type FamillePicto } from './familles-picto'
+
+export type { FamillePicto } from './familles-picto'
 
 export type EtatOuvrage = 'marche' | 'arret' | 'defaut' | 'ok' | 'inconnu'
 
@@ -28,8 +33,6 @@ export interface CadreDessin {
   h: number
 }
 
-/** famille de pictogramme affichable dans une carte */
-export type FamillePicto = 'pompe' | 'moteur' | 'ventilateur' | 'vanne' | 'cuve' | FamillePictoCvc
 export type EtatPicto = 'marche' | 'arret' | 'defaut' | 'ouvert' | 'ferme' | 'modulant' | 'inconnu'
 
 export interface PictoResume {
@@ -188,14 +191,82 @@ interface Position {
 interface Groupe {
   id: string
   titre: string
+  /** titre calculé automatiquement (avant renommage) */
+  titreAuto?: string
   membres: SynopticEquipement[]
+  /** carte créée par l'utilisateur */
+  perso?: boolean
 }
 
 const centre = (p: Position) => ({ x: p.x + p.w / 2, y: p.y + p.h / 2 })
 
-/** construit le résumé : alarmes actives puis cartes (les cartes en alarme d'abord) */
-export function construireResume(doc: SynopticDocument, values: Valeurs): ResumeSynoptique {
+export interface OptionsResume {
+  /** vrai = ignore `modele.resume` : calcul purement automatique (aperçu « avant », bouton « Rétablir l'automatique ») */
+  auto?: boolean
+}
+
+/** un équipement d'une carte, tel que l'éditeur du résumé le présente */
+export interface MembreDetail {
+  id: string
+  libelle: string
+  type: string
+  /** famille donnée par le type de symbole (familles-picto.ts), null si aucune */
+  familleAuto: FamillePicto | null
+  /** famille effective (après correction), null = pas de pictogramme */
+  famille: FamillePicto | null
+  epingle: boolean
+  masque: boolean
+  /** vrai si l'équipement est actuellement en alarme ou en défaut */
+  enAlarme: boolean
+}
+
+export interface ValeurPossible {
+  variable: string
+  libelle: string
+}
+
+/** une carte avec ce que l'éditeur doit savoir (y compris les cartes masquées) */
+export interface CarteDetail {
+  id: string
+  /** titre affiché (après renommage) */
+  titre: string
+  /** titre calculé automatiquement */
+  titreAuto: string
+  masquee: boolean
+  /** carte créée par l'utilisateur */
+  personnalisee: boolean
+  /** carte d'un bandeau CVC : seuls titre, ordre et masquage s'appliquent (pas d'équipement ni de valeur à choisir) */
+  cvc: boolean
+  membres: MembreDetail[]
+  /** variables que l'on peut choisir comme valeurs de la carte */
+  valeursPossibles: ValeurPossible[]
+  /** variables choisies par l'utilisateur (vide = automatique) */
+  valeursChoisies: string[]
+  carte: CarteResume
+}
+
+export interface DetailResume {
+  alarmes: AlarmeResume[]
+  /** toutes les cartes dans l'ordre d'affichage, masquées comprises */
+  cartes: CarteDetail[]
+}
+
+/** lit `modele.resume` en tolérant un contenu abîmé (JSON importé à la main) */
+export function lireConfigResume(brut: unknown): ResumeConfig | undefined {
+  if (!brut || typeof brut !== 'object') return undefined
+  return brut as ResumeConfig
+}
+
+/** construit le résumé : alarmes actives puis cartes (les cartes en alarme d'abord, sauf ordre choisi) */
+export function construireResume(doc: SynopticDocument, values: Valeurs, options: OptionsResume = {}): ResumeSynoptique {
+  const d = detailResume(doc, values, options)
+  return { alarmes: d.alarmes, ouvrages: d.cartes.filter((c) => !c.masquee).map((c) => c.carte) }
+}
+
+/** même calcul que construireResume, avec le détail utile à l'éditeur du résumé (cartes masquées, équipements, valeurs possibles) */
+export function detailResume(doc: SynopticDocument, values: Valeurs, options: OptionsResume = {}): DetailResume {
   const modele = doc.modele
+  const cfg = options.auto ? undefined : lireConfigResume(modele.resume)
   const tous = (modele.equipements ?? []).filter((e) => e.type !== 'raccord')
   const equipementsCvc = tous.filter((e) => estTypeCvc(e.type))
   const equipements = tous.filter((e) => !estTypeCvc(e.type))
@@ -211,16 +282,26 @@ export function construireResume(doc: SynopticDocument, values: Valeurs): Resume
     const cb = centre(pb)
     return Math.hypot(ca.x - cb.x, ca.y - cb.y)
   }
-  const groupes = formerGroupes(modele.zones ?? [], equipements, distance)
+  // 1. calcul automatique des groupes, 2. corrections de l'utilisateur (rattachements, titres)
+  const groupes = appliquerRattachements(formerGroupes(modele.zones ?? [], equipements, distance), equipements, cfg)
+  for (const g of groupes) {
+    g.titreAuto = g.titre
+    g.titre = cfg?.cartes?.[g.id]?.titre?.trim() || g.titre
+  }
 
-  // alarmes : un équipement en alarme ou en défaut, puis les voyants du bandeau
-  const titreDe = new Map<string, string>()
-  for (const g of groupes) for (const e of g.membres) titreDe.set(e.id, g.titre)
+  // alarmes : un équipement en alarme ou en défaut, puis les voyants du bandeau. Les alarmes ne dépendent JAMAIS des corrections
+  // (un équipement masqué ou une carte masquée garde ses alarmes dans la liste).
+  const groupeDe = new Map<string, Groupe>()
+  for (const g of groupes) for (const e of g.membres) groupeDe.set(e.id, g)
   const alarmes: AlarmeResume[] = []
+  const nbParCarte = new Map<string, number>()
+  const compte = (carteId: string) => nbParCarte.set(carteId, (nbParCarte.get(carteId) ?? 0) + 1)
   for (const e of equipements) {
     const etat = etatEquipement(e, values)
     if (etat === 'alarme' || etat === 'defaut') {
-      alarmes.push({ id: e.id, texte: texteAlarme(e, etat), ouvrage: titreDe.get(e.id) ?? null })
+      const g = groupeDe.get(e.id)
+      alarmes.push({ id: e.id, texte: texteAlarme(e, etat), ouvrage: g?.titre ?? null })
+      if (g) compte(g.id)
     }
   }
   for (const b of modele.bandeau ?? []) {
@@ -232,11 +313,64 @@ export function construireResume(doc: SynopticDocument, values: Valeurs): Resume
     }
   }
 
-  const cartes = groupes.map((g) => carte(g, values, positions, alarmes))
-  for (const e of equipementsCvc) cartes.push(...cartesElementCvc(e, values, positions, alarmes))
-  // les cartes en alarme passent devant ; l'ordre du document est conservé sinon
-  cartes.sort((a, b) => Number(b.alarmes > 0) - Number(a.alarmes > 0))
-  return { alarmes, ouvrages: cartes }
+  const liste: CarteDetail[] = groupes.map((g) => detailGroupe(g, values, positions, nbParCarte.get(g.id) ?? 0, cfg))
+  for (const e of equipementsCvc) {
+    for (const c of cartesElementCvc(e, values, positions, alarmes, (id, titre) => cfg?.cartes?.[id]?.titre?.trim() || titre)) {
+      liste.push({
+        id: c.id,
+        titre: c.titre,
+        titreAuto: c.titreAuto,
+        masquee: false,
+        personnalisee: false,
+        cvc: true,
+        membres: [],
+        valeursPossibles: [],
+        valeursChoisies: [],
+        carte: c.carte,
+      })
+    }
+  }
+  for (const c of liste) c.masquee = !!cfg?.cartes?.[c.id]?.masquee
+
+  // ordre : les cartes avec un rang choisi d'abord (par rang), puis les autres, les cartes en alarme devant (ordre du document sinon)
+  const rang = (c: CarteDetail) => cfg?.cartes?.[c.id]?.ordre
+  const avecRang = liste.filter((c) => Number.isFinite(rang(c)))
+  const sansRang = liste.filter((c) => !Number.isFinite(rang(c)))
+  avecRang.sort((a, b) => (rang(a) as number) - (rang(b) as number))
+  sansRang.sort((a, b) => Number(b.carte.alarmes > 0) - Number(a.carte.alarmes > 0))
+  return { alarmes, cartes: [...avecRang, ...sansRang] }
+}
+
+/** déplace les équipements vers les cartes demandées et ajoute les cartes personnalisées (les autres groupes ne changent pas) */
+function appliquerRattachements(groupes: Groupe[], equipements: SynopticEquipement[], cfg: ResumeConfig | undefined): Groupe[] {
+  if (!cfg) return groupes
+  const cible = new Map<string, string>()
+  for (const c of cfg.cartesPerso ?? []) for (const id of c.equipements ?? []) if (!cible.has(id)) cible.set(id, c.id)
+  for (const [id, o] of Object.entries(cfg.equipements ?? {})) if (o?.carte) cible.set(id, o.carte)
+  if (!cible.size && !cfg.cartesPerso?.length) return groupes
+
+  const idsAuto = new Set(groupes.map((g) => g.id))
+  const persos: Groupe[] = (cfg.cartesPerso ?? [])
+    .filter((c) => c?.id && !idsAuto.has(c.id))
+    .map((c) => ({ id: c.id, titre: String(c.titre || 'Carte'), membres: [], perso: true }))
+  const tous = [...groupes, ...persos]
+  const parId = new Map(tous.map((g) => [g.id, g]))
+  const equipement = new Map(equipements.map((e) => [e.id, e]))
+  const touches = new Set<Groupe>()
+  for (const [eid, cid] of cible) {
+    const e = equipement.get(eid)
+    const vers = parId.get(cid)
+    if (!e || !vers) continue
+    const depuis = tous.find((g) => g.membres.includes(e))
+    if (depuis === vers) continue
+    if (depuis) depuis.membres.splice(depuis.membres.indexOf(e), 1)
+    vers.membres.push(e)
+    touches.add(vers)
+  }
+  // une carte qui a reçu des équipements reprend l'ordre du document, quel que soit l'ordre des déplacements
+  const rangDoc = new Map(equipements.map((e, i) => [e.id, i]))
+  for (const g of touches) g.membres.sort((a, b) => (rangDoc.get(a.id) ?? 0) - (rangDoc.get(b.id) ?? 0))
+  return tous.filter((g) => g.membres.length)
 }
 
 /** cartes d'un bandeau CTA ou d'une ligne hydraulique : une carte par fonction (soufflage, reprise, récupération, batteries, départs…) */
@@ -245,7 +379,8 @@ function cartesElementCvc(
   v: Valeurs,
   positions: Map<string, Position>,
   alarmes: AlarmeResume[],
-): CarteResume[] {
+  titreChoisi: (idCarte: string, titreAuto: string) => string,
+): Array<{ id: string; titre: string; titreAuto: string; carte: CarteResume }> {
   const type = e.type as 'cta' | 'hydro'
   const params = e.params as (ParamsCta & ParamsHydro) | undefined
   const lecteur = (idModule: string, base: string) => lire(e, `${idModule}:${base}`, v)
@@ -254,19 +389,20 @@ function cartesElementCvc(
   const cartes = cartesCvc(type, params, lecteur, e.libelle)
   // sans aucune valeur reçue, une carte reste « inconnu » (pas de « marche » inventée)
   return cartes.map((c) => {
-    const titreAlarme = c.titre
+    const titreAlarme = titreChoisi(c.id, c.titre)
     for (const m of modulesDe(type, params).filter(({ m: mod }) => c.modules.includes(mod.id))) {
       if (etatModule(m.m, lecteur) === 'defaut') alarmes.push({ id: `${e.id}:${m.m.id}`, texte: texteAlarmeModule(m.m, type, lecteur), ouvrage: titreAlarme })
     }
-    return {
+    const carte: CarteResume = {
       id: c.id,
-      titre: c.titre,
+      titre: titreAlarme,
       etat: c.etat === 'ok' ? 'ok' : c.etat,
       alarmes: c.defauts.length,
       pictos: c.pictos.map((q) => ({ id: q.id, famille: q.famille, etat: q.etat === 'ok' ? 'inconnu' : (q.etat as EtatPicto), libelle: q.libelle, niveau: null })),
       valeurs: c.valeurs.map((x) => ({ libelle: x.libelle, texte: `${formaterNombre(x.valeur)}${UNITES_SLOT[x.base] ? ' ' + UNITES_SLOT[x.base] : ''}` })),
       cadre,
     }
+    return { id: c.id, titre: titreAlarme, titreAuto: c.titre, carte }
   })
 }
 
@@ -373,19 +509,20 @@ function plusProche(
   return meilleur
 }
 
-function carte(
+function detailGroupe(
   g: Groupe,
   v: Valeurs,
   positions: Map<string, Position>,
-  alarmes: AlarmeResume[],
-): CarteResume {
-  const nbAlarmes = alarmes.filter((a) => a.ouvrage === g.titre).length
+  nbAlarmes: number,
+  cfg: ResumeConfig | undefined,
+): CarteDetail {
   const etats = g.membres.map((e) => etatEquipement(e, v))
   const actionneurs = g.membres.filter((e) => TYPES_ACTIONNEUR.includes(typeEffectif(e)))
   const etatsActionneurs = actionneurs.map((e) => etatEquipement(e, v))
   const aDesDonnees = g.membres.some((e) =>
     Object.values(e.slots ?? {}).some((sp) => sp?.variable && v[sp.variable] !== undefined),
   )
+  // l'état de la carte tient compte de tous ses équipements, masqués compris
   let etat: EtatOuvrage = 'inconnu'
   if (nbAlarmes > 0) etat = 'defaut'
   else if (etatsActionneurs.includes('marche')) etat = 'marche'
@@ -401,36 +538,67 @@ function carte(
     const y1 = Math.max(...cadres.map((p) => p.y + p.h))
     cadre = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
   }
+  const corr = (e: SynopticEquipement): ResumeEquipement => cfg?.equipements?.[e.id] ?? {}
+  const options: OptionsPictos = {
+    epingles: new Set(g.membres.filter((e) => corr(e).epingle).map((e) => e.id)),
+    masques: new Set(g.membres.filter((e) => corr(e).masque).map((e) => e.id)),
+    familles: new Map(g.membres.filter((e) => corr(e).famille).map((e) => [e.id, corr(e).famille as FamillePicto | 'aucun'])),
+  }
+  const possibles = valeursPossibles(g.membres)
+  const choisies = (cfg?.cartes?.[g.id]?.valeurs ?? []).filter((x) => possibles.some((p) => p.variable === x)).slice(0, MAX_VALEURS)
+  const valeurs = choisies.length ? valeursChoisies(choisies, possibles, v) : valeursPrincipales(g.membres, v, options)
   return {
     id: g.id,
     titre: g.titre,
-    etat,
-    alarmes: nbAlarmes,
-    valeurs: valeursPrincipales(g.membres, v),
-    pictos: pictosDe(g.membres, v),
-    cadre,
+    titreAuto: g.titreAuto ?? g.titre,
+    masquee: false,
+    personnalisee: !!g.perso,
+    cvc: false,
+    membres: g.membres.map((e) => ({
+      id: e.id,
+      libelle: e.libelle,
+      type: typeEffectif(e),
+      familleAuto: familleDe(e),
+      famille: familleEffective(e, options),
+      epingle: options.epingles?.has(e.id) ?? false,
+      masque: options.masques?.has(e.id) ?? false,
+      enAlarme: ['alarme', 'defaut'].includes(etatEquipement(e, v)),
+    })),
+    valeursPossibles: possibles.map(({ variable, libelle }) => ({ variable, libelle })),
+    valeursChoisies: choisies,
+    carte: {
+      id: g.id,
+      titre: g.titre,
+      etat,
+      alarmes: nbAlarmes,
+      valeurs,
+      pictos: pictosDe(g.membres, v, options),
+      cadre,
+    },
   }
 }
 
 const MAX_PICTOS = 4
-const FAMILLE: Record<string, FamillePicto> = {
-  pompe: 'pompe',
-  moteur: 'moteur',
-  compresseur: 'moteur',
-  convoyeur: 'moteur',
-  variateur: 'moteur',
-  ventilateur: 'ventilateur',
-  vanne: 'vanne',
-  vanne_reg: 'vanne',
-  vanne_man: 'vanne',
-  vanne_3v: 'vanne',
-  cuve: 'cuve',
-}
 /** ordre d'affichage : l'ouvrage, puis ce qui tourne, puis les vannes */
 const ORDRE: FamillePicto[] = ['cuve', 'pompe', 'moteur', 'ventilateur', 'vanne']
 
+/** famille donnée par le type de symbole (table unique : familles-picto.ts) */
 export function familleDe(e: SynopticEquipement): FamillePicto | null {
-  return FAMILLE[typeEffectif(e)] ?? null
+  return familleDuType(typeEffectif(e))
+}
+
+/** corrections de pictogrammes d'une carte (tout est facultatif : sans options, le calcul est automatique) */
+export interface OptionsPictos {
+  epingles?: Set<string>
+  masques?: Set<string>
+  familles?: Map<string, FamillePicto | 'aucun'>
+}
+
+/** famille affichée : celle choisie par l'utilisateur (« aucun » = pas de pictogramme), sinon celle du type */
+function familleEffective(e: SynopticEquipement, o: OptionsPictos = {}): FamillePicto | null {
+  const f = o.familles?.get(e.id)
+  if (f === 'aucun') return null
+  return f ?? familleDe(e)
 }
 
 function etatPicto(e: SynopticEquipement, v: Valeurs): EtatPicto {
@@ -449,51 +617,84 @@ function niveauRelatif(e: SynopticEquipement, v: Valeurs): number | null {
   return Math.max(0, Math.min(1, brut / ref))
 }
 
-export function pictosDe(membres: SynopticEquipement[], v: Valeurs): PictoResume[] {
-  return membres
-    .map((e) => ({ e, famille: familleDe(e) }))
-    .filter((x): x is { e: SynopticEquipement; famille: FamillePicto } => !!x.famille)
-    .sort((a, b) => ORDRE.indexOf(a.famille) - ORDRE.indexOf(b.famille))
-    .slice(0, MAX_PICTOS)
-    .map(({ e, famille }) => ({
-      id: e.id,
-      famille,
-      etat: etatPicto(e, v),
-      libelle: e.libelle,
-      niveau: famille === 'cuve' ? niveauRelatif(e, v) : null,
-    }))
+/**
+ * pictogrammes d'une carte : 4 au plus, dans l'ordre cuve > pompe > moteur > ventilateur > vanne.
+ * Les équipements épinglés passent d'abord et ne comptent pas dans la limite ; les masqués (ou dont la famille est « aucun »)
+ * ne sont jamais montrés.
+ */
+export function pictosDe(membres: SynopticEquipement[], v: Valeurs, options: OptionsPictos = {}): PictoResume[] {
+  const candidats = membres
+    .filter((e) => !options.masques?.has(e.id))
+    .map((e) => ({ e, famille: familleEffective(e, options), epingle: !!options.epingles?.has(e.id) }))
+    .filter((x): x is { e: SynopticEquipement; famille: FamillePicto; epingle: boolean } => !!x.famille)
+  const parOrdre = (a: { famille: FamillePicto }, b: { famille: FamillePicto }) => ORDRE.indexOf(a.famille) - ORDRE.indexOf(b.famille)
+  const epingles = candidats.filter((x) => x.epingle).sort(parOrdre)
+  const autres = candidats.filter((x) => !x.epingle).sort(parOrdre)
+  const retenus = [...epingles, ...autres.slice(0, Math.max(0, MAX_PICTOS - epingles.length))].sort(parOrdre)
+  return retenus.map(({ e, famille }) => ({
+    id: e.id,
+    famille,
+    etat: etatPicto(e, v),
+    libelle: e.libelle,
+    niveau: famille === 'cuve' ? niveauRelatif(e, v) : null,
+  }))
 }
 
-/** niveau de l'ouvrage, mesures, vitesses, puis nombre de vannes ouvertes : 3 valeurs au plus, sans doublon de variable */
-function valeursPrincipales(membres: SynopticEquipement[], v: Valeurs): ValeurResume[] {
+interface ValeurBrute extends ValeurResume {
+  variable: string
+}
+
+/** les trois valeurs « principales » d'un équipement : niveau, mesure, vitesse (undefined si la variable n'a pas répondu) */
+function valNiveau(e: SynopticEquipement, v: Valeurs): ValeurBrute | null {
+  const sp = e.slots?.niveau
+  const brut = sp?.variable ? v[sp.variable] : undefined
+  if (!sp?.variable || brut === undefined) return null
+  const p = (e.params ?? {}) as { unite_niveau?: string }
+  return { variable: sp.variable, libelle: 'Niveau', texte: `${formaterNombre(brut)} ${p.unite_niveau || '%'}` }
+}
+function valMesure(e: SynopticEquipement, v: Valeurs): ValeurBrute | null {
+  if (e.type !== 'mesure') return null
+  const sp = e.slots?.valeur
+  const brut = sp?.variable ? v[sp.variable] : undefined
+  if (!sp?.variable || brut === undefined) return null
+  const unite = (e.params as { unite?: string } | undefined)?.unite
+  return { variable: sp.variable, libelle: e.libelle, texte: `${formaterNombre(brut)}${unite ? ' ' + unite : ''}` }
+}
+function valVitesse(e: SynopticEquipement, v: Valeurs): ValeurBrute | null {
+  const sp = e.slots?.vitesse
+  const brut = sp?.variable ? v[sp.variable] : undefined
+  if (!sp?.variable || brut === undefined) return null
+  return { variable: sp.variable, libelle: 'Vitesse', texte: `${formaterNombre(brut)} %` }
+}
+
+/** niveau de l'ouvrage, mesures, vitesses, puis nombre de vannes ouvertes : 3 valeurs au plus, sans doublon de variable ;
+ *  les équipements épinglés donnent leurs valeurs en premier, hors limite ; les masqués n'en donnent aucune */
+function valeursPrincipales(membres: SynopticEquipement[], v: Valeurs, options: OptionsPictos = {}): ValeurResume[] {
   const out: ValeurResume[] = []
   const vues = new Set<string>()
-  const ajoute = (libelle: string, texte: string, variable?: string | null) => {
-    if (out.length >= MAX_VALEURS || (variable && vues.has(variable))) return
+  const ajoute = (libelle: string, texte: string, variable?: string | null, force = false) => {
+    if ((!force && out.length >= MAX_VALEURS) || (variable && vues.has(variable))) return
     if (variable) vues.add(variable)
     out.push({ libelle, texte })
   }
+  const visibles = membres.filter((e) => !options.masques?.has(e.id))
 
-  for (const e of membres) {
-    const sp = e.slots?.niveau
-    const brut = sp?.variable ? v[sp.variable] : undefined
-    if (brut === undefined) continue
-    const p = (e.params ?? {}) as { unite_niveau?: string }
-    ajoute('Niveau', `${formaterNombre(brut)} ${p.unite_niveau || '%'}`, sp?.variable)
+  for (const e of visibles.filter((q) => options.epingles?.has(q.id))) {
+    for (const x of [valNiveau(e, v), valMesure(e, v), valVitesse(e, v)]) if (x) ajoute(x.libelle, x.texte, x.variable, true)
   }
-  for (const e of membres.filter((q) => q.type === 'mesure')) {
-    const sp = e.slots?.valeur
-    const brut = sp?.variable ? v[sp.variable] : undefined
-    if (brut === undefined) continue
-    const unite = (e.params as { unite?: string } | undefined)?.unite
-    ajoute(e.libelle, `${formaterNombre(brut)}${unite ? ' ' + unite : ''}`, sp?.variable)
+  for (const e of visibles) {
+    const x = valNiveau(e, v)
+    if (x) ajoute(x.libelle, x.texte, x.variable)
   }
-  for (const e of membres) {
-    const sp = e.slots?.vitesse
-    const brut = sp?.variable ? v[sp.variable] : undefined
-    if (brut !== undefined) ajoute('Vitesse', `${formaterNombre(brut)} %`, sp?.variable)
+  for (const e of visibles) {
+    const x = valMesure(e, v)
+    if (x) ajoute(x.libelle, x.texte, x.variable)
   }
-  const vannes = membres.filter((e) => ['vanne', 'vanne_reg', 'vanne_man', 'vanne_3v'].includes(e.type))
+  for (const e of visibles) {
+    const x = valVitesse(e, v)
+    if (x) ajoute(x.libelle, x.texte, x.variable)
+  }
+  const vannes = visibles.filter((e) => ['vanne', 'vanne_reg', 'vanne_man', 'vanne_3v'].includes(e.type))
   const etatsVannes = vannes.map((e) => etatEquipement(e, v))
   const connues = etatsVannes.filter((s) => s === 'ouvert' || s === 'ferme')
   if (vannes.length > 1 && connues.length) {
@@ -501,4 +702,37 @@ function valeursPrincipales(membres: SynopticEquipement[], v: Valeurs): ValeurRe
     ajoute('Vannes ouvertes', `${ouvertes} / ${vannes.length}`)
   }
   return out
+}
+
+/** emplacements à valeur analogique (hors états marche / défaut / ouvert…) */
+const SLOTS_ETAT = ['marche', 'defaut', 'ouvert', 'ferme', 'sorti', 'rentre', 'declenche', 'colmatage', 'etat']
+
+interface PossibleBrute extends ValeurPossible {
+  unite: string
+}
+
+/** variables analogiques des équipements d'une carte, proposées au choix des valeurs affichées */
+export function valeursPossibles(membres: SynopticEquipement[]): PossibleBrute[] {
+  const out: PossibleBrute[] = []
+  const vues = new Set<string>()
+  for (const e of membres) {
+    const p = (e.params ?? {}) as { unite?: string; unite_niveau?: string }
+    for (const [nom, sp] of Object.entries(e.slots ?? {})) {
+      if (!sp?.variable || vues.has(sp.variable) || SLOTS_ETAT.includes(nom)) continue
+      vues.add(sp.variable)
+      const unite = nom === 'niveau' ? p.unite_niveau || '%' : nom === 'vitesse' ? '%' : nom === 'valeur' ? p.unite || '' : UNITES_SLOT[nom] || ''
+      const libelle = nom === 'niveau' ? `Niveau · ${e.libelle}` : nom === 'valeur' ? e.libelle : `${e.libelle} · ${nom}`
+      out.push({ variable: sp.variable, libelle, unite })
+    }
+  }
+  return out
+}
+
+/** valeurs choisies par l'utilisateur : une ligne par variable, « — » tant que la variable n'a pas répondu */
+function valeursChoisies(variables: string[], possibles: PossibleBrute[], v: Valeurs): ValeurResume[] {
+  return variables.map((nom) => {
+    const p = possibles.find((x) => x.variable === nom) as PossibleBrute
+    const brut = v[nom]
+    return { libelle: p.libelle, texte: brut === undefined ? '—' : `${formaterNombre(brut)}${p.unite ? ' ' + p.unite : ''}` }
+  })
 }

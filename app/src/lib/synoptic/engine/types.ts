@@ -1,4 +1,5 @@
 // Types publics du moteur de synoptique (l'intérieur du moteur n'est pas typé : voir moteur.ts).
+import type { FamillePicto } from '../familles-picto'
 
 /** Document d'un synoptique tel que stocké dans synoptic_versions.doc */
 export interface SynopticDocument {
@@ -38,7 +39,44 @@ export interface SynopticModele {
   bandeau?: Array<{ variable?: string; [k: string]: unknown }>
   legende?: Record<string, string>
   bibliotheque?: Array<Record<string, unknown>>
+  /** corrections du résumé mobile (absent = tout automatique) */
+  resume?: ResumeConfig
   [k: string]: unknown
+}
+
+/** correction d'un équipement dans le résumé mobile (chaque champ est facultatif) */
+export interface ResumeEquipement {
+  /** toujours montré (pictogramme et valeur) dans sa carte, avant l'ordre automatique et sans limite */
+  epingle?: boolean
+  /** jamais montré (pictogramme, valeur) ; ses alarmes restent visibles */
+  masque?: boolean
+  /** carte forcée : id d'une carte automatique (zone ou ouvrage) ; une carte personnalisée se règle dans `cartesPerso` */
+  carte?: string
+  /** famille de pictogramme forcée ; 'aucun' = pas de pictogramme */
+  famille?: FamillePicto | 'aucun'
+}
+
+/** correction d'une carte (id de carte automatique ou de carte personnalisée) */
+export interface ResumeCarte {
+  titre?: string
+  /** rang d'affichage (les cartes sans rang suivent, dans l'ordre automatique) */
+  ordre?: number
+  masquee?: boolean
+  /** variables affichées, 3 au plus ; absent = choix automatique */
+  valeurs?: string[]
+}
+
+export interface ResumeCartePerso {
+  id: string
+  titre: string
+  /** ids des équipements rattachés à cette carte */
+  equipements: string[]
+}
+
+export interface ResumeConfig {
+  equipements?: Record<string, ResumeEquipement>
+  cartes?: Record<string, ResumeCarte>
+  cartesPerso?: ResumeCartePerso[]
 }
 
 export interface SynopticLayout {
@@ -100,6 +138,8 @@ export interface SynopticInstance {
   /** true = édition, false = consultation */
   mode(edition: boolean): void
   getDoc(): SynopticDocument
+  /** remplace les corrections du résumé mobile (undefined = tout automatique) */
+  setResume(r: ResumeConfig | undefined): void
   marquerEnregistre(): void
   estModifie(): boolean
   importerTexte(txt: string): boolean
