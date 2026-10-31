@@ -11,7 +11,8 @@ import type { Params, EtatNom, Valeurs, Fluide } from './types'
 export const CTA_D = 66       // profondeur
 export const CTA_HB = 5       // hauteur du châssis
 const PL: [EtatNom, Valeurs?, number?][] = [['arret'], ['marche'], ['defaut'], ['alarme'], ['consigne', { manuel: true }], ['inconnu'], ['marche', {}, 90], ['arret', {}, 90]]
-const PLPOS: [EtatNom, Valeurs?, number?][] = [['ferme', { position: 0 }], ['modulant', { position: 35 }], ['modulant', { position: 70 }], ['ouvert', { position: 100 }], ['defaut', { position: 50 }], ['alarme'], ['consigne', { manuel: true, position: 60 }], ['inconnu'], ['ouvert', { position: 100 }, 90]]
+// planche de registre : 4 états nets (fermé / ouvert / modulant 50 % / défaut) + rotation 90° ; pas de combinaisons ambiguës
+const PLPOS: [EtatNom, Valeurs?, number?][] = [['ferme', { position: 0 }], ['ouvert', { position: 100 }], ['modulant', { position: 50 }], ['defaut', { position: 0 }], ['ouvert', { position: 100 }, 90]]
 
 const fl = (f: Fluide, inner: string) => `<g class="fl-${f}">${inner}</g>`
 /** flux d'air animé (visible en marche) : traits qui défilent selon +x */
@@ -300,8 +301,22 @@ enregistrer({
     const cx = L / 2, cz = mid, ry = (z1 - z0) / 2 - 2, hw = (u1 - u0) / 2 - 3
     const dm = `M${cx - hw} ${cz}L${cx} ${cz + ry}L${cx + hw} ${cz}L${cx} ${cz - ry}Z`
     s += d2(dm, 'fw')
-    const n = 12
-    for (let i = 1; i < n; i++) { const k = i / n; s += `<path class="ed2" style="stroke-opacity:.55" d="M${cx - hw * (1 - k)} ${cz + ry * k}L${cx + hw * k} ${cz - ry * (1 - k)}"/>` }
+    // plaques : bandes diagonales alternées (air neuf / air repris), plus de quadrillage ; flèches d'entrée/sortie sur les 4 côtés
+    const n = 8
+    const A = (k: number): [number, number] => [cx - hw * (1 - k), cz + ry * k], B = (k: number): [number, number] => [cx + hw * k, cz - ry * (1 - k)]
+    for (let i = 0; i < n; i++) {
+      const [a0, a1, b0, b1] = [A(i / n), A((i + 1) / n), B(i / n), B((i + 1) / n)]
+      s += `<g class="fl-${i % 2 ? 'air_repris' : 'air_souffle'}"><path class="fl" style="opacity:.8" d="M${a0}L${a1}L${b1}L${b0}Z"/></g>`
+    }
+    const tri = (x: number, z: number, dx: number, dz: number, f: string) => {
+      const d = `M${x - dz * 3.2 - dx * 3} ${z + dx * 3.2 - dz * 3}L${x + dx * 4} ${z + dz * 4}L${x + dz * 3.2 - dx * 3} ${z - dx * 3.2 - dz * 3}Z`
+      return `<g class="fl-${f}"><path class="fl" d="${d}"/></g><path class="ed" d="${d}"/>`
+    }
+    // neuf : entre à gauche-bas vers le haut-droit (flèches sur les arêtes L-B et T-R) ; repris : entre à gauche-haut vers le bas-droit (arêtes L-T et B-R)
+    const mx = (u: [number, number], v: [number, number]): [number, number] => [(u[0] + v[0]) / 2, (u[1] + v[1]) / 2]
+    const eLT = mx(A(0), A(1)), eBR = mx(B(0), B(1)), eLB = mx(A(0), B(0)), eTR = mx(A(1), B(1))
+    s += tri(eLT[0] - 5, eLT[1] + 4, 0.7, -0.7, 'air_souffle') + tri(eBR[0] + 6, eBR[1] - 4, 0.7, -0.7, 'air_souffle')
+    s += tri(eLB[0] - 5, eLB[1] - 4, 0.7, 0.7, 'air_repris') + tri(eTR[0] + 6, eTR[1] + 4, 0.7, 0.7, 'air_repris')
     s += d2(dm, 'ed')
     // flux : soufflage (bas, vers +x) / extraction (haut, vers −x)
     s += `<g class="fl-air_souffle"><path class="fl" d="M${u0} ${z0 + 6}H${u1}V${z0 + 9}H${u0}Z" style="opacity:.6"/></g>` + cflow(u0, u1, [z0 + 7.5])
@@ -374,23 +389,20 @@ base('piege_son', 'Piège à son (baffles absorbants)', 100, { fluide: 'air_souf
 
 // ───────── ventilateur plug-fan (roue visible par le hublot)
 enregistrer({
-  id: 'cta.ventilateur', famille: 'CTA', nom: 'Ventilateur plug-fan (roue visible par la porte)',
+  id: 'cta.ventilateur', famille: 'CTA', nom: 'Ventilateur plug-fan (roue dans la section, vue au refoulement)', statut: 'revu',
   taille: (p) => [p.L ?? 100, CTA_D + 22, (p.h ?? 62) + CTA_HB], defauts: { h: 62, L: 100, fluide: 'air_souffle' }, planche: PL,
   dessiner(b: Builder, p: Params) {
     const L = p.L ?? 100, H = p.h, D = CTA_D, zb = CTA_HB
     const c = caisson(b, L, H, p.fluide, { fenetre: false, poignees: false })
     const cs = b.parts[1]
-    const cx = L * 0.5, cz = zb + H / 2, R = Math.min(H / 2 - 7, 24)
-    let s = c2(cx, cz, R + 5, 'ed') + c2(cx, cz, R + 3, 'in')
-    // roue vue de face (axe y) : tourne en marche
-    const wheel = `<g transform="translate(${cx} ${cz})"><g class="spin">${roueAubes(R, 11).replace(/<circle class="fm"[^>]*>/, '<circle class="fb" cx="0" cy="0" r="' + R + '"/>')}</g></g>`
-    s += wheel
-    s += `<path class="ed" d="M${cx - R - 5} ${cz - R - 5}H${cx - R - 12}V${cz + R + 5}H${cx - R - 5}"/>`
-    vue(b, cs, s)
-    // porte de visite à charnières et poignée
-    b.box(cx + R + 8, D, cz - 6, 2.4, 2.6, 12, 'mm')
-    // moteur arrière (côté +x, sur la face) + variateur
-    const mo = b.cylX(L - 4, D / 2, cz, 9, 12, 'mb'); b.rings(mo, [L - 4, D / 2, cz], [L + 8, D / 2, cz], 9, [0.33, 0.66])
+    // plug fan : la roue est dans le plan de la SECTION du caisson (axe x = sens du flux). On la voit en ellipse par l'ouverture de refoulement (face +x).
+    const cz = zb + H / 2, R = Math.min(H / 2 - 7, D / 2 - 7, 24), cyc = D / 2
+    const ouv = r2(cyc - R - 5, cz - R - 5, 2 * R + 10, 2 * R + 10, 'ed', 2) + r2(cyc - R - 3.5, cz - R - 3.5, 2 * R + 7, 2 * R + 7, 'in', 1.5)
+    const wheel = `<g transform="translate(${cyc} ${cz})"><g class="spin">${roueAubes(R, 11).replace(/<circle class="fm"[^>]*>/, '<circle class="fb" cx="0" cy="0" r="' + R + '"/>')}</g></g>`
+    b.pl('yz', L + 0.05, ouv + wheel + c2(cyc, cz, 2.2, 'fd'), cs)
+    // porte de visite sur la face avant (poignée seule, la roue n'est plus vue par là)
+    b.box(L * 0.5 + R, D, cz - 6, 2.4, 2.6, 12, 'mm')
+    const cx = L * 0.5
     // flèche de sens
     const sg = p.sens === -1 ? -1 : 1
     b.pl('xz', D + 0.15, chev(L - 14, zb + 7, 1.2 * sg) + chev(L - 20, zb + 7, 1.2 * sg), cs)

@@ -69,115 +69,137 @@ enregistrer({
 })
 
 enregistrer({
-  id: 'traitement.echangeur_plaques', famille: 'Traitement', nom: 'Échangeur à plaques (bâti, tirants, 4 piquages)',
-  taille: (p) => [(p.n ?? 20) * 2.8 + 40, 54, 98], defauts: { n: 20, dn: 4, fluide: 'eau_chaude_aller' }, variantes: ['n=8..40'], planche: [['arret'], ['marche'], ['alarme'], ['defaut'], ['consigne'], ['inconnu'], ['marche', {}, 90]],
+  id: 'traitement.echangeur_plaques', famille: 'Traitement', nom: 'Échangeur à plaques (bâti, tirants, 4 piquages en plaque d\'extrémité)', statut: 'revu',
+  taille: (p) => [(p.n ?? 20) * 2.8 + 52, 54, 104], defauts: { n: 20, dn: 4, fluide: 'eau_chaude_aller' }, variantes: ['n=8..40'], planche: [['arret'], ['marche'], ['alarme'], ['defaut'], ['consigne'], ['inconnu'], ['marche', {}, 90]],
   dessiner(b: Builder, p: Params) {
-    const n = p.n, T = n * 2.8, x0 = 14, W = T + 28, r = p.dn
-    // pieds + règle supérieure et inférieure
-    b.box(x0 - 14, 4, 0, W, 46, 5, 'mm')
-    b.box(x0 - 2, 8, 5, 4, 38, 88, 'mm')                       // plaque fixe
-    b.box(x0 + T + 8, 8, 5, 4, 38, 88, 'mm')                    // plaque mobile
-    // paquet de plaques : bandes avec joints colorés (chaud / froid alternés)
-    const pk = b.box(x0 + 2, 10, 8, T + 6, 34, 82, 'mb')
+    const n = p.n, T = n * 2.8, x0 = 12, r = p.dn
+    const xf = x0 + 5 + T + 2                                   // plaque fixe (côté +x, face visible) : porte les 4 piquages
+    // plaque mobile à gauche (x0), paquet de plaques, plaque fixe à droite : grandes faces dans le plan y-z, vues de côté
+    b.box(x0 - 6, 4, 0, T + 28, 46, 5, 'mm')                       // longeron de pied
+    b.box(x0, 8, 5, 4, 38, 90, 'mm')
+    const pk = b.box(x0 + 5, 10, 8, T, 34, 84, 'mb')
     let s = ''
-    for (let i = 0; i <= n; i++) s += l2(x0 + 2 + ((T + 6) * i) / n, 8, x0 + 2 + ((T + 6) * i) / n, 90, i % 2 ? 'ed2' : 'ed')
+    for (let i = 0; i <= n; i++) s += l2(x0 + 5 + (T * i) / n, 8, x0 + 5 + (T * i) / n, 90, i % 2 ? 'ed2' : 'ed')
     b.pl('xz', 44, s, pk)
-    // tirants + écrous
-    for (const [y, z] of [[10, 12], [10, 80], [44, 12], [44, 80]] as const) { b.cylX(x0 - 6, y, z, 1.4, T + 28, 'md'); b.cylX(x0 + T + 12, y, z, 2.4, 3, 'mm') }
-    b.cylX(x0 + T + 11, 14, 18, 0.1, 0.1, 'mm')
-    // rail supérieur de guidage
-    b.cylX(x0 - 10, 27, 94, 1.8, T + 40, 'mm')
-    // 4 piquages sur la plaque fixe (côté -x non visible) → on les met sur le dessus/dessous côté +y visible
-    buse(b, 'prim_in', [x0 + 6, 18, 90], 'z', 1, 14, r, 'eau_chaude_aller')
-    buse(b, 'prim_out', [x0 + 6, 18, 8], 'z', -1, 1, r, 'eau_chaude_retour')
-    buse(b, 'sec_in', [x0 + 6 + 14, 36, 8], 'y', 1, 12, r, 'eau')
-    buse(b, 'sec_out', [x0 + 6 + 14, 36, 90], 'y', 1, 12, r, 'eau')
-    b.anchor('badge', [x0 + T / 2, 27, 116]); b.anchor('haut', [x0 + T / 2, 27, 106])
+    b.box(xf, 8, 5, 5, 38, 90, 'mm')
+    // 2 barres porteuses (haute et basse) + tirants aux 4 coins, écrous côté mobile
+    for (const z of [98, 3]) b.cylX(x0 - 4, 27, z, 1.8, xf - x0 + 14, 'mm')
+    for (const [y, z] of [[11, 14], [11, 86], [43, 14], [43, 86]] as const) { b.cylX(x0 - 3, y, z, 1.3, xf - x0 + 4, 'md'); b.cylX(x0 - 3, y, z, 2.3, 2.5, 'mm') }
+    // 4 piquages COAXIAUX (axe x) sur la face +x de la plaque fixe, en rectangle propre
+    buse(b, 'prim_in', [xf + 5, 17, 76], 'x', 1, 10, r, 'eau_chaude_aller')
+    buse(b, 'prim_out', [xf + 5, 17, 20], 'x', 1, 10, r, 'eau_chaude_retour')
+    buse(b, 'sec_out', [xf + 5, 37, 76], 'x', 1, 10, r, 'eau')
+    buse(b, 'sec_in', [xf + 5, 37, 20], 'x', 1, 10, r, 'eau')
+    b.anchor('badge', [x0 + T / 2, 27, 114]); b.anchor('haut', [x0 + T / 2, 27, 104])
   },
 })
 
 enregistrer({
-  id: 'traitement.echangeur_tubulaire', famille: 'Traitement', nom: 'Échangeur tubulaire (calandre, boîtes de distribution)',
-  taille: () => [150, 56, 66], defauts: { dn: 4, fluide: 'vapeur' }, planche: [['arret'], ['marche'], ['alarme'], ['defaut'], ['consigne'], ['inconnu'], ['marche', {}, 90]],
+  id: 'traitement.echangeur_tubulaire', famille: 'Traitement', nom: 'Échangeur tubulaire (calandre, boîte de tête)', statut: 'revu',
+  taille: () => [150, 56, 78], defauts: { dn: 4, fluide: 'vapeur' }, planche: [['arret'], ['marche'], ['alarme'], ['defaut'], ['consigne'], ['inconnu'], ['marche', {}, 90]],
   dessiner(b: Builder, p: Params) {
     const cy = 28, zc = 34, r = p.dn
-    for (const x of [30, 112]) { b.box(x - 7, cy - 14, 0, 14, 28, zc - 17, 'mm'); b.box(x - 9, cy - 15, 0, 18, 30, 2, 'mm') }
-    const sh = b.cylX(18, cy, zc, 17, 114, 'mb'); b.rings(sh, [18, cy, zc], [132, cy, zc], 17, [0.2, 0.4, 0.6, 0.8], 'ed2')
-    for (const [x, sg] of [[12, -1], [132, 1]] as const) {
-      b.cylX(x - (sg < 0 ? 0 : 0), cy, zc, 19, 6, 'mm')
-      b.cylX(sg < 0 ? 0 : 138, cy, zc, sg < 0 ? 17 : 17, 12, 'mb', sg < 0 ? 12 : 17)
-    }
-    b.cylX(138, cy, zc, 17, 8, 'mb', 12); b.cylX(146, cy, zc, 3, 4, 'mm')
-    b.pl('yz', 150, c2(cy, zc, 10, 'ed2') + c2(cy, zc, 3, 'fd'), undefined, [cy - 12, zc - 12, cy + 12, zc + 12], 'mm')
-    buse(b, 'prim_in', [40, cy, zc + 16], 'z', 1, 14, r * 1.2, 'vapeur')
-    buse(b, 'prim_out', [100, cy, zc - 16], 'z', -1, 1, r, 'condensat')
-    buse(b, 'sec_in', [4, cy + 6, zc - 8], 'y', 1, 12, r, 'eau')
-    buse(b, 'sec_out', [140, cy + 6, zc + 8], 'y', 1, 12, r, 'eau_chaude_aller')
-    b.anchor('badge', [75, cy, zc + 44])
+    for (const x of [34, 112]) { b.box(x - 7, cy - 14, 0, 14, 28, zc - 17, 'mm'); b.box(x - 9, cy - 15, 0, 18, 30, 2, 'mm') }
+    // calandre + brides de plaque tubulaire, coaxiales à la calandre
+    const sh = b.cylX(20, cy, zc, 17, 112, 'mb'); b.rings(sh, [20, cy, zc], [132, cy, zc], 17, [0.25, 0.5, 0.75], 'ed2')
+    b.flange([20, cy, zc], 'x', 20.5, 3, 12); b.flange([129, cy, zc], 'x', 20.5, 3, 12)
+    // boîte de tête (gauche, 2 tubulures) et fond bombé (droite)
+    const bt = b.cylX(4, cy, zc, 17, 16, 'mb'); b.rings(bt, [4, cy, zc], [20, cy, zc], 17, [0.5], 'ed2')
+    b.cylX(132, cy, zc, 17, 12, 'mb', 9); b.cylX(144, cy, zc, 9, 3, 'mm')
+    // 2 piquages de calandre (côté fluide chaud) : entrée dessus, sortie dessous, verticaux
+    buse(b, 'prim_in', [76, cy, zc + 17], 'z', 1, 13, r * 1.2, 'vapeur')
+    buse(b, 'prim_out', [100, cy, zc - 17], 'z', -1, 11, r, 'condensat')
+    // 2 tubulures de la boîte de tête (fluide dans les tubes) : entrée dessus, sortie dessous, au même x
+    buse(b, 'sec_in', [12, cy, zc + 17], 'z', 1, 13, r, 'eau')
+    buse(b, 'sec_out', [12, cy, zc - 17], 'z', -1, 11, r, 'eau_chaude_aller')
+    b.anchor('badge', [75, cy, zc + 48])
   },
 })
 
 enregistrer({
-  id: 'traitement.separateur', famille: 'Traitement', nom: 'Séparateur (hydrocyclone / dégazeur vertical)',
-  taille: () => [70, 70, 120], defauts: { dn: 4, fluide: 'eau' }, planche: PL.slice(0, 6),
+  id: 'traitement.separateur', famille: 'Traitement', nom: 'Séparateur (hydrocyclone / dégazeur vertical)', statut: 'revu',
+  taille: () => [70, 70, 128], defauts: { dn: 4, fluide: 'eau' }, planche: PL.slice(0, 6),
   dessiner(b: Builder, p: Params) {
     const cx = 35, cy = 35, r = 18
-    for (const [dx, dy] of [[1, 0], [-0.5, 0.87], [-0.5, -0.87]]) { b.cylZ(cx + dx * r * 0.7, cy + dy * r * 0.7, 0, 2.4, 22, 'mm'); b.box(cx + dx * r * 0.7 - 4, cy + dy * r * 0.7 - 4, 0, 8, 8, 1.6, 'mm') }
-    b.cylZ(cx, cy, 12, 4, 6, 'mm'); b.cylZ(cx, cy, 18, 4, 16, 'mb', r)
+    for (const [dx, dy] of [[1, 0], [-0.5, 0.87], [-0.5, -0.87]]) { b.cylZ(cx + dx * r * 0.7, cy + dy * r * 0.7, 0, 2.4, 26, 'mm'); b.box(cx + dx * r * 0.7 - 4, cy + dy * r * 0.7 - 4, 0, 8, 8, 1.6, 'mm') }
+    // cône (bas) + fût + dôme, tous d'axe z
+    b.cylZ(cx, cy, 20, 4, 14, 'mb', r)
     const f = b.cylZ(cx, cy, 34, r, 52, 'mb'); b.rings(f, [cx, cy, 34], [cx, cy, 86], r, [0.5], 'ed2')
     b.cylZ(cx, cy, 86, r, 12, 'mb', r * 0.4)
-    b.cylZ(cx, cy, 98, 5, 10, 'mm'); b.cylZ(cx, cy, 108, 6.4, 3, 'md')
-    buse(b, 'e', [cx, cy - r, 70], 'y', -1, 12, p.dn, 'eau')   // tangent
-    buse(b, 's', [cx + r, cy, 52], 'x', 1, 14, p.dn, 'eau')
-    b.cylY(cx, cy + r - 0.5, 28, 2.4, 8, 'mm'); b.cylY(cx, cy + r + 7.5, 28, 3.6, 2, 'md')
+    // 3 piquages coaxiaux à leurs brides : entrée (paroi +y), sortie haute (axe), purge basse (axe)
+    buse(b, 'e', [cx, cy + r, 68], 'y', 1, 12, p.dn, 'eau')
+    buse(b, 's', [cx, cy, 98], 'z', 1, 12, p.dn, 'eau')
+    buse(b, 'd', [cx, cy, 20], 'z', -1, 10, p.dn * 0.8, 'boues')
     b.anchor('badge', [cx, cy, 124])
   },
 })
 
 enregistrer({
-  id: 'traitement.centrifugeuse', famille: 'Traitement', nom: 'Centrifugeuse / décanteur centrifuge',
-  taille: () => [150, 56, 66], defauts: { dn: 4, fluide: 'boues' }, planche: PL,
+  id: 'traitement.centrifugeuse', famille: 'Traitement', nom: 'Décanteur centrifuge horizontal (moteur, réducteur, bol sous carter)', statut: 'revu',
+  taille: () => [150, 56, 78], defauts: { dn: 4, fluide: 'boues' }, planche: PL,
   dessiner(b: Builder, p: Params) {
-    const cy = 28, zc = 30
+    const cy = 28, zc = 32
     socle(b, 0, 2, 150, 52, 6)
-    b.box(14, cy - 14, 6, 14, 28, zc - 16, 'mm'); b.box(88, cy - 14, 6, 14, 28, zc - 16, 'mm')
-    // bol (tambour conique) sous carter
-    const car = b.cylX(18, cy, zc, 18, 78, 'mb'); b.rings(car, [18, cy, zc], [96, cy, zc], 18, [0.25, 0.5, 0.75], 'ed2')
-    b.cylX(96, cy, zc, 18, 8, 'mm', 12)
-    b.box(40, cy - 4, zc + 16, 30, 8, 5, 'mm')     // capot de décharge supérieur
-    // moteur principal + boîte d'engrenages
-    b.cylX(104, cy, zc, 12, 8, 'mm')
-    const gb = b.cylX(112, cy, zc, 10, 12, 'mb'); void gb
-    moteurX(b, 124, cy, zc, 11, 22, { cowl: true, fan: true })
-    b.cylX(4, cy, zc, 9, 14, 'mm')
-    b.cylY(30, cy - 10, zc + 10, 0.1, 0.1, 'mm')
-    buse(b, 'e', [60, cy, zc + 18], 'z', 1, 14, p.dn, 'eau')
-    buse(b, 'liquide', [40, cy + 6, 14], 'y', 1, 12, p.dn, 'eau_traitee')
-    buse(b, 'solides', [80, cy, 6], 'z', -1, 1, p.dn * 1.4, 'boues')
-    b.anchor('badge', [60, cy, zc + 34])
+    b.box(52, cy - 14, 6, 14, 28, zc - 17, 'mm'); b.box(104, cy - 14, 6, 14, 28, zc - 17, 'mm')
+    // chaîne cinématique à gauche (moteur → réducteur → accouplement), bol sous carter à droite, alimentation axiale en bout visible (+x)
+    moteurX(b, 4, cy, zc, 11, 22, { cowl: true, fan: true })
+    b.cylX(26, cy, zc, 10, 14, 'mb'); b.cylX(40, cy, zc, 12, 6, 'mm')
+    const car = b.cylX(46, cy, zc, 18, 78, 'mb'); b.rings(car, [46, cy, zc], [124, cy, zc], 18, [0.25, 0.5, 0.75], 'ed2')
+    b.cylX(124, cy, zc, 18, 8, 'mm', 12)
+    // 3 piquages coaxiaux : alimentation axiale (+x), liquide clarifié dessus, solides dessous
+    buse(b, 'e', [132, cy, zc], 'x', 1, 14, p.dn, 'boues')
+    buse(b, 'liquide', [68, cy, zc + 18], 'z', 1, 12, p.dn, 'eau_traitee')
+    buse(b, 'solides', [100, cy, zc - 18], 'z', -1, 10, p.dn * 1.4, 'boues')
+    b.anchor('badge', [75, cy, zc + 44])
+  },
+})
+
+/** Séparateur centrifuge à bol vertical type Alfa Laval (laiterie, agro) : bâti avec moteur dessous, carter de bol, capot, entrée en tête, 2 sorties (phase légère / lourde). */
+enregistrer({
+  id: 'traitement.separateur_centrifuge', famille: 'Traitement', nom: 'Séparateur centrifuge à bol vertical (type laiterie)', statut: 'revu',
+  taille: () => [70, 70, 112], defauts: { dn: 3, fluide: 'neutre' }, planche: PL,
+  dessiner(b: Builder, p: Params) {
+    const cx = 35, cy = 35
+    // bâti : socle large + corps cylindrique renfermant le moteur (grille de ventilation et plaque signalétique), axe z
+    b.cylZ(cx, cy, 0, 27, 3, 'mm')
+    const ba = b.cylZ(cx, cy, 3, 24, 26, 'mb'); b.rings(ba, [cx, cy, 3], [cx, cy, 29], 24, [0.55], 'ed2')
+    b.pl('xz', cy + 24, r2(cx - 10, 8, 20, 3, 'fk', 0.8) + r2(cx - 10, 14, 20, 3, 'fk', 0.8) + r2(cx - 4, 21, 8, 3.4, 'fa', 0.6) + c2(cx + 8, 23, 1.2, 'led'), ba)
+    b.led([cx + 8, cy + 24, 23], ba, 1.3)
+    // collerette puis carter de bol
+    b.cylZ(cx, cy, 29, 21, 3, 'mm')
+    const ca = b.cylZ(cx, cy, 32, 19, 30, 'mb'); b.rings(ca, [cx, cy, 32], [cx, cy, 62], 19, [0.5], 'ed2')
+    // capot : épaulement + dôme ; entrée axiale en tête, collerettes de sortie légère (+x) et lourde (+y)
+    b.cylZ(cx, cy, 62, 21, 3, 'mm')
+    b.cylZ(cx, cy, 65, 18, 18, 'mb', 9)
+    b.cylZ(cx, cy, 83, 9, 3, 'mm')
+    buse(b, 'e', [cx, cy, 86], 'z', 1, 14, p.dn, 'neutre')
+    buse(b, 'leger', [cx + 18, cy, 50], 'x', 1, 12, p.dn, 'neutre')
+    buse(b, 'lourd', [cx, cy + 18, 40], 'y', 1, 12, p.dn, 'neutre')
+    b.anchor('badge', [cx, cy, 106])
   },
 })
 
 enregistrer({
-  id: 'traitement.uv', famille: 'Traitement', nom: 'Réacteur UV (désinfection) + armoire de ballast',
-  taille: () => [116, 50, 62], defauts: { dn: 4, fluide: 'eau_traitee' }, planche: PL,
+  id: 'traitement.uv', famille: 'Traitement', nom: 'Réacteur UV (désinfection) + boîtier de ballast', statut: 'revu',
+  taille: () => [116, 50, 66], defauts: { dn: 4, fluide: 'eau_traitee' }, planche: PL,
   dessiner(b: Builder, p: Params) {
     const cy = 25, zc = 26
-    for (const x of [26, 86]) b.box(x - 5, cy - 11, 0, 10, 22, zc - 12, 'mm')
-    const re = b.cylX(14, cy, zc, 12, 80, 'mb'); b.rings(re, [14, cy, zc], [94, cy, zc], 12, [0.14, 0.86], 'ed2')
-    // fenêtre de contrôle : lampe violette
-    b.pl('xz', cy + 12.05, r2(30, zc - 3, 48, 6, 'fk', 3) + `<g class="uv">${r2(32, zc - 1.4, 44, 2.8, 'fa', 1.4)}</g>`, re)
-    b.cylX(8, cy, zc, 12.8, 6, 'mm'); b.cylX(94, cy, zc, 12.8, 6, 'mm')
-    b.flange([0, cy, zc], 'x', r(p) * 1.9, 3, 8); b.cylX(2, cy, zc, p.dn * 1.2, 8, 'mm')
-    b.flange([113, cy, zc], 'x', r(p) * 1.9, 3, 8); b.cylX(100, cy, zc, p.dn * 1.2, 13, 'mm')
+    for (const x of [26, 88]) b.box(x - 5, cy - 11, 0, 10, 22, zc - 12, 'mm')
+    // chambre inox : tube horizontal unique, brides coaxiales aux deux bouts (tube, brides et piquages sur le même axe)
+    const re = b.cylX(3, cy, zc, 12, 110, 'mb'); b.rings(re, [3, cy, zc], [113, cy, zc], 12, [0.5], 'ed2')
+    b.flange([0, cy, zc], 'x', 15.5, 3, 8); b.flange([113, cy, zc], 'x', 15.5, 3, 8)
     b.port('e', [0, cy, zc], [-1, 0, 0], { dn: p.dn, fluide: 'eau_traitee' }); b.port('s', [116, cy, zc], [1, 0, 0], { dn: p.dn, fluide: 'eau_traitee' })
-    // boîtier de ballast
-    const bx = b.box(52, cy - 7, zc + 12, 24, 14, 12, 'mm')
-    b.pl('xz', cy + 7, r2(55, zc + 15, 12, 6, 'fk', 1) + c2(71, zc + 18, 1.4, 'led'), bx)
-    b.led([71, cy + 7, zc + 18], bx, 1.4)
-    b.anchor('badge', [58, cy, zc + 38])
+    // fenêtre de contrôle : lampe violette
+    b.pl('xz', cy + 12.05, r2(24, zc - 3, 66, 6, 'fk', 3) + `<g class="uv">${r2(26, zc - 1.4, 62, 2.8, 'fa', 1.4)}</g>`, re)
+    // boîtier de ballast sur le dessus, relié par un col
+    b.cylZ(58, cy, zc + 11, 3, 6, 'mm')
+    const bx = b.box(44, cy - 7, zc + 16, 28, 14, 14, 'mm')
+    b.pl('xz', cy + 7, r2(47, zc + 19, 14, 7, 'fk', 1) + c2(66, zc + 24, 1.4, 'led'), bx)
+    b.led([66, cy + 7, zc + 24], bx, 1.4)
+    b.anchor('badge', [58, cy, zc + 42])
   },
 })
+
 const r = (p: Params) => p.dn ?? 4
 
 // ═════ MOTEURS & MÉCANIQUE
@@ -222,27 +244,40 @@ enregistrer({
     b.anchor('badge', [cx, cy, top + 10])
   },
 })
+/** Convoyeur à bande EXTENSIBLE : un module central de pas fixe PAS_CB est répété n fois ; la tête (tambour de renvoi) et la queue (tambour moteur) ne changent jamais.
+ *  Paramètre `longueur` (alias `l`, longueur souhaitée du plateau) : arrondie au nombre entier de modules. */
+export const CONVOYEUR = { TETE: 24, PAS: 28, ENTRETIEN: 0 }
+export function convoyeurLongueur(p: Params): { n: number; Lb: number } {
+  const want = Number(p.longueur ?? p.l ?? 150)
+  const n = Math.max(1, Math.round((want - CONVOYEUR.TETE) / CONVOYEUR.PAS))
+  return { n, Lb: CONVOYEUR.TETE + n * CONVOYEUR.PAS }
+}
 enregistrer({
-  id: 'meca.convoyeur_bande', famille: 'Mécanique', nom: 'Convoyeur à bande',
-  taille: (p) => [(p.l ?? 150) + 20, 40, 52], defauts: { l: 150 }, planche: PL,
+  id: 'meca.convoyeur_bande', famille: 'Mécanique', nom: 'Convoyeur à bande (longueur paramétrable)', statut: 'revu',
+  taille: (p) => [convoyeurLongueur(p).Lb + 22, 40, 52], defauts: { longueur: 150 }, variantes: ['longueur=52..600 (pas de 28)'], planche: PL,
   dessiner(b: Builder, p: Params) {
-    const l = p.l, y0 = 6, w = 28
-    for (const x of [14, l * 0.5, l - 10]) { b.box(x, y0 + 1, 0, 3, 3, 24, 'mm'); b.box(x, y0 + w - 4, 0, 3, 3, 24, 'mm'); b.box(x - 1, y0 - 1, 0, 5, w + 2, 2, 'mm') }
-    b.box(8, y0, 24, l + 4, 3, 4, 'mm'); b.box(8, y0 + w - 3, 24, l + 4, 3, 4, 'mm')
-    // bande (dessus) + tambours
-    const bd = b.box(8, y0 + 3, 26, l + 4, w - 6, 3, 'md')
-    b.pl('xy', 29, `<g class="cflow">${[0.3, 0.5, 0.7].map((k) => `<path class="flow air" d="M12 ${y0 + w * k}H${l}"/>`).join('')}</g>` + Array.from({ length: Math.floor(l / 14) }, (_, i) => l2(16 + i * 14, y0 + 4, 16 + i * 14, y0 + w - 4, 'ed2')).join(''), bd)
-    b.cylY(10, y0 - 2, 27, 5, w + 4, 'mm'); b.cylY(l + 2, y0 - 2, 27, 5, w + 4, 'mm')
-    // tambour moteur + motoréducteur
-    b.cylY(10, y0 + w + 2, 27, 2, 6, 'mm')
-    moteurX(b, l + 6, y0 + w + 6, 27, 6, 12, { bornes: false, pieds: false, cowl: false })
-    b.box(l - 6, y0 + w, 24, 10, 8, 6, 'mb')
-    // carters de protection + arrêt d'urgence par câble
-    b.path3([[14, y0 - 2, 36], [l - 4, y0 - 2, 36]], 'ed2')
-    b.cylZ(14, y0 - 2, 28, 1, 8, 'mm'); b.cylZ(l - 4, y0 - 2, 28, 1, 8, 'mm')
-    b.anchor('badge', [l / 2, y0 + w / 2, 42])
+    const { n, Lb } = convoyeurLongueur(p), y0 = 6, w = 28, P = CONVOYEUR.PAS
+    // pieds : un portique tous les PAS, le premier à 12 de la tête, le dernier à 12 de la queue
+    for (let i = 0; i <= n; i++) { const x = 12 + i * P; b.box(x, y0 + 1, 0, 3, 3, 24, 'mm'); b.box(x, y0 + w - 4, 0, 3, 3, 24, 'mm'); b.box(x - 1, y0 - 1, 0, 5, w + 2, 2, 'mm') }
+    // longerons + bande sur toute la longueur
+    b.box(8, y0, 24, Lb - 4, 3, 4, 'mm'); b.box(8, y0 + w - 3, 24, Lb - 4, 3, 4, 'mm')
+    const bd = b.box(8, y0 + 3, 26, Lb - 4, w - 6, 3, 'md')
+    // rouleaux (traits en travers) à pas fixe de PAS/2, symétriques tête / queue
+    let rl = ''
+    for (let k = 0; k <= 2 * n; k++) { const x = 12 + k * P / 2; rl += l2(x, y0 + 4, x, y0 + w - 4, 'ed2') }
+    b.pl('xy', 29, `<g class="cflow">${[0.3, 0.5, 0.7].map((k) => `<path class="flow air" d="M12 ${y0 + w * k}H${Lb - 8}"/>`).join('')}</g>` + rl, bd)
+    // tambours : renvoi en tête (x = 6), moteur en queue (x = Lb - 2)
+    b.cylY(10, y0 - 2, 27, 5, w + 4, 'mm'); b.cylY(Lb + 2, y0 - 2, 27, 5, w + 4, 'mm')
+    // motoréducteur en queue (toujours à la même distance de l'extrémité)
+    moteurX(b, Lb + 6, y0 + w + 6, 27, 6, 12, { bornes: false, pieds: false, cowl: false })
+    b.box(Lb - 6, y0 + w, 24, 10, 8, 6, 'mb')
+    // arrêt d'urgence par câble : poteaux aux deux extrémités, câble continu
+    b.path3([[14, y0 - 2, 36], [Lb - 4, y0 - 2, 36]], 'ed2')
+    b.cylZ(14, y0 - 2, 28, 1, 8, 'mm'); b.cylZ(Lb - 4, y0 - 2, 28, 1, 8, 'mm')
+    b.anchor('badge', [Lb / 2, y0 + w / 2, 42])
   },
 })
+
 enregistrer({
   id: 'meca.convoyeur_vis', famille: 'Mécanique', nom: 'Convoyeur à vis (auge couverte, trémie)',
   taille: (p) => [(p.l ?? 140) + 30, 36, 48], defauts: { l: 140 }, planche: PL,

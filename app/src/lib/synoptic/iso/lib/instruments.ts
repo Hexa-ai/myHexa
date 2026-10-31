@@ -13,20 +13,20 @@ const hex = (b: Builder, cx: number, cy: number, z: number, r: number, h: number
 const ledTop = (b: Builder, p: any, x: number, y: number, z: number) => b.led([x, y, z], p, 1.6)
 
 enregistrer({
-  id: 'instr.pression', famille: 'Instrumentation', nom: 'Transmetteur de pression',
+  id: 'instr.pression', famille: 'Instrumentation', nom: 'Transmetteur de pression', statut: 'revu',
   taille: () => [28, 28, 50], defauts: { fluide: 'eau' }, planche: PL,
   dessiner(b: Builder, p: Params) {
     const cx = 14, cy = 14
-    hex(b, cx, cy, 0, 6, 4)            // raccord process (écrou)
+    // pile coaxiale (axe z) : écrou process, col, corps à bague, tête ; afficheur sur le DESSUS de la tête (ellipse dans le plan xy)
+    hex(b, cx, cy, 0, 6, 4)
     b.cylZ(cx, cy, 4, 3.2, 4, 'mm')
     const co = b.cylZ(cx, cy, 8, 6, 20, 'mb'); b.rings(co, [cx, cy, 8], [cx, cy, 28], 6, [0.5])
     const tete = b.cylZ(cx, cy, 28, 9, 12, 'mm')
-    b.pl('xz', cy + 9.05, r2(cx - 5, 31, 10, 6, 'fk', 1) + r2(cx - 4, 32.4, 5, 1.4, 'fa', .3) + r2(cx - 4, 34.4, 7, 1, 'ed2'), tete)
-    b.cylZ(cx, cy, 40, 6, 3, 'mm'); b.cylZ(cx, cy, 43, 2, 4, 'md')
-    b.cylY(cx - 8, cy, 33, 1.6, 4, 'md')
-    ledTop(b, tete, cx + 6, cy + 6.4, 36)
+    b.pl('xy', 40.05, c2(cx, cy, 6.4, 'fk') + c2(cx, cy, 6.4, 'ed2') + r2(cx - 4, cy - 0.8, 6, 1.6, 'fa', 0.4), tete)
+    b.cylX(cx + 9, cy, 33, 1.8, 4, 'md')           // presse-étoupe de câble
+    ledTop(b, tete, cx - 5.5, cy - 5.5, 40.05)
     b.port('proc', [cx, cy, 0], [0, 0, -1], { dn: 3 })
-    b.anchor('badge', [cx, cy, 58])
+    b.anchor('badge', [cx, cy, 50])
   },
 })
 
@@ -52,26 +52,24 @@ enregistrer({
 })
 
 enregistrer({
-  id: 'instr.debitmetre', famille: 'Instrumentation', nom: 'Débitmètre électromagnétique',
-  taille: () => [52, 40, 62], defauts: { dn: 5, fluide: 'eau', simple: false }, planche: PL,
+  id: 'instr.debitmetre', famille: 'Instrumentation', nom: 'Débitmètre électromagnétique', statut: 'revu',
+  taille: () => [60, 40, 66], defauts: { dn: 5, fluide: 'eau', simple: false }, planche: PL,
   dessiner(b: Builder, p: Params) {
-    const cy = 20, zc = 18, r = p.dn
-    inline(b, 52, cy, zc, r)
+    const cy = 20, zc = 18, r = p.dn, W = 60
+    // tube de mesure bridé aux DEUX bouts : une manchette de tuyau visible de chaque côté du corps (coaxial)
+    inline(b, W, cy, zc, r)
     if (p.simple) {       // niveau « indicateur » / « masqué » : simple manchette, la mesure est portée par une étiquette
-      const co = b.cylX(16, cy, zc, r * 1.9, 20, 'mb'); b.rings(co, [16, cy, zc], [36, cy, zc], r * 1.9, [0.5], 'ed2')
-      b.anchor('badge', [26, cy, zc + r * 1.9 + 2]); return
+      const co = b.cylX(20, cy, zc, r * 1.6, 20, 'mb'); b.rings(co, [20, cy, zc], [40, cy, zc], r * 1.6, [0.5], 'ed2')
+      b.anchor('badge', [30, cy, zc + r * 1.6 + 2]); return
     }
-    const co = b.cylX(14, cy, zc, r * 2.2, 24, 'mb'); b.rings(co, [14, cy, zc], [38, cy, zc], r * 2.2, [0.5], 'ed2')
-    // bobines : coffrets latéraux
-    b.cylY(26, cy + r * 2.1, zc, 4.6, 3, 'mm')
-    b.cylZ(26, cy, zc + r * 2.1 - 1, 5, 7, 'mm')
-    const tr = b.box(14, cy - 12, zc + r * 2.1 + 6, 24, 24, 16, 'mb')
-    b.pl('xz', cy + 12, r2(17, zc + r * 2.1 + 14, 18, 6.5, 'fk', 1.2) + r2(19, zc + r * 2.1 + 15.4, 7, 1.5, 'fa', .3) + c2(22, zc + r * 2.1 + 10, 1.2, 'fm') + c2(26, zc + r * 2.1 + 10, 1.2, 'fm') + c2(30, zc + r * 2.1 + 10, 1.2, 'fm'), tr)
-    b.pl('yz', 38, r2(cy - 8, zc + r * 2.1 + 9, 16, 8, 'ed2'), tr)
-    ledTop(b, tr, 35, cy + 12, zc + r * 2.1 + 20)
-    b.cylY(26, cy + 12, zc + r * 2.1 + 6, 0.1, 0.1, 'mm')
-    b.cylX(38, cy - 6, zc + r * 2.1 + 12, 1.6, 4, 'md')
-    b.anchor('badge', [26, cy, zc + r * 2.1 + 30])
+    const co = b.cylX(19, cy, zc, r * 1.75, 22, 'mb'); b.rings(co, [19, cy, zc], [41, cy, zc], r * 1.75, [0.5], 'ed2')
+    // convertisseur compact : col + boîtier, afficheur sur la face avant (plan xz, face plane du boîtier)
+    b.cylZ(30, cy, zc + r * 1.75 - 1, r * 0.9, 7, 'mm')
+    const zb = zc + r * 1.75 + 5
+    const tr = b.box(19, cy - 9, zb, 22, 18, 14, 'mb')
+    b.pl('xz', cy + 9, r2(22, zb + 6, 16, 6, 'fk', 1.2) + r2(24, zb + 7.6, 6, 1.4, 'fa', 0.3) + c2(34, zb + 9, 1.1, 'fm'), tr)
+    ledTop(b, tr, 38, cy + 9, zb + 11)
+    b.anchor('badge', [30, cy, zb + 24])
   },
 })
 
@@ -85,11 +83,11 @@ enregistrer({
     if (p.variante === 'ultrason') { b.cylZ(cx, cy, 0.1, 8, 4, 'mb') }
     const co = b.cylZ(cx, cy, 12, 8, 14, 'mb'); b.rings(co, [cx, cy, 12], [cx, cy, 26], 8, [0.5])
     const tete = b.cylZ(cx, cy, 26, 9.6, 16, 'mm')
-    b.pl('xz', cy + 9.65, r2(cx - 6, 30, 12, 7, 'fk', 1) + r2(cx - 4.6, 31.4, 5, 1.4, 'fa', .3) + c2(cx - 3, 34.8, 1, 'fm') + c2(cx + 3, 34.8, 1, 'fm'), tete)
-    b.cylZ(cx, cy, 42, 7, 3, 'mm'); b.cylZ(cx, cy, 45, 3.2, 4, 'md')
-    ledTop(b, tete, cx + 7, cy + 6.6, 36)
+    b.pl('xy', 42.05, c2(cx, cy, 6.6, 'fk') + c2(cx, cy, 6.6, 'ed2') + r2(cx - 4.2, cy - 0.8, 6.4, 1.6, 'fa', 0.4), tete)   // afficheur sur le dessus
+    b.cylX(cx + 9.6, cy, 36, 1.8, 4, 'md')
+    ledTop(b, tete, cx - 5.5, cy - 5.5, 42.05)
     b.port('proc', [cx, cy, 0], [0, 0, -1], { dn: 4 })
-    b.anchor('badge', [cx, cy, 56])
+    b.anchor('badge', [cx, cy, 52])
   },
 })
 
@@ -111,14 +109,15 @@ enregistrer({
 })
 
 enregistrer({
-  id: 'instr.pressostat', famille: 'Instrumentation', nom: 'Pressostat / thermostat à contact',
+  id: 'instr.pressostat', famille: 'Instrumentation', nom: 'Pressostat / thermostat à contact', statut: 'revu',
   taille: () => [28, 24, 44], defauts: {}, planche: [['arret'], ['marche'], ['alarme'], ['defaut'], ['consigne', { manuel: true }], ['inconnu']],
   dessiner(b: Builder, p: Params) {
+    // boîtier à face plane (plan xz) : molette de consigne + voyant ; raccord process hexagonal dessous, presse-étoupe dessus
     const bx = b.box(4, 4, 8, 20, 16, 22, 'mb')
     hex(b, 14, 12, 0, 4.6, 5); b.cylZ(14, 12, 5, 2.4, 3, 'mm')
-    b.pl('xz', 20, r2(7, 20, 14, 7, 'fk', 1) + r2(8.4, 21.4, 6, 1.4, 'fa', .3) + c2(11, 14, 2.6, 'fm') + l2(11, 14, 12.6, 15.6, 'ed') + c2(18, 14, 1.4, 'led'), bx)
+    b.pl('xz', 20, c2(11, 17, 4, 'fm') + c2(11, 17, 4, 'ed2') + l2(11, 17, 11, 20.2, 'ed') + c2(19, 24, 1.4, 'led'), bx)
     b.cylZ(14, 12, 30, 2.4, 6, 'mm'); b.cylZ(14, 12, 36, 4, 2.4, 'md')
-    ledTop(b, bx, 18, 20, 14)
+    ledTop(b, bx, 19, 20, 24)
     b.port('proc', [14, 12, 0], [0, 0, -1], { dn: 2 })
     b.anchor('badge', [14, 12, 48])
   },
@@ -151,55 +150,61 @@ enregistrer({
   },
 })
 
+/** Colonne lumineuse (empilement de 3 segments coaxiaux : vert / orange / rouge), sans klaxon. */
+function colonne(b: Builder) {
+  const cx = 14, cy = 14
+  b.cylZ(cx, cy, 0, 7, 3, 'mm'); b.cylZ(cx, cy, 3, 2.4, 6, 'mm')
+  const e = b.etat
+  const seg = (z: number, lit: boolean, m: string, cls: string) => { const s = b.cylZ(cx, cy, z, 5.6, 7, lit ? m : 'md'); b.pl('xy', z + 7, c2(cx, cy, 3.4, lit ? cls : 'fd'), s); return s }
+  seg(9, e === 'marche' || e === 'modulant', 'mg', 'fn')
+  seg(16, e === 'alarme', 'mw', 'fo')
+  seg(23, e === 'defaut', 'mr', 'fr')
+  b.cylZ(cx, cy, 30, 6, 2, 'mm')
+  b.anchor('badge', [cx, cy, 40])
+}
 enregistrer({
-  id: 'instr.voyant_klaxon', famille: 'Instrumentation', nom: 'Colonne lumineuse + klaxon',
-  taille: () => [34, 34, 62], defauts: {}, planche: [['arret'], ['marche'], ['alarme'], ['defaut'], ['consigne'], ['inconnu']],
-  dessiner(b: Builder, p: Params) {
-    const cx = 14, cy = 14
-    b.cylZ(cx, cy, 0, 7, 3, 'mm'); b.cylZ(cx, cy, 3, 2.4, 6, 'mm')
-    const e = b.etat
-    const seg = (z: number, lit: boolean, m: string, cls: string) => { const s = b.cylZ(cx, cy, z, 5.6, 7, lit ? m : 'md'); b.pl('xy', z + 7, c2(cx, cy, 3.4, lit ? cls : 'fd'), s); return s }
-    seg(9, e === 'marche' || e === 'modulant', 'mg', 'fn')
-    seg(16, e === 'alarme', 'mw', 'fo')
-    seg(23, e === 'defaut', 'mr', 'fr')
-    b.cylZ(cx, cy, 30, 6, 2, 'mm')
-    // klaxon (pavillon) sur le côté
-    b.box(cx + 7, cy - 2, 12, 4, 4, 6, 'mm')
-    b.cylX(cx + 11, cy, 15, 2.6, 4, 'mm', 6)
-    b.cylX(cx + 15, cy, 15, 6, 4, 'mb')
-    b.anchor('badge', [cx, cy, 44])
-  },
+  id: 'instr.colonne_lumineuse', famille: 'Instrumentation', nom: 'Colonne lumineuse', statut: 'revu',
+  taille: () => [28, 28, 52], defauts: {}, planche: [['arret'], ['marche'], ['alarme'], ['defaut'], ['consigne'], ['inconnu']],
+  dessiner: (b: Builder) => colonne(b),
+})
+// ancien symbole « colonne lumineuse + klaxon » : le klaxon est retiré, l'id est conservé pour les documents existants (rendu = colonne seule)
+enregistrer({
+  id: 'instr.voyant_klaxon', famille: 'Instrumentation', nom: 'Colonne lumineuse + klaxon (obsolète)', statut: 'obsolete', remplacePar: 'instr.colonne_lumineuse',
+  taille: () => [28, 28, 52], defauts: {}, planche: [['arret'], ['marche'], ['alarme'], ['defaut'], ['consigne'], ['inconnu']],
+  dessiner: (b: Builder) => colonne(b),
 })
 
-/** cadran à aiguille : thermomètre (écrou + doigt de gant sous le joint) ou manomètre (sur robinet de prise à levier).
- *  Le port « proc » est le plan de joint ; hors montage seulement, le doigt de gant est dessiné sous le joint. Cadran face à +y (spectateur). */
-function cadran(b: Builder, p: Params, kind: 'th' | 'ma') {
-  const cx = 14, cy = 14, R = kind === 'ma' ? 12 : 10, zc = 30
-  let z0 = 0
-  if (kind === 'th' && !p.dnPx) { b.cylZ(cx, cy, -22, 1.9, 22, 'mm'); b.cylZ(cx, cy, -22, 1.1, 1, 'md') }
-  if (kind === 'ma') {
-    // robinet de prise de pression : corps + levier
-    b.cylZ(cx, cy, 0, 3.6, 7, 'mm'); b.cylX(cx - 6, cy, 3.6, 0.9, 12, 'md'); b.cylX(cx - 8, cy, 3.6, 1.7, 2.4, 'mb')
-    z0 = 7
-  }
-  hex(b, cx, cy, z0, 4.4, 4)
-  b.cylZ(cx, cy, z0 + 4, 2.4, zc - R + 1 - (z0 + 4), 'md')    // col
-  const bo = b.cylY(cx, cy - 3, zc, R, 6, 'mb')                   // boîtier
+/** Indicateur à cadran : UN seul symbole pour le thermomètre et le manomètre (même silhouette), paramètre `grandeur` 'T' | 'P'.
+ *  Écrou hexagonal + col + boîtier cylindrique d'axe y ; cadran = disque dans le plan xz (ellipse vraie). Le port « proc » est le plan de joint ;
+ *  hors montage seulement, un doigt de gant est dessiné sous le joint pour T. */
+const GRANDEURS: Record<string, { fl: string; max: number; defaut: number }> = { T: { fl: 'eau_chaude_aller', max: 120, defaut: 64 }, P: { fl: 'eau_froide', max: 6, defaut: 2.4 } }
+function cadranInd(b: Builder, p: Params) {
+  const g = GRANDEURS[p.grandeur === 'P' ? 'P' : 'T']
+  const cx = 14, cy = 14, R = 11, zc = 30
+  if (p.grandeur !== 'P' && !p.dnPx) { b.cylZ(cx, cy, -22, 1.9, 22, 'mm'); b.cylZ(cx, cy, -22, 1.1, 1, 'md') }
+  hex(b, cx, cy, 0, 4.4, 4)
+  b.cylZ(cx, cy, 4, 2.4, zc - R + 1 - 4, 'md')                    // col
+  b.cylY(cx, cy - 3, zc, R, 6, 'mb')                               // boîtier
   const ba = b.cylY(cx, cy + 3, zc, R + 0.9, 2.2, 'mm')            // bague
-  void bo
-  const raw = (p.valeur ?? b.val.valeur ?? (kind === 'th' ? 64 : 2.4)) as number
-  const v = Math.max(0, Math.min(1, raw / (p.max ?? (kind === 'th' ? 120 : raw > 10 ? 100 : 6))))
+  const raw = (p.valeur ?? b.val.valeur ?? g.defaut) as number
+  const v = Math.max(0, Math.min(1, raw / (p.max ?? (p.grandeur === 'P' && raw > 10 ? 100 : g.max))))
   const a = (225 - 270 * v) * Math.PI / 180                          // 225° (min) → -45° (max)
   let f = c2(cx, zc, R - 1.2, 'ed2')
   for (let i = 0; i <= 8; i++) { const t = (225 - 270 * i / 8) * Math.PI / 180; f += l2(cx + Math.cos(t) * (R - 2.6), zc + Math.sin(t) * (R - 2.6), cx + Math.cos(t) * (R - 1.6), zc + Math.sin(t) * (R - 1.6), 'ed2') }
   const [x1, z1] = [cx + Math.cos(a) * (R - 2.4), zc + Math.sin(a) * (R - 2.4)]
-  f += `<g class="fl-${kind === 'th' ? 'eau_chaude_aller' : 'eau_froide'}">${l2(cx, zc, x1, z1, 'ed')}</g>` + c2(cx, zc, 1, 'fd')
+  f += `<g class="fl-${g.fl}">${l2(cx, zc, x1, z1, 'ed')}</g>` + c2(cx, zc, 1, 'fd')
   b.pl('xz', cy + 5.1, f, ba)
   b.port('proc', [cx, cy, 0], [0, 0, -1], { dn: 3 })
   b.anchor('badge', [cx, cy, zc + R + 8])
 }
-enregistrer({ id: 'instr.thermometre', famille: 'Instrumentation', nom: 'Thermomètre à cadran (doigt de gant)', taille: () => [28, 28, 40], defauts: { fluide: 'eau' }, planche: PL, dessiner: (b: Builder, p: Params) => cadran(b, p, 'th') } as any)
-enregistrer({ id: 'instr.manometre', famille: 'Instrumentation', nom: 'Manomètre à cadran', taille: () => [28, 28, 40], defauts: { fluide: 'eau' }, planche: PL, dessiner: (b: Builder, p: Params) => cadran(b, p, 'ma') } as any)
+enregistrer({
+  id: 'instr.cadran', famille: 'Instrumentation', nom: 'Indicateur à cadran (thermomètre T / manomètre P)', statut: 'revu',
+  taille: () => [28, 28, 44], defauts: { fluide: 'eau', grandeur: 'T' }, variantes: ['grandeur=T|P'], planche: PL,
+  dessiner: (b: Builder, p: Params) => cadranInd(b, p),
+})
+// anciens symboles : même rendu que l'indicateur à cadran (T / P), ids conservés pour les documents existants
+enregistrer({ id: 'instr.thermometre', famille: 'Instrumentation', nom: 'Thermomètre à cadran (obsolète)', statut: 'obsolete', remplacePar: 'instr.cadran', taille: () => [28, 28, 44], defauts: { fluide: 'eau' }, planche: PL, dessiner: (b: Builder, p: Params) => cadranInd(b, { ...p, grandeur: 'T' }) } as any)
+enregistrer({ id: 'instr.manometre', famille: 'Instrumentation', nom: 'Manomètre à cadran (obsolète)', statut: 'obsolete', remplacePar: 'instr.cadran', taille: () => [28, 28, 44], defauts: { fluide: 'eau' }, planche: PL, dessiner: (b: Builder, p: Params) => cadranInd(b, { ...p, grandeur: 'P' }) } as any)
 
 /** Repère de mesure (niveau « indicateur ») : piquage + pastille discrète. La valeur est portée par une étiquette (cf. Scene). */
 enregistrer({

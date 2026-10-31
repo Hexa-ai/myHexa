@@ -34,8 +34,9 @@ enregistrer({
     const r = dn(p), W = r * 7 + 6, cy = CYF(r), zc = ZC(r), ouv = b.ouvert || b.etat === 'marche'
     const t = brides(b, W, cy, zc, r, r * 1.9, p.fluide)
     b.cylX(t, cy, zc, r * 1.15, W - 2 * t, 'mm')
-    b.ball([W / 2, cy, zc], r * 2.0, 'mm')
-    b.cylZ(W / 2, cy, zc + r * 1.7, r * 0.55, r * 1.1, 'mm')
+    // corps de boisseau : cylindre coaxial au tube (plus de sphère mal projetée)
+    const bc = b.cylX(W / 2 - r * 1.7, cy, zc, r * 1.9, r * 3.4, 'mm'); b.rings(bc, [W / 2 - r * 1.7, cy, zc], [W / 2 + r * 1.7, cy, zc], r * 1.9, [0.5], 'ed2')
+    b.cylZ(W / 2, cy, zc + r * 1.6, r * 0.55, r * 1.2, 'mm')
     const base = b.cylZ(W / 2, cy, zc + r * 2.7, r * 1.1, r * 0.5, 'mm')
     const a = ouv ? 0 : -90
     b.pl('xy', zc + r * 3.2, `<g transform="translate(${W / 2} ${cy}) rotate(${a})">${d2(`M${-r * 0.4} ${-r * 0.4}H${r * 3.2}V${r * 0.4}H${-r * 0.4}Z`, 'fm')}${d2(`M${r * 3.2} ${-r * 0.55}H${r * 4.8}V${r * 0.55}H${r * 3.2}Z`, 'fa')}${c2(0, 0, r * 0.45, 'fd')}</g>`, base)
@@ -108,24 +109,19 @@ enregistrer({
 
 // ─────────── vanne à manchon pneumatique (pinch valve)
 enregistrer({
-  id: 'vanne.manchon', famille: 'Vannes', nom: 'Vanne à manchon pneumatique (pinch valve) — fenêtre écorchée',
+  id: 'vanne.manchon', famille: 'Vannes', nom: 'Vanne à manchon pneumatique (pinch valve)',
   taille: (p) => { const r = dn(p); return [r * 6.5 + 8, CYF(r) * 2, ZC(r) + r * 3.4] }, defauts: { fluide: 'boues', dn: 7 },
   planche: [['ouvert'], ['ferme'], ['modulant', { position: 50 }], ['defaut'], ['consigne', { manuel: true }], ['inconnu'], ['ouvert', {}, 90], ['ferme', {}, 90]],
   dessiner(b: Builder, p: Params) {
     const r = dn(p), W = r * 6.5 + 8, cy = CYF(r), zc = ZC(r), x = W / 2
     const t = brides(b, W, cy, zc, r, r * 2.15, p.fluide)
     const rc = r * 1.7
+    // corps cylindrique unique, coaxial aux deux brides ; une seule bague de calandre au milieu
     const co = b.cylX(t, cy, zc, rc, W - 2 * t, 'mm')
-    b.rings(co, [t, cy, zc], [W - t, cy, zc], rc, [0.12, 0.88], 'ed2')
-    // raccord d'air comprimé sur le dessus
+    b.rings(co, [t, cy, zc], [W - t, cy, zc], rc, [0.5], 'ed2')
+    // raccord d'air comprimé sur le dessus (chambre de commande du manchon)
     b.cylZ(x, cy, zc + rc - 1, r * 0.45, r * 0.9, 'mm')
     b.cylZ(x, cy, zc + rc + r * 0.7, r * 0.7, r * 0.5, 'mm')
-    // fenêtre écorchée : manchon (gonflé = fermé, plat = ouvert)
-    const pinch = b.etat === 'ferme' ? 1 : b.val.position != null || b.etat === 'modulant' ? 1 - b.pos / 100 : 0
-    const hw = (W - 2 * t) * 0.34, he = r * 0.95, hm = Math.max(0.35, he * (1 - pinch))
-    const manchon = `M${-hw} ${-he}C${-hw * 0.35} ${-he} ${-hw * 0.35} ${-hm} 0 ${-hm}C${hw * 0.35} ${-hm} ${hw * 0.35} ${-he} ${hw} ${-he}L${hw} ${he}C${hw * 0.35} ${he} ${hw * 0.35} ${hm} 0 ${hm}C${-hw * 0.35} ${hm} ${-hw * 0.35} ${he} ${-hw} ${he}Z`
-    const win = `<g transform="translate(${x} ${zc})">${r2(-hw - 4, -he - 3.2, 2 * hw + 8, 2 * he + 6.4, 'fm', 2)}${d2(manchon, 'fk')}${d2(`M${-hw} ${-he}L${hw} ${-he}M${-hw} ${he}L${hw} ${he}`, 'ed2')}${pinch > 0.5 ? '' : ''}</g>`
-    b.pl('xz', cy + rc + 0.1, win, co)
     b.port('air', [x, cy, zc + rc + r * 1.2], [0, 0, 1], { dn: Math.max(1.4, r * 0.3), fluide: 'air_comprime' })
     b.anchor('badge', [x, cy, zc + rc + r * 2.2])
   },
@@ -187,16 +183,20 @@ enregistrer({
 })
 enregistrer({
   id: 'vanne.double_siege', famille: 'Vannes', nom: 'Vanne à double siège (mixproof) — chambre de fuite',
-  taille: (p) => { const r = dn(p); return [r * 9 + 6, CYF(r) * 2, ZC(r) + r * 16] }, defauts: { fluide: 'reactif', dn: 4 }, planche: PLTOR,
+  taille: (p) => { const r = dn(p); return [r * 12 + 6, CYF(r) * 2 + r * 3, ZC(r) + r * 16] }, defauts: { fluide: 'reactif', dn: 4 }, planche: PLTOR,
   dessiner(b: Builder, p: Params) {
-    const r = dn(p), W = r * 9 + 6, cy = CYF(r), zc = ZC(r), x = W / 2, rr = r * 1.25
+    const r = dn(p), W = r * 12 + 6, cy = CYF(r), zc = ZC(r), x = W / 2, rr = r * 1.25
+    // tube traversant, brides clamp coaxiales aux deux extrémités
     b.cylX(0, cy, zc, rr, W, 'mm'); clamp(b, 0, cy, zc, r, 1); clamp(b, W, cy, zc, r, -1)
     b.port('a', [0, cy, zc], [-1, 0, 0], { dn: r, fluide: p.fluide }); b.port('b', [W, cy, zc], [1, 0, 0], { dn: r, fluide: p.fluide })
-    // deux corps de siège + chambre de fuite centrale avec évent vers le bas
-    for (const dx of [-r * 2.3, r * 2.3]) b.cylZ(x + dx, cy, zc - rr * 0.6, rr * 1.35, r * 2.0, 'mm')
-    const ch = b.cylX(x - r * 1.2, cy, zc, r * 1.7, r * 2.4, 'mm'); b.rings(ch, [x - r * 1.2, cy, zc], [x + r * 1.2, cy, zc], r * 1.7, [0.5])
-    b.cylZ(x, cy, zc - r * 1.6, r * 0.35, r * 1.2, 'mm')
-    const top = actionneurAgro(b, x, cy, zc + r * 1.7, r * 1.1, { double: true })
+    // deux corps de siège cylindriques de part et d'autre de la chambre de fuite, reliés par un étrier
+    const hh = r * 1.9, hz = hh * 2
+    for (const dx of [-r * 2.6, r * 2.6]) { const c = b.cylZ(x + dx, cy, zc - hh, hh, hz, 'mm'); b.rings(c, [x + dx, cy, zc - hh], [x + dx, cy, zc + hh], hh, [0.5], 'ed2') }
+    b.box(x - r * 2.6, cy - r * 0.9, zc + hh - 0.5, r * 5.2, r * 1.8, r * 1.1, 'mm')
+    // évent de la chambre de fuite : piquage vers le spectateur, au milieu
+    b.cylY(x, cy, zc - r * 0.2, r * 0.5, r * 3.4, 'mm')
+    b.cylY(x, cy + r * 3.4, zc - r * 0.2, r * 0.85, 2, 'mb')
+    const top = actionneurAgro(b, x, cy, zc + hh + r * 0.6, r * 1.1, { double: true })
     b.anchor('badge', [x, cy, top + 4])
   },
 })
@@ -213,11 +213,10 @@ enregistrer({
     const r = dn(p), W = r * 6 + 8, cy = CYF(r), zc = ZC(r), x = W * 0.5
     const t = corpsClapet(b, W, cy, zc, r, p.fluide)
     const co = b.cylX(t, cy, zc, r * 1.5, W - 2 * t, 'mm')
-    b.rings(co, [t, cy, zc], [W - t, cy, zc], r * 1.5, [0.2, 0.8], 'ed2')
+    b.rings(co, [t, cy, zc], [W - t, cy, zc], r * 1.5, [0.5], 'ed2')
     b.cylZ(x, cy, zc + r * 1.0, r * 1.9, r * 1.0, 'mm')
     b.flange([x, cy, zc + r * 2.0], 'z', r * 2.0, T(r) * 0.8, NB(r))
     b.cylZ(x, cy, zc + r * 2.0 + T(r) * 0.8, r * 0.5, r * 0.5, 'mm')
-    b.cylY(x - r * 1.6, cy, zc + r * 0.4, r * 0.28, r * 3.4, 'mm')
     b.pl('xz', cy + r * 1.5 + 0.05, fleche(x, zc - r * 0.2, Math.max(0.8, r / 6)), co)
     b.anchor('badge', [x, cy, zc + r * 3.8])
   },
@@ -229,11 +228,12 @@ enregistrer({
     const r = dn(p), W = r * 6 + 8, cy = CYF(r), zc = ZC(r), x = W * 0.5
     const t = corpsClapet(b, W, cy, zc, r, p.fluide)
     b.cylX(t, cy, zc, r * 1.3, W - 2 * t, 'mm')
-    const bl = b.ball([x, cy, zc + r * 0.5], r * 2.3, 'mm')
-    b.rings(b.cylZ(x, cy, zc + r * 2.0, r * 1.5, r * 0.3, 'mm'), [x, cy, zc + r * 2.0], [x, cy, zc + r * 2.3], r * 1.5, [0.5])
-    b.flange([x, cy, zc + r * 2.3], 'z', r * 1.3, T(r) * 0.8, NB(r))
-    b.pl('xz', cy + r * 2.3 - 0.1, fleche(x, zc - r * 0.4, Math.max(0.8, r / 6)), bl)
-    b.anchor('badge', [x, cy, zc + r * 4])
+    // loge de la boule : cylindre vertical (comme le clapet à battant), couvercle boulonné sur le dessus
+    const bl = b.cylZ(x, cy, zc, r * 1.9, r * 2.0, 'mm')
+    b.rings(bl, [x, cy, zc], [x, cy, zc + r * 2.0], r * 1.9, [0.5], 'ed2')
+    b.flange([x, cy, zc + r * 2.0], 'z', r * 1.9, T(r) * 0.8, NB(r))
+    b.pl('xz', cy + r * 1.9 + 0.05, fleche(x, zc + r * 0.9, Math.max(0.8, r / 6)), bl)
+    b.anchor('badge', [x, cy, zc + r * 3.4])
   },
 })
 
