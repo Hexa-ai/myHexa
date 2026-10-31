@@ -5,6 +5,7 @@
 // Entrée : un équipement du modele.json + ses éléments rattachés. Sortie : taille du nœud, ports de raccordement,
 // positions relatives des éléments (moteur d'agitateur, annexes, vannes de trémie, étiquette). Aucune coordonnée absolue.
 import { disposerCta, disposerHydro, portsCvc } from './cvc-modele'
+import { geometrieElec, LARGEUR_REPERE } from './elec-modele'
 const G: any = {};
 G.CELL_W = 86; G.CELL_H = 84;   // cellule d'un instrument en ligne (sur une conduite)
 G.ANNEXE_W = 74; G.ANNEXE_H = 66; // cellule d'une annexe (sonde, poire) sous un récipient
@@ -139,6 +140,9 @@ G.mesurer = function (eq, ctx) {
     g.cvc = true; g.w = Math.max(60, gg.w); g.h = gg.h; g.cx = g.w / 2; g.cy = gg.h / 2; g.label = null; g.lignes = [];
     g.ports = portsCvc(t, eq.params);
     g.ports.nord = { x: g.w / 2, y: 0, side: 'N' };
+  } else if (t === 'elec') {   // famille « Schéma électrique » : géométrie dans elec-modele.ts (le courant descend, ports N / S)
+    const ge = geometrieElec(eq.params || { sym: '' });
+    g.elec = true; g.w = ge.w + LARGEUR_REPERE; g.h = ge.h; g.cx = ge.cx; g.cy = ge.h / 2; g.label = null; g.lignes = []; g.ports = ge.ports;
   } else if (G.EXTRA[t]) {   // symboles de la passe 7 : 2 ports W / E sur l'axe du symbole (+ p3, p4 selon le type)
     const X = G.EXTRA[t], rw = X.rw * f, rh = X.rh * f, w = Math.max(2 * (rw + 14), lblW), cy = rh + 12 + (t === 'vanne_man' || t === 'vanne_3v' ? 12 * f : 0);
     g.rw = rw; g.rh = rh; g.cx = w / 2; g.cy = cy; g.w = w; g.aVal = !!X.val;
