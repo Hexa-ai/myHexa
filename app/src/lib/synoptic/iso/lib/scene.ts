@@ -47,7 +47,9 @@ export class Scene {
   tube(path: (Port | V3)[], o: TubeOpts = {}): this { this.items.push(...tube(path, o)); return this }
   gaine(path: (Port | V3)[], o: GaineOpts = {}): this { this.items.push(...gaine(path, o)); return this }
   /** supports de tuyauterie espacés sous un chemin horizontal */
-  supports(path: (Port | V3)[], o: { pas?: number; r?: number; ordre?: string } = {}): this { this.items.push(...supports(path, o)); return this }
+  supports(path: (Port | V3)[], o: { pas?: number; r?: number; ordre?: string } = {}): this { if (this.avecSupports) this.items.push(...supports(path, o)); return this }
+  /** règle de sobriété : les supports de tuyauterie sont désactivés par défaut (`supports:false`) ; les activer explicitement si besoin */
+  avecSupports = false
   item(i: Item): this { this.items.push(i); return this }
   /** calque SVG brut dessiné au-dessus de tout (repères de ports, aides) */
   over: string[] = []

@@ -2,7 +2,7 @@
 // Modèle de connexion : composants à ports, liaisons (tuyaux routés automatiquement), accessoires en ligne, tés, ponts.
 // Tout se sérialise en JSON ; `construire(doc)` reconstruit la scène entièrement.
 import type { V3, BBox } from './geom'
-import { add, sub, mul, len, unit, dot, proj, f, VUE } from './geom'
+import { add, sub, mul, len, unit, dot, proj, f, VUE, bboxDe } from './geom'
 import type { Plan, Rel } from './geom'
 import { dessiner } from './registre'
 import { Scene } from './scene'
@@ -42,8 +42,12 @@ export interface Accessoire {
   /** capteur en piquage : côté du tuyau horizontal ('haut' par défaut, 'x+', 'y+', 'x-', 'y-') */
   cote?: string
 }
+/** styles de « lien » générique (ni tuyau ni fluide) : réseau, câble, chaleur enterrée, radio/4G, flèche de flux */
+export type StyleLien = 'reseau' | 'cable' | 'chaleur' | 'radio' | 'flux'
 export interface Liaison {
   id: string
+  /** lien générique : tracé orthogonal au sol (ou aérien), sans DN ni accessoires */
+  lien?: { style: StyleLien; aerien?: boolean }
   de: Extremite
   vers: Extremite
   /** DN nominal (15…200). Par défaut : celui du port de départ */
@@ -275,6 +279,7 @@ export function construire(doc: Doc, opt: { K?: number } = {}): Resultat {
     return null
   }
 
+  const out_lien: Item[] = []
   for (const L of ordre) {
     try {
       const info = construireLiaison(L)
@@ -283,7 +288,63 @@ export function construire(doc: Doc, opt: { K?: number } = {}): Resultat {
     } catch (e: any) { avert.push(`liaison ${L.id} : ${e.message}`) }
   }
 
+  /** lien générique : polyligne orthogonale (routeur) au sol, ou aérienne ; rouge si l'état est en défaut */
+  function construireLien(L: Liaison): InfoLiaison {
+    const lien = L.lien!
+    const pa = getPort(L.de as RefPort), pb = getPort(L.vers as RefPort)
+    const sol = (pt: V3): V3 => [pt[0], pt[1], 0.4]
+    const horiz = (d: V3): V3 => (Math.abs(d[2]) > 0.5 ? [1, 0, 0] : d)
+    let P: V3[]
+    let ok = true
+    if (lien.aerien) {
+      const h = Math.max(pa.pos[2], pb.pos[2]) + 16
+      P = [pa.pos, [pa.pos[0], pa.pos[1], h], [pb.pos[0], pb.pos[1], h], pb.pos]
+      if (Math.abs(pa.pos[0] - pb.pos[0]) > 0.5 && Math.abs(pa.pos[1] - pb.pos[1]) > 0.5) P.splice(2, 0, [pb.pos[0], pa.pos[1], h])
+    } else {
+      const A: PortRoute = { pos: sol(pa.pos), dir: horiz(pa.dir), r: 1.5, obstacle: obstIdx[(L.de as RefPort).c] }
+      const B: PortRoute = { pos: sol(pb.pos), dir: horiz(pb.dir), r: 1.5, obstacle: obstIdx[(L.vers as RefPort).c] }
+      const route = router({ ...A }, { ...B }, { r: 1.5, obstacles, segments: [], via: L.via?.map(sol) })
+      ok = route.ok
+      P = simplifier ? simplifier(route.pts) : route.pts
+    }
+    const def = L.etat === 'defaut' || L.etat === 'alarme'
+    const bb = bboxDe(...P)
+    const q = P.map(proj)
+    const d = 'M' + q.map((a) => f(a[0]) + ' ' + f(a[1])).join('L')
+    const col = def ? 'var(--i-offline,#e5484d)' : lien.style === 'chaleur' ? 'var(--i-eau_chaude_aller,#e0623a)' : lien.style === 'cable' ? 'var(--i-edge)' : 'var(--i-signal,#3b8fc0)'
+    const anim = L.etat === 'marche' || L.etat === 'modulant'
+    let svg = ''
+    if (lien.style === 'chaleur') {
+      // réseau enterré : double trait au sol (deux parallèles décalées de ±1,8)
+      for (const k of [-1.8, 1.8]) {
+        const dec = P.map((pt, i) => { const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)]; const t = unit(sub(b, a)); return add(pt, [-t[1] * k, t[0] * k, 0] as V3) })
+        svg += `<path d="M${dec.map(proj).map((a) => f(a[0]) + ' ' + f(a[1])).join('L')}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linejoin="round" opacity=".9"/>`
+      }
+    } else {
+      const dash = lien.style === 'reseau' ? '5 3' : lien.style === 'radio' ? '1.5 4' : ''
+      const w = lien.style === 'cable' ? 1.8 : 1.5
+      svg += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="${lien.style === 'radio' ? 'round' : 'butt'}"${dash ? ` stroke-dasharray="${dash}"` : ''}${anim && lien.style !== 'cable' ? ' class="flow"' : ''}/>`
+    }
+    if (lien.style === 'radio') {
+      // icône d'ondes au milieu : trois arcs concentriques
+      const m = q[Math.floor(q.length / 2)], m2 = q[Math.ceil(q.length / 2) - 1], cx = (m[0] + m2[0]) / 2, cy = (m[1] + m2[1]) / 2
+      svg += `<g fill="none" stroke="${col}" stroke-width="1.2" stroke-linecap="round"><circle cx="${f(cx)}" cy="${f(cy)}" r="1.4" fill="${col}"/>${[4, 7].map((r) => `<path d="M${f(cx - r * 0.7)} ${f(cy - r * 0.7)}A${r} ${r} 0 0 1 ${f(cx + r * 0.7)} ${f(cy - r * 0.7)}"/>`).join('')}</g>`
+    }
+    if (lien.style === 'flux' && P.length > 1) {
+      const a = q[q.length - 2], b = q[q.length - 1], ang = Math.atan2(b[1] - a[1], b[0] - a[0])
+      const hx = (t: number) => f(b[0] + Math.cos(ang + t) * -7) + ' ' + f(b[1] + Math.sin(ang + t) * -7)
+      svg += `<path d="M${hx(0.45)}L${f(b[0])} ${f(b[1])}L${hx(-0.45)}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linejoin="round"/>`
+    }
+    if (def) {
+      const m = q[Math.floor(q.length / 2)]
+      svg += `<circle cx="${f(m[0])}" cy="${f(m[1] - 6)}" r="4.5" fill="var(--i-offline,#e5484d)"/><path d="M${f(m[0])} ${f(m[1] - 8.4)}v2.6M${f(m[0])} ${f(m[1] - 4)}v.1" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>`
+    }
+    out_lien.push({ bb, id: 'l:' + L.id, plan: L.plan, svg: wrapLien(svg, L.id) })
+    return { id: L.id, pts: P, r: 1.5, fluide: 'eau' as Fluide, coudes: Math.max(0, P.length - 2), ok, accessoires: [], tes: [], segments: [], ponts: 0 }
+  }
+
   function construireLiaison(L: Liaison): InfoLiaison {
+    if (L.lien) return construireLien(L)
     const ext = (e: Extremite, cote: 'de' | 'vers'): PortRoute & { bride: boolean; fl?: Fluide; rPort: number; cid?: string } => {
       const t = e as RefTap
       if (t.liaison) {
@@ -520,7 +581,7 @@ export function construire(doc: Doc, opt: { K?: number } = {}): Resultat {
   }
 
   // 3. assemblage scène
-  for (const it of items) sc.item(it)
+  for (const it of [...items, ...out_lien]) sc.item(it)
   if (doc.sol) sc.sol(doc.sol.x0, doc.sol.y0, doc.sol.x1, doc.sol.y1, doc.sol.pas ?? 40)
   for (const e of doc.etiquettes ?? []) {
     const r = rendus[e.c]; if (!r) continue

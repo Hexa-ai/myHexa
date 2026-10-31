@@ -123,8 +123,10 @@ export function objetsIso(iso: IsoSection): ObjetIso[] {
 /** variables reliées dans la scène iso (pour le chargement des valeurs et la synchronisation des blocs) */
 export function variablesIso(iso: IsoSection | undefined): string[] {
   const noms = new Set<string>()
-  for (const { obj } of iso ? objetsIso(iso) : [])
+  for (const { obj } of iso ? objetsIso(iso) : []) {
     for (const sp of Object.values(obj.slots ?? {})) if (sp?.variable) noms.add(sp.variable)
+    for (const v of variablesHabillage((obj as ExtensionIso).habillage)) noms.add(v)
+  }
   return [...noms]
 }
 

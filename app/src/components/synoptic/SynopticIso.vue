@@ -39,6 +39,8 @@ const emit = defineEmits<{
   (e: 'etat', etat: SynopticEtat): void
   (e: 'save'): void
   (e: 'recherche'): void
+  /** clic sur un symbole dont la carte renvoie vers un autre synoptique (lecture) */
+  (e: 'naviguer', id: string): void
 }>()
 
 // feuille de style des symboles : une seule fois dans la page
@@ -57,6 +59,8 @@ const erreur = ref('')
 const info = ref('')
 const sel = ref<Sel | null>(null)
 const mode = ref<'sel' | 'lien'>('sel')
+/** nature de la liaison tracée : tuyau (défaut) ou lien générique (réseau, câble, chaleur enterrée, radio, flux) */
+const styleLien = ref<'tuyau' | 'reseau' | 'cable' | 'chaleur' | 'radio' | 'flux'>('tuyau')
 const arme = ref<string | null>(null)
 const attente = ref<string | null>(null)
 const aimant = ref<number>(20)
@@ -224,7 +228,12 @@ function onDown(e: PointerEvent) {
   if (e.button !== 0) return
   if (props.editing) {
     if (touchEdition(e)) return
-  } else if (!props.gestes) return
+  } else {
+    const cmp = toucher(e, '.cmp')
+    const lien = cmp ? compo(cmp.getAttribute('data-c')!)?.habillage?.carte?.lien : undefined
+    clicCarte = lien ? { x: e.clientX, y: e.clientY, lien } : null
+    if (!props.gestes) return
+  }
   pan = { x: e.clientX, y: e.clientY, vb: [...vb!] as Vb }
   stage.value?.setPointerCapture(e.pointerId)
 }
@@ -319,8 +328,11 @@ function onMove(e: PointerEvent) {
     s.setAttribute('viewBox', vb.join(' '))
   }
 }
+let clicCarte: { x: number; y: number; lien: string } | null = null
 function onUp(e: PointerEvent) {
   pointeurs.delete(e.pointerId)
+  if (clicCarte && Math.hypot(e.clientX - clicCarte.x, e.clientY - clicCarte.y) < 6) emit('naviguer', clicCarte.lien)
+  clicCarte = null
   if (pointeurs.size < 2) pincement = null
   const bouge = glisse?.bouge || glisseAcc?.bouge
   glisse = null
@@ -407,7 +419,9 @@ function choisirPort(pid: string) {
   attente.value = null
   mode.value = 'sel'
   sel.value = { k: 'l', id }
-  info.value = `Tuyau ${id} tracé`
+  const nouvelle = travail.value.liaisons.find((l) => l.id === id)
+  if (nouvelle && styleLien.value !== 'tuyau') nouvelle.lien = { style: styleLien.value }
+  info.value = styleLien.value === 'tuyau' ? `Tuyau ${id} tracé` : `Lien ${id} tracé`
   valider()
 }
 function basculerLien() {
@@ -553,6 +567,10 @@ void nextTick
   <div class="syn-root iso-vue" :class="{ 'syn-plein': fullFrame, 'syn-sans-geste': gestes === false, 'syn-mobile': mobile, 'mode-edition': editing }" data-testid="iso-root">
     <div v-if="editing" class="edbar" data-testid="iso-barre">
       <button type="button" class="btn" :class="{ on: mode === 'lien' }" data-testid="iso-relier" title="Relier deux ports (L)" @click="basculerLien">⟷ Relier (L)</button>
+      <select v-if="mode === 'lien'" v-model="styleLien" class="ed-in sm" data-testid="iso-style-lien" aria-label="Nature de la liaison">
+        <option value="tuyau">Tuyau</option><option value="reseau">Réseau (Ethernet / fibre)</option><option value="cable">Câble électrique</option>
+        <option value="chaleur">Réseau de chaleur enterré</option><option value="radio">Radio / 4G</option><option value="flux">Flèche de flux</option>
+      </select>
       <button type="button" class="btn" :disabled="sel?.k !== 'c'" data-testid="iso-barre-tourner" title="Quart de tour (R)" @click="tournerSel">↻ Tourner (R)</button>
       <button type="button" class="btn" :disabled="!sel" title="Suppr" @click="supprimer">✕ Supprimer</button>
       <span class="ed-sep" />

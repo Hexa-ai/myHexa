@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useRoute, useRouter } from 'vue-router'
 // Dessin d'un synoptique en consultation : vue 2D (moteur historique) ou vue isométrique, selon ce que contient le document.
 // Un document sans section `iso` donne exactement le dessin d'avant ; avec les deux vues, une bascule « 2D | Iso » apparaît
 // (la vue enregistrée dans le document est celle d'ouverture).
@@ -29,6 +30,13 @@ const emit = defineEmits<{
   (e: 'vue', vue: { x: number; y: number; w: number; h: number }): void
 }>()
 
+const router = useRouter()
+const route = useRoute()
+/** carte d'un symbole : ouvre le synoptique lié (même mode d'affichage ; retour vers la page courante) */
+function ouvrirLie(id: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return
+  void router.push({ name: 'admin-synoptic', params: { id }, query: { retour: route.fullPath } })
+}
 const dispo = computed(() => vuesDisponibles(props.doc))
 const choisie = ref<VueSynoptique>(vueInitiale(props.doc))
 // nouveau document (autre version) : on repart de la vue enregistrée
@@ -51,6 +59,7 @@ const actif = computed<VueSynoptique>(() => (dispo.value.includes(choisie.value)
       :gestes="gestes"
       :mobile="mobile"
       @etat="emit('etat', $event)"
+      @naviguer="ouvrirLie"
     />
     <SynopticCanvas
       v-else

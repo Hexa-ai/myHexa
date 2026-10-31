@@ -3,6 +3,7 @@
 // un test (recherche.spec.ts) échoue si un symbole iso ou 2D n'a pas au moins un mot-clé anglais.
 // Pour ajouter un symbole : ajouter une ligne ici (clé = identifiant iso « famille.nom » ou clé de la palette 2D).
 import { mots } from './texte'
+import { T_METIERS } from './mots-cles-metiers'
 
 const T: Record<string, string> = {
   // ── pompes
@@ -201,7 +202,7 @@ export interface MotsCles {
 
 /** mots-clés déclarés pour un identifiant de symbole (iso « famille.nom » ou clé 2D) ; vide si non déclaré */
 export function motsClesDe(id: string): MotsCles {
-  const brut = T[id]
+  const brut = T[id] ?? T_METIERS[id]
   if (!brut) return { fr: [], en: [] }
   const [fr, en] = brut.split('|').map((x) => x.split(',').map((m) => m.trim()).filter(Boolean))
   return { fr: fr ?? [], en: en ?? [] }
@@ -214,4 +215,4 @@ export function motsIndexables(id: string): string[] {
 }
 
 /** identifiants ayant des mots-clés déclarés (utile aux tests) */
-export const idsAvecMotsCles = (): string[] => Object.keys(T)
+export const idsAvecMotsCles = (): string[] => [...Object.keys(T), ...Object.keys(T_METIERS)]

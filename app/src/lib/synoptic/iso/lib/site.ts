@@ -17,7 +17,7 @@ const ACCENTS = 'accent=signal|chaud|vert|rouge|neutre|eau|gaz'
 const accent = (p: Params, def = 'signal'): string => ACC[p.accent ?? def] ?? 'ma'
 
 /** 4 ancres de façade au pied du bâtiment (+ x, − x, + y, − y) */
-function facades(b: Builder, W: number, D: number, z = 4) {
+export function facades(b: Builder, W: number, D: number, z = 4) {
   b.port('x+', [W, D / 2, z], [1, 0, 0], { type: 'signal' })
   b.port('x-', [0, D / 2, z], [-1, 0, 0], { type: 'signal' })
   b.port('y+', [W / 2, D, z], [0, 1, 0], { type: 'signal' })
