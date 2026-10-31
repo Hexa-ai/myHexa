@@ -53,11 +53,21 @@ async function handleSubmit() {
     <div class="absolute inset-0 hex-grid" />
 
     <!-- corners -->
-    <div class="absolute top-6 left-6 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground flex items-center gap-2">
+    <div v-if="!brand" class="absolute top-6 left-6 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground flex items-center gap-2">
       <span class="text-signal">⬢</span>
-      <a href="https://hexa-ai.fr" target="_blank" rel="noopener noreferrer" class="hover:text-signal transition" data-testid="powered-by">{{ brand ? 'propulsé par Hexa-AI' : 'Hexa.ai · myHexa edge' }}</a>
+      <a href="https://hexa-ai.fr" target="_blank" rel="noopener noreferrer" class="hover:text-signal transition">Hexa.ai · myHexa edge</a>
     </div>
-    <div class="absolute bottom-6 right-6 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+    <!-- page client : Hexa-AI s'efface, simple mention en bas à droite (texte, sans logo) -->
+    <a
+      v-if="brand"
+      href="https://hexa-ai.fr"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="absolute bottom-4 right-5 font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground/70 hover:text-signal transition"
+      data-testid="powered-by"
+      >propulsé par Hexa-AI</a
+    >
+    <div v-else class="absolute bottom-6 right-6 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
       v1 · 2026
     </div>
     <button
@@ -85,16 +95,8 @@ async function handleSubmit() {
 
     <div class="relative w-full max-w-[440px] fade-up">
       <div class="mb-8 flex flex-col items-center">
-        <div v-if="brand?.logoUrl" class="mb-7 flex items-center justify-center gap-5" data-testid="login-cobrand">
+        <div v-if="brand?.logoUrl" class="mb-7 flex items-center justify-center" data-testid="login-cobrand">
           <CompanyLogo height-class="h-20" testid="login-brand-logo" />
-          <span class="h-12 w-px bg-border" aria-hidden="true" />
-          <img
-            :src="theme === 'dark' ? '/hexa-logo-dark.png' : '/hexa-logo-light.png'"
-            alt="Hexa.ai"
-            class="h-10 w-[120px] object-contain select-none"
-            data-testid="login-hexa-logo"
-            draggable="false"
-          />
         </div>
         <img
           v-else

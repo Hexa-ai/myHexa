@@ -238,31 +238,30 @@ function goUsage() {
         v-if="collapsed"
         class="hidden md:flex flex-col items-center gap-2 pt-5 pb-4 border-b border-border"
       >
+        <CompanyLogo v-if="brand?.logoUrl" height-class="h-7" testid="brand-logo-rail" />
         <img
+          v-else
           src="/hexa-mark.png"
           alt="Hexa-AI"
           class="size-8 select-none"
           :title="company"
           draggable="false"
         />
-        <CompanyLogo v-if="brand?.logoUrl" height-class="h-7" testid="brand-logo-rail" />
       </div>
       <div :class="['px-5 pt-6 pb-5 border-b border-border', collapsed && 'md:hidden']">
-        <div v-if="brand?.logoUrl" class="mb-3" data-testid="brand-block">
+        <div v-if="brand?.logoUrl" data-testid="brand-block">
           <CompanyLogo height-class="h-11" testid="brand-logo" />
         </div>
         <img
+          v-else
           :src="theme === 'dark' ? '/hexa-logo-dark.png' : '/hexa-logo-light.png'"
           alt="Hexa.ai"
-          :class="[
-            'object-contain object-left select-none',
-            brand?.logoUrl ? 'h-6 w-[96px] opacity-90' : 'h-9 w-[140px]',
-          ]"
+          class="h-9 w-[140px] object-contain object-left select-none"
           data-testid="hexa-logo"
           draggable="false"
           @click="diagTap"
         />
-        <div class="mt-4 flex items-center justify-between gap-2">
+        <div class="mt-4 flex items-center justify-between gap-2" data-testid="menu-company" @click="diagTap">
           <div class="flex items-center gap-2 min-w-0">
             <span class="size-1.5 rounded-full bg-signal pulse-dot shrink-0" />
             <span
@@ -844,7 +843,7 @@ function goUsage() {
               <path d="M3 6h18M3 12h18M3 18h18" />
             </svg>
           </button>
-          <img src="/hexa-mark.png" alt="" class="hidden sm:inline size-4" draggable="false" />
+          <img v-if="!brand?.logoUrl" src="/hexa-mark.png" alt="" class="hidden sm:inline size-4" draggable="false" />
           <span class="text-muted-foreground/50 hidden sm:inline">/</span>
           <span class="hidden sm:inline">admin</span>
           <span class="text-muted-foreground/50 hidden sm:inline">/</span>
