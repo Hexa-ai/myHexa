@@ -16,6 +16,7 @@ function porte(b: Builder, cs: any, W: number, H: number, z0: number, y: number)
 
 enregistrer({
   id: 'elec.armoire', famille: 'Électrique', nom: 'Armoire électrique (porte, voyants, serrure)',
+  statut: 'obsolete', remplacePar: 'armoire.a1p',
   taille: () => [60, 34, 100], defauts: { variante: 'simple' }, variantes: ['simple', 'double'], planche: PL,
   dessiner(b: Builder, p: Params) {
     const W = 60, D = 34, H = 94
@@ -35,6 +36,7 @@ enregistrer({
 })
 enregistrer({
   id: 'elec.tgbt', famille: 'Électrique', nom: 'TGBT (colonnes, disjoncteur général, jeu de barres)',
+  statut: 'obsolete', remplacePar: 'armoire.tgbt',
   taille: (p) => [(p.n ?? 3) * 44 + 4, 40, 110], defauts: { n: 3 }, planche: PL.slice(0, 6),
   dessiner(b: Builder, p: Params) {
     const n = p.n, W = n * 44 + 4, D = 40, H = 100
@@ -59,6 +61,7 @@ enregistrer({
 })
 enregistrer({
   id: 'elec.variateur', famille: 'Électrique', nom: 'Variateur de fréquence (radiateur, console)',
+  statut: 'obsolete',
   taille: () => [34, 26, 56], defauts: {}, planche: PL,
   dessiner(b: Builder, p: Params) {
     const bx = b.box(2, 2, 2, 30, 14, 50, 'mb')
@@ -73,6 +76,7 @@ enregistrer({
 })
 enregistrer({
   id: 'elec.transformateur', famille: 'Électrique', nom: 'Transformateur (cuve à ailettes, 6 isolateurs)',
+  statut: 'revu',
   taille: () => [74, 50, 78], defauts: {}, planche: PL.slice(0, 6),
   dessiner(b: Builder, p: Params) {
     b.box(4, 4, 0, 66, 42, 6, 'mm')
@@ -106,6 +110,7 @@ enregistrer({
 })
 enregistrer({
   id: 'elec.groupe_electrogene', famille: 'Électrique', nom: 'Groupe électrogène (capot insonorisé, échappement)',
+  statut: 'obsolete', remplacePar: 'energie.groupe_electrogene',
   taille: () => [130, 56, 80], defauts: {}, planche: PL,
   dessiner(b: Builder, p: Params) {
     b.box(2, 2, 0, 126, 52, 8, 'mm')
@@ -124,6 +129,7 @@ enregistrer({
 })
 enregistrer({
   id: 'elec.panneau_pv', famille: 'Électrique', nom: 'Panneau photovoltaïque (cellules, cadre, structure inclinée)',
+  statut: 'obsolete', remplacePar: 'energie.pv_sol',
   taille: (p) => [(p.n ?? 3) * 36 + 10, 60, 58], defauts: { n: 3 }, planche: [['arret'], ['marche', { valeur: 4.2 }], ['defaut'], ['alarme'], ['consigne'], ['inconnu']],
   dessiner(b: Builder, p: Params) {
     const n = p.n, W = n * 36 + 6, yb = 6, yh = 56, zb = 8, zh = 44
@@ -148,6 +154,7 @@ const P = (b: Builder, q: [number, number, number]) => { const a = proj(b.w(q));
 
 enregistrer({
   id: 'elec.borne_irve', famille: 'Électrique', nom: 'Borne de recharge IRVE',
+  statut: 'obsolete', remplacePar: 'energie.borne_irve',
   taille: () => [34, 30, 84], defauts: {}, planche: [['arret'], ['marche'], ['defaut'], ['alarme'], ['consigne', { manuel: true }], ['inconnu']],
   dessiner(b: Builder, p: Params) {
     b.box(2, 4, 0, 30, 22, 3, 'mc')
@@ -163,6 +170,7 @@ enregistrer({
 })
 enregistrer({
   id: 'elec.box_hai', famille: 'Électrique', nom: 'Box HAI-P200 4G (boîtier rail DIN + antenne)',
+  statut: 'obsolete', remplacePar: 'reseau.box_hai_p200',
   taille: () => [40, 30, 66], defauts: {}, planche: [['arret'], ['marche'], ['defaut'], ['alarme'], ['inconnu'], ['marche', {}, 90]],
   dessiner(b: Builder, p: Params) {
     b.box(0, 6, 0, 40, 18, 2, 'mm')                    // rail DIN
