@@ -4,7 +4,7 @@ alter table public.companies
   add column if not exists beta_features text[] not null default '{}';
 
 comment on column public.companies.beta_features is
-  'Fonctions en avant-première activées pour l''entreprise (ex. widgets_beta, synoptique) ; modifiable par le staff admin seulement';
+  'Fonctions en avant-première activées pour l''entreprise (ex. synoptique) ; modifiable par le staff admin seulement';
 
 create or replace function public._guard_beta_features() returns trigger
 language plpgsql security definer set search_path = public as $$
@@ -23,8 +23,8 @@ create trigger companies_guard_beta before update of beta_features on public.com
   for each row execute function public._guard_beta_features();
 
 -- entreprise interne Hexa-AI (même id en prod et sur le test)
-update public.companies set beta_features = '{widgets_beta,synoptique}'
+update public.companies set beta_features = '{synoptique}'
   where id = '08a472a4-04de-498e-8f88-3aab12925134';
 -- société de démonstration (test seulement : ligne absente en prod)
-update public.companies set beta_features = '{widgets_beta,synoptique}'
+update public.companies set beta_features = '{synoptique}'
   where id = '00000000-0000-4000-8000-0000000de300';

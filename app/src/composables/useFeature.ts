@@ -1,4 +1,4 @@
-// Fonctionnalités en avant-première (bêta) par entreprise : companies.beta_features, modifiable par le
+// Options activables par entreprise (fonction vendue en option, ou avant-première) : companies.beta_features, modifiable par le
 // staff seulement. Se base sur l'entreprise EFFECTIVE : un staff qui agit comme un client voit
 // exactement ce que voit ce client (donc pas les bêtas).
 import { computed, ref } from 'vue'
@@ -6,7 +6,6 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
 
 export const BETA_FEATURES = [
-  { key: 'widgets_beta', label: 'Nouveaux widgets', hint: 'styles de jauge : barres, cuve' },
   { key: 'synoptique', label: 'Synoptique', hint: 'synoptique généré par IA' },
 ] as const
 export type BetaFeature = (typeof BETA_FEATURES)[number]['key']

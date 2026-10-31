@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useFeature } from '@/composables/useFeature'
 import {
   GAUGE_COLORS,
   GAUGE_STYLES,
@@ -200,11 +199,8 @@ function setGaugeStyle(g: GaugeStyle) {
     w.value.options.gaugeStyle = g
   }
 }
-const betaWidgets = useFeature('widgets_beta')
-/** le choix du style de jauge n'est proposé que si la bêta est active (ou si le style est déjà posé) */
-const showGaugeStyle = computed(
-  () => w.value.type === 'gauge' && (betaWidgets.value || !!w.value.options.gaugeStyle),
-)
+/** styles de jauge (ronde, barres, cuve) : proposés à tous les clients (décision Julien 31/10, pas d'option) */
+const showGaugeStyle = computed(() => w.value.type === 'gauge')
 const gaugeStyle = computed(() => w.value.options.gaugeStyle ?? 'dial')
 const showThresholds = computed(
   () =>
@@ -658,11 +654,6 @@ function save() {
         <div class="flex items-center gap-2">
           <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
             >Style de la jauge</span
-          >
-          <span
-            class="font-mono text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-full border border-signal/50 text-signal"
-            data-testid="beta-badge"
-            >bêta</span
           >
         </div>
         <div class="flex flex-wrap gap-1.5">

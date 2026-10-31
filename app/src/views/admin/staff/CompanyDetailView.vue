@@ -386,11 +386,11 @@ watch(id, load)
 
     <section v-if="auth.isHexaStaffAdmin && company" class="space-y-2" data-testid="company-betas">
       <h2 class="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-        Fonctions en avant-première (bêta)
+        Options de l'entreprise
       </h2>
       <p class="text-xs text-muted-foreground">
-        Visibles uniquement pour cette entreprise tant qu'elles sont cochées ; les autres clients
-        ne les voient pas.
+        Fonctions activées pour cette entreprise seulement (option souscrite ou avant-première) ;
+        décochée, la fonction disparaît pour ce client.
       </p>
       <label
         v-for="f in BETA_FEATURES"
