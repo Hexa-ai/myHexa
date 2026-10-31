@@ -221,6 +221,7 @@ defineExpose({ recharger })
         <SynopticCanvas
           ref="canvas"
           :inert="onglet === 'resume' || vueEdition === 'iso'"
+          :class="{ invisible: vueEdition === 'iso' && onglet === 'dessin' }"
           :doc="doc"
           :values="values"
           :catalogue="catalogue"

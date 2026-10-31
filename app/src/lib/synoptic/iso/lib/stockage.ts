@@ -2,10 +2,12 @@
 // @ts-nocheck — catalogue de dessin (code massif copié de iso_lib, qui compile sans strictNullChecks) ; voir iso/README.md
 // Stockage : cuves, bassins, silos, décanteur, bâche, ballons…
 import { enregistrer } from './registre'
-import { Builder, Part, c2, r2, l2, p2, d2, boxSvg, cylSvg as CYL } from './iso'
+import type { Part } from './iso'
+import { Builder, c2, r2, l2, p2, d2, boxSvg, cylSvg as CYL } from './iso'
 import { moteurZ, helice, socle, grille } from './communs'
 import { rayonDN } from './reseau'
-import { V3, BBox, pts, P2, f, proj, arcCmds, ptCircle } from './geom'
+import type { V3, BBox } from './geom'
+import { pts, P2, f, proj, arcCmds, ptCircle } from './geom'
 import type { Params, EtatNom, Valeurs, Fluide } from './types'
 
 const NIV: [EtatNom, Valeurs?, number?][] = [['arret', { niveau: 20 }], ['marche', { niveau: 55 }], ['alarme', { niveau: 92, seuils: { b: 15, h: 85, tb: 5, th: 95 } }], ['defaut', { niveau: 4, seuils: { b: 15, tb: 8 } }], ['consigne', { niveau: 70, manuel: true }], ['inconnu', { niveau: 50 }], ['marche', { niveau: 65 }, 90], ['arret', { niveau: 35 }, 90]]

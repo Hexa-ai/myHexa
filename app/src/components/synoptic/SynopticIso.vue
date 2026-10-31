@@ -129,6 +129,11 @@ function rendre(force = false) {
     let svg = r.scene.toSvg({ css: false, fond: false, marge: 30 })
     const m = svg.match(/viewBox="([-\d. ]+)"/)
     const v = (m?.[1] ?? '0 0 400 300').split(' ').map(Number) as Vb
+    // scène vide : la bibliothèque renvoie une boîte infinie ; on se rabat sur le sol (éditeur) ou un cadre neutre
+    if (!(v[2] > 0 && v[3] > 0 && Math.abs(v[0]) < 1e6)) {
+      const b = boiteSol(solEffectif(travail.value))
+      v.splice(0, 4, ...(props.editing ? b : ([0, 0, 400, 300] as Vb)))
+    }
     let grille = ''
     if (props.editing) {
       const sol = solEffectif(travail.value)
@@ -140,7 +145,7 @@ function rendre(force = false) {
         vb = [x0, y0, x1 - x0, y1 - y0]
       }
     } else if (!vb) vb = v
-    svg = svg.replace(/width="\d+" height="\d+" viewBox="[-\d. ]+"/, `width="100%" height="100%" viewBox="${vb.join(' ')}"`)
+    svg = svg.replace(/width="[-\d.]+" height="[-\d.]+" viewBox="[-\d. ]+"/, `width="100%" height="100%" viewBox="${vb.join(' ')}"`)
     if (grille) svg = svg.replace('<g class="dessin">', grille + '<g class="dessin">')
     let sur = ''
     if (props.editing && mode.value === 'lien') {
@@ -532,6 +537,7 @@ void nextTick
       <button type="button" class="btn" @click="ajuster">⤢ Ajuster</button>
       <span class="ed-sp" />
       <span class="mono" data-testid="iso-info">{{ info }}</span>
+      <button type="button" class="btn primaire" data-testid="iso-enregistrer" title="Enregistrer une nouvelle version (Ctrl+S)" @click="emit('save')">Enregistrer</button>
     </div>
     <div class="synbody" :class="{ edition: editing }">
       <aside v-if="editing" class="ed-palette" aria-label="Palette isométrique" data-testid="iso-palette">

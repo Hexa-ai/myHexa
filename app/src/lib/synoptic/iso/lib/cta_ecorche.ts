@@ -7,7 +7,8 @@
 // Ports : gaine à chaque extrémité de chaque étage (in/out, in2/out2), eau (ch_a/ch_r batterie chaude, fr_a/fr_r froide) par le plancher sous une batterie, condensat, vapeur.
 import { enregistrer } from './registre'
 import { Builder, c2, r2, l2 } from './iso'
-import { pts, V3, BBox } from './geom'
+import type { V3, BBox } from './geom'
+import { pts } from './geom'
 import type { Params, Fluide } from './types'
 
 export const CE_D = 78       // profondeur intérieure + parois

@@ -147,6 +147,26 @@ Deux éléments paramétriques, dessinés en SVG par `engine/cvc-dessin.ts` à p
 
 Les symboles propres à une entreprise se dessinent dans l'éditeur de formes (stockés dans `modele.bibliotheque`), sans toucher au code.
 
+## Mode isométrique
+
+Un synoptique peut avoir une vue **2D** (moteur historique), une vue **isométrique**, ou les deux. Le choix de la vue d'ouverture est enregistré dans le document (`iso.vue`).
+
+**Format.** Le document v2 reçoit une section optionnelle `iso` (`app/src/lib/synoptic/iso/format.ts`) : `composants` (type du catalogue, x/y au sol, z hauteur, rotation, état fixe), `liaisons` (ports reliés, DN, fluide, `accessoires` posés à l'abscisse `s` du tuyau), `sol` (étendue de la grille), `vue`, `instruments`. Chaque objet porte en plus `libelle` et `slots` (variables reliées, même forme que les équipements 2D : `{ variable, regle? }`). Un document sans `iso` se comporte exactement comme avant : `avecIso(doc)` le renvoie tel quel, `variablesLiees` n'ajoute rien, l'import ne crée pas la section. La section est omise tant que la scène est vide.
+
+**Éditeur** (PC uniquement, bascule « 2D | Iso » dans la barre ; le 2D reste monté dessous, ses modifications ne sont pas perdues) : grille isométrique au sol (2 axes à 30° + axe de hauteur gradué), palette du catalogue (vannes et capteurs « sur un tuyau » en tête), pose aimantée (pas 10/20/40), glisser pour déplacer, `R` quart de tour, hauteur z par champ ou `[` / `]`, `L` (ou « Relier ») puis clic sur deux ports : le routeur de la bibliothèque trace le tuyau (coudes, tés, ponts) et le recalcule quand on déplace un appareil. Une vanne ou un capteur armé (ou déposé) sur un tuyau se cale dans l'axe ; il glisse le long du tuyau. DN et fluide se règlent sur la liaison. Profondeur : automatique, ou « premier plan » / « arrière-plan » (`PageUp` / `PageDown`). Annuler / rétablir propre à la vue iso ; enregistrement par le circuit habituel (nouvelle version, brouillon / publication inchangés), `Ctrl+S`.
+
+**Variables et états en direct** (`iso/etats.ts`) : mêmes emplacements que le 2D (marche, défaut, ouvert / fermé, position, niveau, valeur, vitesse selon la famille, `iso/familles.ts`) et même panneau (sélecteur de variable, règle `{ op, val }`). Les 10 états de la bibliothèque (arrêt, marche, défaut, alarme, modulant, ouvert, fermé, inconnu, consigne, maintenance) sont mappés sur ceux du moteur (`ETAT_ISO_VERS_MOTEUR`, test de totalité). Une grandeur reliée sans mesure n'affiche rien (pas de valeur fixe trompeuse). Les valeurs reliées des appareils sans instrument sont posées en étiquettes (placement automatique, `etiquettes.ts`).
+
+**Résumé mobile** : `avecIso` ajoute au document les équipements iso (pompes, cuves, vannes, capteurs reliés ou nommés) comme équipements du moteur (`type_iso`) ; `familleDe` lit `FAMILLE_PICTO_PAR_TYPE_ISO` (un test exige qu'aucun symbole du catalogue iso ne manque).
+
+**Affichage** : `SynopticVue.vue` choisit la vue (tuile, vue agrandie, plein écran mobile) et affiche la bascule quand les deux existent ; le dessin iso est chargé à la demande (chunk séparé, ~70 ko gzip). Thèmes clair / sombre par les variables CSS du portail ; édition réservée au PC, consultation OK tablette / mobile.
+
+**Origine du code.** `app/src/lib/synoptic/iso/lib/` est une copie de `iso_lib/src` (source de vérité tant que le format n'est pas stabilisé : `~/suivi/projets/myhexa_support/synoptique/iso_lib/`). Écarts : imports `import type`, suppression de code mort, `any` justifiés dans `modele.ts` / `types.ts`. Les catalogues de dessin (pompes, vannes, cuves, chaufferie, CTA…) gardent `/* eslint-disable */` et `// @ts-nocheck` : code de dessin massif qui ne compile pas en `strictNullChecks`. Pour resynchroniser : recopier, puis relancer `eslint`, `vue-tsc` et `vitest`.
+
+**Limites connues.** Le glisser-déposer depuis la palette n'a pas d'aperçu fantôme (le clic « armer puis poser » est la voie testée) ; pas de multi-sélection ; pas de copier-coller ; une seule hauteur z par appareil (pas de plans / étages éditables, `plan` du modèle non exposé) ; routage automatique sans point de passage manuel (`via` conservé mais non éditable) ; la bascule 2D / iso n'est pas partagée entre vues (pas de lien entre un équipement 2D et son jumeau iso) ; mobile : pincer / glisser seulement, pas d'édition.
+
+Tests : `tests/unit/lib/synoptic/iso-format.spec.ts` (format, rétrocompatibilité, routage via le moteur, mapping d'états, résumé) ; e2e `myHexa-tools/e2e/synopt_iso.mjs`.
+
 ## Tests
 
 - Unitaires : `app/tests/unit/lib/synoptic/` (règles, documents / import-export, géométrie, annuler/rétablir sur le vrai moteur monté dans jsdom).

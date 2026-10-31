@@ -1,7 +1,8 @@
 /* eslint-disable */
 // @ts-nocheck — catalogue de dessin (code massif copié de iso_lib, qui compile sans strictNullChecks) ; voir iso/README.md
 // Briques communes aux symboles (moteurs, socles, bornes, grilles…).
-import { Builder, Part, r2, c2, l2, p2, d2 } from './iso'
+import type { Part } from './iso'
+import { Builder, r2, c2, l2, p2, d2 } from './iso'
 import type { V3 } from './geom'
 
 /** Grille de ventilateur : cercles + rayons, dans un plan centré (0,0) */

@@ -7,7 +7,7 @@
 .syn-root .iso-stage.arme { cursor: copy; }
 .syn-root .iso-stage .cmp, .syn-root .iso-stage .acc, .syn-root .iso-stage .lien { cursor: pointer; }
 /* grille au sol : deux familles de traits à 30° et l'axe de hauteur */
-.syn-root .iso-gl { fill: none; stroke: var(--grid-line, rgb(128 140 150 / .28)); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.syn-root .iso-gl { fill: none; stroke: var(--muted-foreground, #8a96a3); stroke-opacity: .3; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .syn-root .iso-gz { fill: none; stroke: var(--muted-foreground, #8a96a3); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
 /* sélection */
 .syn-root .iso-stage .sel { filter: drop-shadow(0 0 2px var(--primary)) drop-shadow(0 0 5px var(--primary)); }

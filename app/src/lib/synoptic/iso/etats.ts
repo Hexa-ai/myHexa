@@ -85,6 +85,8 @@ export function lireEtat(o: ObjetIsoLie, v: Record<string, number>): EtatLu {
   if (!estLie(o)) return fixe
   const fam: FamilleIso = familleIso(o.type)
   const valeurs: Valeurs = { ...(o.valeurs ?? {}) }
+  // une grandeur reliée à une variable ne garde pas la valeur fixe de l'éditeur : sans mesure, on n'affiche rien
+  for (const [nom, sp] of Object.entries(o.slots ?? {})) if (sp?.variable) delete (valeurs as Record<string, number | undefined>)[nom]
   const defaut = lu(o, 'defaut', v) === 1
   if (fam !== 'mesure' && fam !== 'cuve') {
     const aff = lu(o, 'valeur', v)
