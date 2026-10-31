@@ -79,6 +79,7 @@ export const MODULES_CTA: Record<string, DefModule> = {
   recup_roue: { nom: 'Roue de récupération', court: 'Roue récup.', w: 120, double: true, slots: ['marche', 'vitesse', 'entree_t', 'sortie_t', 'defaut'], mesures: ['sortie_t', 'vitesse'], picto: 'roue', pref: 'RR' },
   caisson_melange: { nom: 'Caisson de mélange', court: 'Mélange', w: 120, double: true, slots: ['position', 'temperature', 'defaut'], mesures: ['temperature', 'position'], picto: 'registre', pref: 'CM' },
   ventilateur: { nom: 'Ventilateur', court: 'Ventilateur', w: 60, slots: ['marche', 'defaut', 'vitesse', 'frequence', 'debit'], mesures: ['frequence', 'vitesse'], picto: 'ventilateur', pref: 'VE' },
+  plug_fan: { nom: 'Ventilateur plug fan', court: 'Plug fan', w: 120, slots: ['marche', 'defaut', 'vitesse', 'frequence', 'debit'], mesures: ['frequence', 'vitesse'], picto: 'ventilateur', pref: 'PF' },
   sonde: { nom: 'Sonde de gaine', court: 'Sonde', w: 60, slots: ['temperature', 'humidite', 'co2', 'pression', 'debit'], mesures: ['temperature', 'humidite'], pref: 'ST' },
   gaine: { nom: 'Gaine', court: '', w: 60, slots: [], mesures: [], largeurLibre: true, pref: 'GA' },
 }
@@ -88,6 +89,10 @@ export const MODULES_HYDRO: Record<string, DefModule> = {
   chaudiere: { nom: 'Chaudière', court: 'Chaudière', w: 120, slots: ['marche', 'defaut', 'vitesse', 'temperature'], mesures: ['temperature', 'vitesse'], picto: 'flamme', pref: 'CH' },
   pac: { nom: 'Pompe à chaleur', court: 'PAC', w: 120, slots: ['marche', 'defaut', 'temperature', 'puissance'], mesures: ['temperature', 'puissance'], picto: 'flamme', pref: 'PAC' },
   pompe: { nom: 'Pompe', court: 'Pompe', w: 60, slots: ['marche', 'defaut', 'vitesse'], mesures: ['vitesse'], picto: 'pompe', ligne: true, pref: 'PO' },
+  pompe_double: { nom: 'Circulateur double', court: 'Circ. double', w: 120, slots: ['marche', 'defaut', 'vitesse'], mesures: ['vitesse'], picto: 'pompe', ligne: true, pref: 'PD' },
+  debitmetre: { nom: 'Débitmètre', court: 'Débitmètre', w: 60, slots: ['debit'], mesures: ['debit'], ligne: true, pref: 'FT' },
+  purgeur: { nom: 'Purgeur d’air', court: 'Purgeur', w: 60, slots: [], mesures: [], ligne: true, pref: 'PU' },
+  emetteur: { nom: 'Émetteur', court: 'Émetteur', w: 60, slots: ['temperature', 'position'], mesures: ['temperature', 'position'], pref: 'EM' },
   vanne_2v: { nom: 'Vanne 2 voies', court: 'Vanne 2V', w: 60, slots: ['ouvert', 'ferme', 'position', 'defaut'], mesures: ['position'], picto: 'vanne', ligne: true, pref: 'V2' },
   vanne_3v: { nom: 'Vanne 3 voies', court: 'Vanne 3V', w: 60, slots: ['position', 'defaut'], mesures: ['position'], picto: 'vanne', pref: 'V3' },
   echangeur: { nom: 'Échangeur', court: 'Échangeur', w: 120, slots: ['entree_t', 'sortie_t', 'defaut'], mesures: ['entree_t', 'sortie_t'], pref: 'EC' },
@@ -117,6 +122,9 @@ export const SLOT_CVC_FR: Record<string, string> = {
   temperature: 'Température', frequence: 'Fréquence', vitesse: 'Vitesse', marche: 'Marche', defaut: 'Défaut',
   ouvert: 'Ouvert', ferme: 'Fermé', colmatage: 'Colmatage',
 }
+
+/** modules qui tournent : ils décident de l'état « en marche » du bandeau */
+export const MOTEURS_CVC: readonly string[] = ['ventilateur', 'plug_fan', 'recup_roue', 'pompe', 'pompe_double', 'chaudiere', 'pac']
 
 export const estTypeCvc = (t: unknown): t is TypeCvc => t === 'cta' || t === 'hydro'
 export const defsDe = (type: TypeCvc): Record<string, DefModule> => (type === 'cta' ? MODULES_CTA : MODULES_HYDRO)
@@ -203,7 +211,9 @@ export function disposerHydro(p: ParamsHydro | undefined): GeomHydro {
     wMax = Math.max(wMax, x)
     return { y: i * HAUTEUR_ETAGE, wRangee: x, cellules }
   })
-  return { w: wMax, h: Math.max(1, rangees.length) * HAUTEUR_ETAGE, marge, rangees: out }
+  // un bloc dont les départs sont encore vides reste visible et ciblable (largeur minimale ; sans effet dès qu'un module est posé)
+  const largeurVide = rangees.every((r) => !r.modules.length) ? 120 : 0
+  return { w: Math.max(wMax, largeurVide), h: Math.max(1, rangees.length) * HAUTEUR_ETAGE, marge, rangees: out }
 }
 
 /** modules de l'élément, à plat, avec leur étage / rangée (utile pour les emplacements, le résumé, les contrôles) */
@@ -252,7 +262,7 @@ export function airBas(g: GeomCta, cellule: CelluleCta): TypeAir {
   const iDouble = g.cellules.findIndex((c) => c.double)
   if (iDouble >= 0) return cellule.index < iDouble ? 'neuf' : 'souffle'
   // sans module double : l'air est neuf jusqu'à la première batterie / humidificateur / ventilateur
-  const iTraitement = g.cellules.findIndex((c) => c.bas && ['batterie_chaude', 'batterie_froide', 'batterie_elec', 'humidificateur', 'ventilateur'].includes(c.bas.k))
+  const iTraitement = g.cellules.findIndex((c) => c.bas && ['batterie_chaude', 'batterie_froide', 'batterie_elec', 'humidificateur', 'ventilateur', 'plug_fan'].includes(c.bas.k))
   return iTraitement >= 0 && cellule.index >= iTraitement ? 'souffle' : 'neuf'
 }
 
@@ -284,6 +294,8 @@ export function etatModule(m: ModuleCvc, lire: Lecteur): EtatModule {
   if (lire(id, 'defaut') === 1 || lire(id, 'antigel') === 1) return 'defaut'
   switch (m.k) {
     case 'ventilateur':
+    case 'plug_fan':
+    case 'pompe_double':
     case 'recup_roue':
     case 'chaudiere':
     case 'pac':
@@ -321,7 +333,7 @@ export function etatModule(m: ModuleCvc, lire: Lecteur): EtatModule {
 
 /** l'élément tourne : au moins un ventilateur / roue / pompe / générateur en marche */
 export function enMarche(places: ModulePlace[], lire: Lecteur, rangee?: number): boolean {
-  return places.some(({ m, rangee: r }) => (rangee == null || r === rangee) && ['ventilateur', 'recup_roue', 'pompe', 'chaudiere', 'pac'].includes(m.k) && lire(m.id, 'marche') === 1)
+  return places.some(({ m, rangee: r }) => (rangee == null || r === rangee) && MOTEURS_CVC.includes(m.k) && lire(m.id, 'marche') === 1)
 }
 
 /** état global d'un bandeau (affichage de l'élément et des alarmes) */
@@ -329,7 +341,7 @@ export function etatGlobal(type: TypeCvc, params: (ParamsCta & ParamsHydro) | un
   const places = modulesDe(type, params)
   const etats = places.map(({ m }) => etatModule(m, lire))
   if (etats.includes('defaut')) return 'defaut'
-  const moteurs = places.filter(({ m }) => ['ventilateur', 'recup_roue', 'pompe', 'chaudiere', 'pac'].includes(m.k)).map(({ m }) => etatModule(m, lire))
+  const moteurs = places.filter(({ m }) => MOTEURS_CVC.includes(m.k)).map(({ m }) => etatModule(m, lire))
   if (moteurs.includes('marche') || moteurs.includes('modulant')) return 'marche'
   if (moteurs.includes('arret')) return 'arret'
   return etats.some((e) => e !== 'inconnu' && e !== 'ok') ? 'ok' : 'inconnu'
@@ -393,7 +405,7 @@ export function cartesCvc(type: TypeCvc, params: (ParamsCta & ParamsHydro) | und
         }
       }
     })
-    const moteurs = ps.filter(({ m }) => ['ventilateur', 'recup_roue', 'pompe', 'chaudiere', 'pac'].includes(m.k)).map(({ m }) => etatModule(m, lire))
+    const moteurs = ps.filter(({ m }) => MOTEURS_CVC.includes(m.k)).map(({ m }) => etatModule(m, lire))
     let etat: CarteCvc['etat'] = 'inconnu'
     if (defauts.length) etat = 'defaut'
     else if (moteurs.includes('marche') || moteurs.includes('modulant')) etat = 'marche'
@@ -404,16 +416,16 @@ export function cartesCvc(type: TypeCvc, params: (ParamsCta & ParamsHydro) | und
 
   if (type === 'cta') {
     const dbl = (params?.flux ?? 'simple') === 'double'
-    const ventilos = places.filter(({ m }) => m.k === 'ventilateur')
+    const ventilos = places.filter(({ m }) => m.k === 'ventilateur' || m.k === 'plug_fan')
     const ventBas = ventilos.filter((p) => p.etage === 'bas')
     const ventHaut = ventilos.filter((p) => p.etage === 'haut')
     const modBas = (k: string) => places.filter((p) => p.m.k === k && p.etage === 'bas')
     const modHaut = (k: string) => places.filter((p) => p.m.k === k && p.etage === 'haut')
     // soufflage : ventilateur(s) du bas, modules de soufflage et sondes de l'étage bas (T, humidité, Hz)
-    construire('soufflage', 'Soufflage', [...ventBas, ...modBas('soufflage')], (p) => (p.m.k === 'ventilateur' ? ['frequence', 'vitesse'] : ['temperature', 'humidite']))
+    construire('soufflage', 'Soufflage', [...ventBas, ...modBas('soufflage')], (p) => (p.m.k === 'ventilateur' || p.m.k === 'plug_fan' ? ['frequence', 'vitesse'] : ['temperature', 'humidite']))
     // reprise : seulement si une reprise ou un ventilateur existe côté extraction
     const repr = [...ventHaut, ...modHaut('reprise')]
-    construire('reprise', 'Reprise', dbl ? repr : [...modBas('reprise')], (p) => (p.m.k === 'ventilateur' ? ['frequence', 'vitesse'] : ['temperature', 'co2']))
+    construire('reprise', 'Reprise', dbl ? repr : [...modBas('reprise')], (p) => (p.m.k === 'ventilateur' || p.m.k === 'plug_fan' ? ['frequence', 'vitesse'] : ['temperature', 'co2']))
     for (const g of GROUPES_CTA) {
       construire(g.id, g.titre, places.filter((p) => g.ks.includes(p.m.k)), (p) => {
         if (['batterie_chaude', 'batterie_froide', 'batterie_elec'].includes(p.m.k)) return ['sortie_t', 'position']
@@ -430,7 +442,7 @@ export function cartesCvc(type: TypeCvc, params: (ParamsCta & ParamsHydro) | und
     rangees.forEach((r, i) => {
       const ps = places.filter((p) => p.rangee === i)
       const titre = r.libelle || r.id || `Départ ${i + 1}`
-      construire(`r${i + 1}`, titre, ps, (p) => (['sonde_t', 'compteur', 'chaudiere', 'pac', 'bouteille', 'ballon_ecs', 'depart', 'arrivee', 'echangeur'].includes(p.m.k) || p.m.k === 'vanne_3v' || p.m.k === 'pompe' ? defs[p.m.k]?.mesures ?? [] : []))
+      construire(`r${i + 1}`, titre, ps, (p) => (['sonde_t', 'compteur', 'chaudiere', 'pac', 'bouteille', 'ballon_ecs', 'depart', 'arrivee', 'echangeur', 'debitmetre', 'emetteur', 'pompe_double'].includes(p.m.k) || p.m.k === 'vanne_3v' || p.m.k === 'pompe' ? defs[p.m.k]?.mesures ?? [] : []))
     })
   }
   return cartes

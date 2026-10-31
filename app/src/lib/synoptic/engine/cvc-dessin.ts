@@ -111,6 +111,15 @@ const CTA = {
     o.push(rotor)
     return o
   },
+  // plug fan : roue libre à pales courbées vers l'arrière dans le plenum, moteur au centre (module de 120 de large)
+  plug_fan: (s, c) => {
+    const X = 60
+    const o = [s('rect', { x: 14, y: 34, width: 92, height: 92, rx: 4, class: 'cv-corps' })]
+    const pales = []
+    for (let i = 0; i < 8; i++) pales.push(s('path', { d: `M${X} ${AXE - 8} C ${X + 9} ${AXE - 12} ${X + 13} ${AXE - 26} ${X + 4} ${AXE - 36}`, transform: rot(i * 45, X, AXE), class: 'cv-trait cv-act' }))
+    o.push(s('g', { class: 'cv-rotor', style: c.dureeRotor ? `animation-duration:${c.dureeRotor}s` : null }, s('circle', { cx: X, cy: AXE, r: 38, class: 'cv-cadre' }), ...pales, s('circle', { cx: X, cy: AXE, r: 8, class: 'cv-corps cv-act' })))
+    return o
+  },
   sonde: (s, c) => [s('line', { x1: 30, x2: 30, y1: GAINE.haut, y2: 66, class: 'cv-trait' }), s('circle', { cx: 30, cy: 70, r: 4.5, class: 'cv-corps cv-act' })],
 }
 
@@ -327,6 +336,33 @@ const HY = {
     const o = [s('circle', { cx: 30, cy: y, r: 19, class: 'cv-corps' }), s('circle', { cx: 30, cy: y, r: 25, class: 'cv-couronne cv-act' }), tri(s, 30, y, 1, sens)]
     return o
   },
+  // circulateur double (pompes jumelées) : deux roues côte à côte sur la même ligne, une seule étiquette
+  pompe_double: (s, c) => {
+    const y = yLigne(c.m), sens = sensLigne(c.m)
+    const o = [s('line', { x1: 30, x2: 90, y1: y, y2: y, class: yLigne(c.m) === HYDRO.retour ? 'cv-eau-r-t' : 'cv-eau-a-t' })]
+    for (const x of [30, 90]) o.push(s('circle', { cx: x, cy: y, r: 19, class: 'cv-corps' }), s('circle', { cx: x, cy: y, r: 25, class: 'cv-couronne cv-act' }), tri(s, x, y, 1, sens))
+    return o
+  },
+  // débitmètre électromagnétique : manchette entre brides, boîtier de mesure au-dessus
+  debitmetre: (s, c) => {
+    const y = yLigne(c.m)
+    const o = [s('rect', { x: 16, y: y - 10, width: 28, height: 20, rx: 2, class: 'cv-corps' }), s('line', { x1: 16, x2: 16, y1: y - 14, y2: y + 14, class: 'cv-trait' }), s('line', { x1: 44, x2: 44, y1: y - 14, y2: y + 14, class: 'cv-trait' })]
+    o.push(s('line', { x1: 30, x2: 30, y1: y - 10, y2: y - 16, class: 'cv-trait' }), s('rect', { x: 21, y: y - 31, width: 18, height: 15, rx: 3, class: 'cv-corps cv-act' }))
+    o.fixe = [['Q', 30, y - 23.5, 'cv-lettre']]
+    return o
+  },
+  // purgeur d'air automatique : corps à flotteur posé sur un piquage en point haut
+  purgeur: (s, c) => {
+    const y = yLigne(c.m)
+    return [s('circle', { cx: 30, cy: y, r: 3, class: 'cv-noeud' }), s('line', { x1: 30, x2: 30, y1: y, y2: y - 9, class: 'cv-trait' }), s('rect', { x: 23, y: y - 25, width: 14, height: 16, rx: 5, class: 'cv-corps cv-act' }), s('line', { x1: 30, x2: 30, y1: y - 25, y2: y - 30, class: 'cv-trait' }), s('line', { x1: 27, x2: 33, y1: y - 30, y2: y - 30, class: 'cv-trait' })]
+  },
+  // émetteur (radiateur, plancher chauffant…) : entre l'aller et le retour de son départ
+  emetteur: (s, c) => {
+    const o = [s('line', { x1: 20, x2: 20, y1: HYDRO.aller, y2: 66, class: 'cv-eau-a-t' }), s('line', { x1: 40, x2: 40, y1: 94, y2: HYDRO.retour, class: 'cv-eau-r-t' }), s('circle', { cx: 20, cy: HYDRO.aller, r: 3, class: 'cv-noeud-a' }), s('circle', { cx: 40, cy: HYDRO.retour, r: 3, class: 'cv-noeud-r' })]
+    o.push(s('rect', { x: 12, y: 66, width: 36, height: 28, rx: 3, class: 'cv-corps cv-act' }))
+    for (const x of [22, 30, 38]) o.push(s('line', { x1: x, x2: x, y1: 70, y2: 90, class: 'cv-trait fin' }))
+    return o
+  },
   vanne_2v: (s, c) => {
     const y = yLigne(c.m)
     return [bowtie(s, 30, y, 1.15), s('line', { x1: 30, x2: 30, y1: y, y2: y - 15, class: 'cv-trait' }), s('rect', { x: 23, y: y - 23, width: 14, height: 8, rx: 2, class: 'cv-corps' })]
@@ -420,6 +456,7 @@ function posValeurs(m) {
     case 'ballon_ecs': return [86, 100]
     case 'vase': return [86, 98]
     case 'depart': case 'arrivee': return [84, 98]
+    case 'emetteur': return [134, 122]
     case 'isolement': return [84, 98]
     case 'vanne_3v': return [y - 30, y - 43]
     default: return [y - 30, y - 43]
