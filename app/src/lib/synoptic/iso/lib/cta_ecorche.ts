@@ -492,18 +492,18 @@ const taille = (p: Params): [number, number, number] => {
   return [p.L ?? Math.max(60, longEtage(bas) + 10, longEtage(haut) + 10), CE_D, n * (CE_H + CE_T)]
 }
 const ETATS_MOD: [any, any?, number?][] = [['arret'], ['marche'], ['modulant', { position: 55 }], ['defaut'], ['consigne', { manuel: true }]]
-enregistrer({ id: 'cta_e.module', famille: 'CTA écorché', nom: 'Module CTA écorché (1 ou 2 étages ; params bas/haut = liste d\'éléments)', taille, defauts: { bas: ['vide'], haut: [], fluide: 'air_souffle' }, planche: ETATS_MOD, dessiner: dessin } as any)
+enregistrer({ id: 'cta_e.module', famille: 'CTA vue ouverte', nom: 'Module CTA vue ouverte (1 ou 2 étages ; params bas/haut = liste d\'éléments)', taille, defauts: { bas: ['vide'], haut: [], fluide: 'air_souffle' }, planche: ETATS_MOD, dessiner: dessin } as any)
 
 // préréglages : un module par élément (utile pour la planche et pour assembler vite)
 for (const k of Object.keys(LONG) as Kind[]) {
   const double = k === 'echangeur_croise' || k === 'echangeur_contre' || k === 'melange_x' || k === 'roue'
-  enregistrer({ id: 'cta_e.' + k, famille: 'CTA écorché', nom: NOMS[k] + ' (module écorché)', taille: (p) => taille({ L: LONG[k] + 14, ...p, bas: p.bas ?? [k] }), defauts: { fluide: 'air_souffle', etages: double ? 2 : 1, haut: double ? [] : undefined, L: LONG[k] + 14 }, planche: ETATS_MOD,
+  enregistrer({ id: 'cta_e.' + k, famille: 'CTA vue ouverte', nom: NOMS[k] + ' (module vue ouverte)', taille: (p) => taille({ L: LONG[k] + 14, ...p, bas: p.bas ?? [k] }), defauts: { fluide: 'air_souffle', etages: double ? 2 : 1, haut: double ? [] : undefined, L: LONG[k] + 14 }, planche: ETATS_MOD,
     dessiner: (b, p) => dessin(b, { ...p, bas: p.bas ?? [k] }) } as any)
 }
 
 // ───────── gaine rectangulaire courte + manchette souple (accordéon), assemblable sur le port d'un module
 enregistrer({
-  id: 'cta_e.gaine', famille: 'CTA écorché', nom: 'Gaine courte + manchette souple', taille: (p) => [p.L ?? 46, CE_D - CE_P - 4, CE_H - 6],
+  id: 'cta_e.gaine', famille: 'CTA vue ouverte', nom: 'Gaine courte + manchette souple', taille: (p) => [p.L ?? 46, CE_D - CE_P - 4, CE_H - 6],
   defauts: { L: 46, fluide: 'air_souffle', manchette: 'in' },
   planche: [['arret'], ['marche'], ['defaut']],
   dessiner(b: Builder, p: Params) {

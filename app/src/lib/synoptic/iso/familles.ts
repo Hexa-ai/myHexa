@@ -69,7 +69,7 @@ export const SLOTS_LIAISON: readonly SlotDef[] = [
 /** accessoires que l'on peut poser SUR un tuyau (le reste du catalogue se pose sur la grille) */
 const ACCESSOIRES_EXPLICITES = new Set([
   'instr.debitmetre', 'instr.pression', 'instr.pression_manifold', 'instr.pression_m', 'instr.temperature', 'instr.pressostat',
-  'instr.manometre', 'instr.thermometre', 'instr.repere', 'pompe.circulateur', 'chaufferie.compteur_energie',
+  'instr.manometre', 'instr.cadran', 'instr.thermometre', 'instr.repere', 'pompe.circulateur', 'chaufferie.compteur_energie',
 ])
 export const estAccessoireIso = (type: string): boolean =>
   (type.startsWith('vanne.') && type !== 'vanne.3voies') || ACCESSOIRES_EXPLICITES.has(type)
