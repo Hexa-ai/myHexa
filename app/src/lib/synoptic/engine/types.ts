@@ -1,5 +1,6 @@
 // Types publics du moteur de synoptique (l'intérieur du moteur n'est pas typé : voir moteur.ts).
 import type { FamillePicto } from '../familles-picto'
+import type { IsoSection } from '../iso/format'
 
 /** Document d'un synoptique tel que stocké dans synoptic_versions.doc */
 export interface SynopticDocument {
@@ -8,6 +9,8 @@ export interface SynopticDocument {
   modele: SynopticModele
   /** mise en page : taille du dessin, nœuds (positions), arêtes (tracés), zones, cartes, textes */
   layout: SynopticLayout
+  /** vue isométrique (optionnelle) : un document sans `iso` se comporte exactement comme avant */
+  iso?: IsoSection
 }
 
 export interface SynopticSlot {

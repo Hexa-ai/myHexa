@@ -1,9 +1,10 @@
 // Variables d'un synoptique : lesquelles sont reliées, valeurs numériques lues sur la box, catalogue proposé dans l'éditeur.
 import type { CatalogueVariable, SynopticDocument } from './engine/types'
 import type { HistVar } from '@/composables/useHistory'
+import { variablesIso } from './iso/format'
 
 /** noms des variables reliées à un emplacement (équipements + bandeau), sans doublon, triés */
-export function variablesLiees(doc: Pick<SynopticDocument, 'modele'>): string[] {
+export function variablesLiees(doc: Pick<SynopticDocument, 'modele'> & { iso?: SynopticDocument['iso'] }): string[] {
   const noms = new Set<string>()
   for (const e of doc.modele.equipements) {
     for (const sp of Object.values(e.slots ?? {})) if (sp?.variable) noms.add(sp.variable)
@@ -11,6 +12,7 @@ export function variablesLiees(doc: Pick<SynopticDocument, 'modele'>): string[] 
     for (const va of assoc ?? []) if (va.variable) noms.add(va.variable)
   }
   for (const b of doc.modele.bandeau ?? []) if (b.variable) noms.add(b.variable)
+  for (const n of variablesIso(doc.iso)) noms.add(n)
   return [...noms].sort()
 }
 

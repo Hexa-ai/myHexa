@@ -5,7 +5,7 @@
 import { onBeforeUnmount, onMounted } from 'vue'
 import type { SynopticDocument, SynopticEtat } from '@/lib/synoptic/engine/types'
 import type { CadreDessin } from '@/lib/synoptic/resume'
-import SynopticCanvas from './SynopticCanvas.vue'
+import SynopticVue from './SynopticVue.vue'
 
 withDefaults(
   defineProps<{
@@ -74,7 +74,7 @@ onBeforeUnmount(() => {
       aria-label="Synoptique en plein écran"
       data-testid="synoptic-mobile-full"
     >
-      <SynopticCanvas
+      <SynopticVue
         :doc="doc"
         :values="values"
         :cadre="cadre"

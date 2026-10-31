@@ -12,7 +12,7 @@ import { construireResume, type CadreDessin } from '@/lib/synoptic/resume'
 import { lireCadre } from '@/lib/synoptic/cadrage'
 import type { DeviceWithStatus } from '@/composables/useDevices'
 import type { SynopticEtat } from '@/lib/synoptic/engine/types'
-import SynopticCanvas from './SynopticCanvas.vue'
+import SynopticVue from './SynopticVue.vue'
 import SynopticFrame from './SynopticFrame.vue'
 import SynopticBar from './SynopticBar.vue'
 import SynopticSummary from './SynopticSummary.vue'
@@ -123,7 +123,7 @@ function editer() {
       @ouvrir="ouvrirPleinEcran"
     />
     <div v-else-if="!agrandi" class="flex-1 min-h-0">
-      <SynopticCanvas
+      <SynopticVue
         :doc="doc"
         :values="values"
         :gestes="mode === 'bureau'"
@@ -163,7 +163,7 @@ function editer() {
         </button>
       </SynopticBar>
       <div class="flex-1 min-h-0">
-        <SynopticCanvas :doc="doc" :values="values" full-frame @etat="etat = $event" />
+        <SynopticVue :doc="doc" :values="values" full-frame @etat="etat = $event" />
       </div>
     </SynopticFrame>
   </div>

@@ -64,8 +64,8 @@ export function lireImport(texte: string): ResultatImport {
     return { erreur: 'ce fichier est un modele.json seul : il manque la mise en page' }
   const erreur = erreurDocument(json)
   if (erreur) return { erreur }
-  const { modele, layout } = json as SynopticDocument
-  return { doc: { schema: SCHEMA, modele, layout } }
+  const { modele, layout, iso } = json as SynopticDocument
+  return { doc: { schema: SCHEMA, modele, layout, ...(iso ? { iso } : {}) } }
 }
 
 /** titre à afficher pour un document (titre du modèle, sinon valeur par défaut) */

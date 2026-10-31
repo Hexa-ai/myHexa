@@ -1,0 +1,24 @@
+/* Vue isométrique : scène, grille au sol, ports, sélection, palette. Les couleurs viennent des variables du portail (clair / sombre). */
+.syn-root .iso-stage { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; cursor: default; background: var(--syn-fond); }
+.syn-root .iso-stage > svg { display: block; width: 100%; height: 100%; }
+.syn-root .iso-stage.plein { cursor: grab; }
+.syn-root.syn-sans-geste .iso-stage { touch-action: auto; cursor: default; }
+.syn-root .iso-stage.lien { cursor: crosshair; }
+.syn-root .iso-stage.arme { cursor: copy; }
+.syn-root .iso-stage .cmp, .syn-root .iso-stage .acc, .syn-root .iso-stage .lien { cursor: pointer; }
+/* grille au sol : deux familles de traits à 30° et l'axe de hauteur */
+.syn-root .iso-gl { fill: none; stroke: var(--grid-line, rgb(128 140 150 / .28)); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.syn-root .iso-gz { fill: none; stroke: var(--muted-foreground, #8a96a3); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+/* sélection */
+.syn-root .iso-stage .sel { filter: drop-shadow(0 0 2px var(--primary)) drop-shadow(0 0 5px var(--primary)); }
+/* ports en mode liaison */
+.syn-root .iso-stage .pt { fill: var(--syn-fond); stroke: var(--primary); stroke-width: 2; cursor: pointer; }
+.syn-root .iso-stage .pt:hover, .syn-root .iso-stage .pt.on { fill: var(--primary); }
+.syn-root .iso-erreur { position: absolute; left: 12px; top: 12px; margin: 0; padding: 6px 10px; border: 1px solid var(--offline); border-radius: 8px; background: var(--offline-soft); color: var(--offline); font-size: 12px; z-index: 3; }
+/* palette */
+.syn-root .ed-palette details { margin: 8px 0 0; }
+.syn-root .ed-palette summary { cursor: pointer; padding: 4px 2px; }
+.syn-root .iso-pal { display: block; width: 100%; text-align: left; background: var(--syn-surface); color: var(--foreground); border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; margin: 4px 0; font: inherit; font-size: 12px; cursor: grab; }
+.syn-root .iso-pal:hover { border-color: var(--hairline); }
+.syn-root .iso-pal.on { border-color: var(--primary); color: var(--primary); background: rgb(0 212 170 / .1); }
+.syn-root.iso-vue .synbody.edition .iso-stage { height: auto; }

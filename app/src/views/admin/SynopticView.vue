@@ -4,7 +4,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDevices } from '@/composables/useDevices'
 import { useSynoptic, useSynopticLive } from '@/composables/useSynoptic'
-import SynopticCanvas from '@/components/synoptic/SynopticCanvas.vue'
+import SynopticVue from '@/components/synoptic/SynopticVue.vue'
 import SynopticFrame from '@/components/synoptic/SynopticFrame.vue'
 import SynopticBar from '@/components/synoptic/SynopticBar.vue'
 
@@ -55,7 +55,7 @@ const retour = computed(() =>
       <p v-if="erreur" class="p-4 text-sm text-destructive">{{ erreur }}</p>
       <p v-else-if="chargement && !doc" class="p-4 text-sm text-muted-foreground">Chargement…</p>
       <div v-else-if="doc" class="flex-1 min-h-0">
-        <SynopticCanvas :doc="doc" :values="values" full-frame />
+        <SynopticVue :doc="doc" :values="values" full-frame />
       </div>
     </SynopticFrame>
   </div>

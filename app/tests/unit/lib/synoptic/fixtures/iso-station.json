@@ -1,0 +1,349 @@
+{
+ "version": 1,
+ "instruments": "indicateur",
+ "sol": {
+  "x0": -40,
+  "y0": -140,
+  "x1": 780,
+  "y1": 440,
+  "pas": 40
+ },
+ "composants": [
+  {
+   "id": "bassin",
+   "type": "bassin.beton",
+   "x": 0,
+   "y": 0,
+   "z": 14,
+   "etat": "marche",
+   "valeurs": {
+    "niveau": 62
+   }
+  },
+  {
+   "id": "p1",
+   "type": "pompe.centrifuge_h",
+   "x": 400,
+   "y": 90,
+   "z": 4,
+   "etat": "marche"
+  },
+  {
+   "id": "p2",
+   "type": "pompe.centrifuge_h",
+   "x": 400,
+   "y": 290,
+   "z": 4,
+   "etat": "arret"
+  },
+  {
+   "id": "haute",
+   "type": "cuve.verticale",
+   "x": 634,
+   "y": -26,
+   "z": 0,
+   "etat": "marche",
+   "valeurs": {
+    "niveau": 62
+   },
+   "params": {
+    "r": 54,
+    "h": 170,
+    "pieds": true,
+    "fond": "plat",
+    "toit": "plat",
+    "agitateur": true,
+    "echelle": 0,
+    "garde_corps": true,
+    "piquages": [
+     {
+      "id": "haut",
+      "face": "paroi",
+      "h": 0.84,
+      "angle": 180,
+      "dn": 80
+     },
+     {
+      "id": "toit",
+      "face": "toit",
+      "r": 0.76,
+      "angle": 270,
+      "dn": 80
+     },
+     {
+      "id": "vidange",
+      "face": "fond",
+      "r": 0,
+      "dn": 50
+     }
+    ],
+    "pieds_h": 52,
+    "vue": "verre"
+   }
+  },
+  {
+   "id": "radar",
+   "type": "instr.niveau_radar",
+   "x": 0,
+   "y": 0,
+   "z": 0,
+   "etat": "marche",
+   "tag": "LT",
+   "valeurs": {
+    "valeur": 62
+   },
+   "params": {
+    "variante": "radar"
+   },
+   "monte": {
+    "sur": "haute",
+    "port": "toit"
+   }
+  },
+  {
+   "id": "basse",
+   "type": "cuve.verticale",
+   "x": 654,
+   "y": 280,
+   "z": 0,
+   "etat": "marche",
+   "valeurs": {
+    "niveau": 30
+   },
+   "params": {
+    "r": 34,
+    "h": 80,
+    "pieds": false,
+    "fond": "plat",
+    "toit": "ouvert",
+    "piquages": [
+     {
+      "id": "entree",
+      "face": "paroi",
+      "h": 0.7,
+      "angle": 270,
+      "dn": 50
+     }
+    ]
+   }
+  },
+  {
+   "id": "air1",
+   "type": "raccord.bout",
+   "x": 515,
+   "y": -100,
+   "z": 195,
+   "params": {
+    "dir": "y+",
+    "dn": 25,
+    "fluide": "air_comprime"
+   }
+  },
+  {
+   "id": "air2",
+   "type": "raccord.bout",
+   "x": 515,
+   "y": 100,
+   "z": 195,
+   "params": {
+    "dir": "y-",
+    "dn": 25,
+    "fluide": "air_comprime"
+   }
+  }
+ ],
+ "liaisons": [
+  {
+   "id": "coll_asp",
+   "de": {
+    "c": "bassin",
+    "port": "s"
+   },
+   "vers": {
+    "c": "p2",
+    "port": "asp"
+   },
+   "dn": 100,
+   "fluide": "eau_brute",
+   "etat": "marche",
+   "via": [
+    [
+     280,
+     48,
+     28
+    ],
+    [
+     280,
+     312,
+     28
+    ]
+   ],
+   "accessoires": [
+    {
+     "type": "vanne.auto",
+     "d": 405,
+     "etat": "ouvert",
+     "id": "coll_asp.a0"
+    }
+   ]
+  },
+  {
+   "id": "asp1",
+   "de": {
+    "liaison": "coll_asp",
+    "d": 150
+   },
+   "vers": {
+    "c": "p1",
+    "port": "asp"
+   },
+   "dn": 100,
+   "fluide": "eau_brute",
+   "etat": "marche",
+   "accessoires": [
+    {
+     "type": "vanne.auto",
+     "s": 0.5,
+     "etat": "ouvert",
+     "id": "asp1.a0"
+    }
+   ]
+  },
+  {
+   "id": "coll_ref",
+   "de": {
+    "c": "p2",
+    "port": "ref"
+   },
+   "vers": {
+    "c": "haute",
+    "port": "haut"
+   },
+   "dn": 80,
+   "fluide": "eau_traitee",
+   "etat": "arret",
+   "via": [
+    [
+     430,
+     312,
+     195
+    ],
+    [
+     430,
+     48,
+     195
+    ]
+   ],
+   "accessoires": [
+    {
+     "type": "vanne.clapet_battant",
+     "d": 42,
+     "etat": "ouvert",
+     "id": "coll_ref.a0"
+    },
+    {
+     "type": "vanne.auto",
+     "d": 92,
+     "etat": "ferme",
+     "id": "coll_ref.a1"
+    },
+    {
+     "type": "instr.pression_manifold",
+     "d": 455,
+     "etat": "marche",
+     "tag": "PT",
+     "valeurs": {
+      "valeur": 4.2
+     },
+     "id": "coll_ref.a2"
+    },
+    {
+     "type": "instr.debitmetre",
+     "d": 525,
+     "etat": "marche",
+     "tag": "FT",
+     "valeurs": {
+      "valeur": 138
+     },
+     "id": "coll_ref.a3"
+    }
+   ]
+  },
+  {
+   "id": "ref1",
+   "de": {
+    "c": "p1",
+    "port": "ref"
+   },
+   "vers": {
+    "liaison": "coll_ref",
+    "d": 331
+   },
+   "dn": 80,
+   "fluide": "eau_traitee",
+   "etat": "marche",
+   "accessoires": [
+    {
+     "type": "vanne.clapet_battant",
+     "d": 42,
+     "etat": "ouvert",
+     "id": "ref1.a0"
+    },
+    {
+     "type": "vanne.auto",
+     "d": 92,
+     "etat": "ouvert",
+     "id": "ref1.a1"
+    }
+   ]
+  },
+  {
+   "id": "vidange",
+   "de": {
+    "c": "haute",
+    "port": "vidange"
+   },
+   "vers": {
+    "c": "basse",
+    "port": "entree"
+   },
+   "dn": 50,
+   "fluide": "boues",
+   "etat": "arret",
+   "accessoires": [
+    {
+     "type": "vanne.papillon_motor",
+     "s": 0.55,
+     "etat": "ferme",
+     "id": "vidange.a0"
+    }
+   ],
+   "via": [
+    [
+     708,
+     48,
+     10
+    ],
+    [
+     708,
+     120,
+     10
+    ]
+   ]
+  },
+  {
+   "id": "air",
+   "de": {
+    "c": "air1",
+    "port": "p"
+   },
+   "vers": {
+    "c": "air2",
+    "port": "p"
+   },
+   "dn": 25,
+   "fluide": "air_comprime",
+   "etat": "marche"
+  }
+ ]
+}

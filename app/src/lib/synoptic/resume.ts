@@ -6,7 +6,8 @@
 import type { ResumeConfig, ResumeEquipement, SynopticDocument, SynopticEquipement } from './engine/types'
 import { appliquerRegle } from './regles'
 import { cartesCvc, estTypeCvc, modulesDe, etatModule, texteAlarmeModule, UNITES_SLOT, type ParamsCta, type ParamsHydro } from './engine/cvc-modele'
-import { familleDuType, type FamillePicto } from './familles-picto'
+import { familleDuType, familleDuTypeIso, type FamillePicto } from './familles-picto'
+import { avecIso } from './iso/format'
 
 export type { FamillePicto } from './familles-picto'
 
@@ -264,7 +265,8 @@ export function construireResume(doc: SynopticDocument, values: Valeurs, options
 }
 
 /** même calcul que construireResume, avec le détail utile à l'éditeur du résumé (cartes masquées, équipements, valeurs possibles) */
-export function detailResume(doc: SynopticDocument, values: Valeurs, options: OptionsResume = {}): DetailResume {
+export function detailResume(docBrut: SynopticDocument, values: Valeurs, options: OptionsResume = {}): DetailResume {
+  const doc = avecIso(docBrut) // équipements de la vue isométrique (sans effet si le document n'a pas d'iso)
   const modele = doc.modele
   const cfg = options.auto ? undefined : lireConfigResume(modele.resume)
   const tous = (modele.equipements ?? []).filter((e) => e.type !== 'raccord')
@@ -584,6 +586,7 @@ const ORDRE: FamillePicto[] = ['cuve', 'pompe', 'moteur', 'ventilateur', 'vanne'
 
 /** famille donnée par le type de symbole (table unique : familles-picto.ts) */
 export function familleDe(e: SynopticEquipement): FamillePicto | null {
+  if (typeof e.type_iso === 'string') return familleDuTypeIso(e.type_iso)
   return familleDuType(typeEffectif(e))
 }
 
