@@ -150,6 +150,9 @@ export function deplacerModuleCtaVers(p: ParamsCta, idModule: string, emp: Empla
   const colRef = emp.remplir != null ? cols[emp.remplir] : cols[emp.colonne]   // colonne visée (undefined = fin de bandeau)
   const iSource = cols.indexOf(src.col)
   if (emp.remplir != null && colRef === src.col) return false
+  // déposé juste avant ou juste après sa propre colonne (seule occupante) : rien ne change
+  const seul = [src.col.haut, src.col.bas, src.col.double].filter(Boolean).length === 1
+  if (emp.remplir == null && seul && (emp.colonne === iSource || emp.colonne === iSource + 1)) return false
   // retrait
   src.col[src.etage] = null
   const vide = !src.col.haut && !src.col.bas && !src.col.double
