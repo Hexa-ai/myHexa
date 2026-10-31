@@ -3,6 +3,7 @@ import { onMounted, ref, computed, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
+import BrandingPanel from '@/components/brand/BrandingPanel.vue'
 import UsageDeviceTable from '@/components/staff/UsageDeviceTable.vue'
 import { BETA_FEATURES, setCachedBetas } from '@/composables/useFeature'
 import { fmtBytes, loadUsageDevices, totals, type UsageDevice } from '@/composables/useUsage'
@@ -211,6 +212,8 @@ watch(id, load)
 
     <p v-if="loading" class="text-sm text-muted-foreground">Chargement…</p>
     <p v-if="error" class="text-sm text-offline">{{ error }}</p>
+
+    <BrandingPanel v-if="company" :key="company.id" :company-id="company.id" staff />
 
     <section
       v-if="auth.isHexaStaffAdmin && company"

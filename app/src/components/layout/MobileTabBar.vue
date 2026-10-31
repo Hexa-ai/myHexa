@@ -4,6 +4,7 @@
 defineProps<{
   active: 'devices' | 'dashboards' | 'projects' | 'alarms' | null
   alarms: number
+  interventions?: number
   menuOpen: boolean
 }>()
 const emit = defineEmits<{
@@ -57,16 +58,25 @@ const tabs = [
       data-testid="tab-menu"
       @click="emit('menu')"
     >
-      <svg
-        viewBox="0 0 24 24"
-        class="size-5"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.7"
-        stroke-linecap="round"
-      >
-        <path d="M4 7h16 M4 12h16 M4 17h16" />
-      </svg>
+      <span class="relative">
+        <svg
+          viewBox="0 0 24 24"
+          class="size-5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          stroke-linecap="round"
+        >
+          <path d="M4 7h16 M4 12h16 M4 17h16" />
+        </svg>
+        <span
+          v-if="(interventions ?? 0) > 0"
+          class="mobile-tab-badge mobile-tab-badge-info tabular"
+          data-testid="tab-menu-badge"
+          title="Interventions ouvertes"
+          >{{ (interventions ?? 0) > 99 ? '99+' : interventions }}</span
+        >
+      </span>
       <span>Menu</span>
     </button>
   </nav>

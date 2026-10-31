@@ -21,6 +21,7 @@ import UpdatesView from '@/views/admin/UpdatesView.vue'
 import StaffDeviceNewView from '@/views/admin/staff/DeviceNewView.vue'
 import StaffDeviceEditView from '@/views/admin/staff/DeviceEditView.vue'
 import InterventionView from '@/views/public/InterventionView.vue'
+import { isReservedSlug } from '@/router/reservedSlugs'
 import { requireAuth, requireAdmin, requireStaff, requireStaffAdmin } from '@/router/guards'
 
 export const router = createRouter({
@@ -134,8 +135,18 @@ export const router = createRouter({
           component: StaffDeviceEditView,
           beforeEnter: requireStaffAdmin,
         },
+        { path: 'branding', name: 'admin-branding', component: () => import('@/views/admin/BrandingView.vue'), beforeEnter: requireAdmin },
         { path: '', redirect: { name: 'admin-devices' } },
       ],
+    },
+    // Page de connexion d'une entreprise : /<slug>. TOUJOURS la dernière route (les routes ci-dessus ont priorité) ;
+    // un premier segment réservé (login, auth, intervention, admin…) n'est jamais un slug : retour à la connexion standard.
+    {
+      path: '/:slug([A-Za-z0-9][A-Za-z0-9-]*)',
+      name: 'company-login',
+      component: LoginView,
+      props: (to) => ({ slug: String(to.params.slug).toLowerCase() }),
+      beforeEnter: (to) => (isReservedSlug(String(to.params.slug)) ? { name: 'login', query: to.query } : true),
     },
   ],
 })
