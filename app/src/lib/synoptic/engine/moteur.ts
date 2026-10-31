@@ -1739,7 +1739,6 @@ corpsScene.addEventListener('dblclick', ev => {   // double-clic : sur une condu
 function deposerEtSelectionner(cle, x, y, cible) {
   const r = deposer(cle, x, y, cible); if (!r) return null;
   ED.sel = [r.cle]; ED.cvcModSel = r.module ? { eq: r.cle.slice(3), mod: r.module } : null; pousser(); redessinerTout();
-  if (r.insere) toast(`Module inséré dans ${r.insere}`, 'ok');
   if (r.fixe) toast(`Fixé sur ${r.fixe}`, 'ok'); else if (r.surConduite) toast(`Posé sur la conduite ${r.surConduite}`, 'ok');
   return r;
 }
