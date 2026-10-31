@@ -1,7 +1,11 @@
 <script setup lang="ts">
 // Dessin du synoptique : le squelette DOM attendu par le moteur (zone de dessin, palette, propriétés, légende, zoom)
 // + le cycle de vie d'une instance du moteur. Utilisé par la tuile, la vue agrandie et l'éditeur.
-import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { inject, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+// Q7 : volets repliables / redimensionnables (fournis par l'éditeur ; absents en consultation)
+import { CLE_PANNEAUX_EDITEUR, type PanneauxEditeur } from '@/composables/usePanneauxEditeur'
+import VoletPoignee from './VoletPoignee.vue'
+import VoletsBarre from './VoletsBarre.vue'
 import { creerSynoptique } from '@/lib/synoptic/engine/moteur'
 import type {
   CatalogueVariable,
@@ -40,6 +44,7 @@ const emit = defineEmits<{
 }>()
 
 const root = ref<HTMLElement | null>(null)
+const p = inject<PanneauxEditeur | null>(CLE_PANNEAUX_EDITEUR, null)
 const inst = shallowRef<SynopticInstance | null>(null)
 
 function creer() {
@@ -102,9 +107,12 @@ defineExpose({
   >
     <div id="edbar" class="edbar" hidden />
     <div class="synbody sans-verif">
-      <aside id="palette" class="ed-palette" aria-label="Palette de symboles" hidden />
+      <aside id="palette" class="ed-palette" :class="{ 'ed-replie': p && editing && !p.gaucheOuvert.value }" :style="p && editing ? p.styleGauche.value : undefined" aria-label="Palette de symboles" hidden />
+      <VoletPoignee v-if="p && editing" :p="p" cote="gauche" />
       <svg id="scene" role="img" aria-label="Synoptique du procédé" />
-      <aside id="proprietes" class="ed-props" aria-label="Propriétés" hidden />
+      <VoletPoignee v-if="p && editing" :p="p" cote="droite" />
+      <aside id="proprietes" class="ed-props" :class="{ 'ed-replie': p && editing && !p.droiteOuvert.value }" :style="p && editing ? p.styleDroite.value : undefined" aria-label="Propriétés" hidden />
+      <VoletsBarre v-if="p && editing" :p="p" :style="{ left: (p.gaucheOuvert.value ? p.largeurGauche.value : 0) + 12 + 'px' }" />
       <div class="legende">
         <span id="leg-couleurs" style="display: contents" />
         <span class="ed-only"><i class="pastille-verif" />À vérifier</span>

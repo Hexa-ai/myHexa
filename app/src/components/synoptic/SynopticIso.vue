@@ -2,7 +2,11 @@
 // Vue isométrique d'un synoptique : affichage en direct (tuile, vue agrandie, plein écran mobile) et éditeur (grille au sol,
 // pose aimantée, liaison de ports, accessoires sur tuyau). Le dessin et le routage des tuyaux viennent de la bibliothèque iso
 // (lib/) ; ce composant ne fait que : état → document de la bibliothèque → SVG, et gestes → opérations d'édition (edition.ts).
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+// Q7 : volets repliables / redimensionnables, plein écran (composable fourni par l'éditeur ; absent hors édition)
+import { CLE_PANNEAUX_EDITEUR, type PanneauxEditeur } from '@/composables/usePanneauxEditeur'
+import VoletPoignee from './VoletPoignee.vue'
+import VoletsBarre from './VoletsBarre.vue'
 import { catalogue as catalogueIso, construire, rendu0, cssIso } from '@/lib/synoptic/iso/lib'
 import type { Resultat } from '@/lib/synoptic/iso/lib'
 import type { CatalogueVariable, SynopticEtat } from '@/lib/synoptic/engine/types'
@@ -60,6 +64,7 @@ if (!document.getElementById('iso-css')) {
 const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x)) as T
 const travail = ref<IsoSection>(clone(props.iso))
 const stage = ref<HTMLDivElement | null>(null)
+const panneaux = inject<PanneauxEditeur | null>(CLE_PANNEAUX_EDITEUR, null)   // Q7
 const res = shallowRef<Resultat | null>(null)
 const erreur = ref('')
 const info = ref('')
@@ -488,6 +493,8 @@ function touche(e: KeyboardEvent) {
   if (saisie) return
   const ctrl = e.ctrlKey || e.metaKey
   const k = e.key.toLowerCase()
+  // Q7 — volets repliables / plein écran (composable partagé) ; [ et ] gardent leur rôle (plan du composant) quand un composant est sélectionné
+  if (panneaux && !(sel.value?.k === 'c' && (e.key === '[' || e.key === ']')) && panneaux.touche(e)) return
   // recherche Spotlight : Ctrl+K, « / » ou Espace (la vue la déclenche, car ce gestionnaire capture le clavier)
   if (ctrl && e.shiftKey && k === 'k') { e.preventDefault(); emit('explorateur'); return }
   if ((ctrl && k === 'k') || (!ctrl && !e.altKey && (e.key === '/' || e.key === ' '))) { e.preventDefault(); emit('recherche'); return }
@@ -628,7 +635,7 @@ void nextTick
       <button type="button" class="btn primaire" data-testid="iso-enregistrer" title="Enregistrer une nouvelle version (Ctrl+S)" @click="emit('save')">Enregistrer</button>
     </div>
     <div class="synbody" :class="{ edition: editing }">
-      <aside v-if="editing" class="ed-palette" aria-label="Palette isométrique" data-testid="iso-palette">
+      <aside v-if="editing" class="ed-palette" :class="{ 'ed-replie': panneaux && !panneaux.gaucheOuvert.value }" :style="panneaux ? panneaux.styleGauche.value : undefined" aria-label="Palette isométrique" data-testid="iso-palette">
         <button type="button" class="btn pal-biblio" data-testid="iso-palette-bibliotheque" title="Explorer toute la bibliothèque (Ctrl+Maj+K)" @click="emit('explorateur')">▦ Bibliothèque</button>
         <input v-model="filtrePalette" class="ed-in" type="search" placeholder="Chercher…" data-testid="iso-palette-filtre">
         <details v-if="palFavoris.length" open data-testid="iso-palette-favoris">
@@ -653,17 +660,20 @@ void nextTick
           >{{ i.nom }}</button>
         </details>
       </aside>
+      <VoletPoignee v-if="editing && panneaux" :p="panneaux" cote="gauche" />
       <div
         ref="stage" class="iso-stage" :class="{ lien: mode === 'lien', arme: !!arme, plein: !editing }" data-testid="iso-stage"
         @pointerdown="onDown" @pointermove="onMove" @pointerup="onUp" @pointercancel="onUp" @contextmenu.prevent @dragover.prevent @drop="lacher"
       />
       <p v-if="erreur" class="iso-erreur" data-testid="iso-erreur">Dessin impossible : {{ erreur }}</p>
-      <aside v-if="editing" class="ed-props" aria-label="Propriétés" data-testid="iso-props">
+      <VoletPoignee v-if="editing && panneaux" :p="panneaux" cote="droite" />
+      <aside v-if="editing" class="ed-props" :class="{ 'ed-replie': panneaux && !panneaux.droiteOuvert.value }" :style="panneaux ? panneaux.styleDroite.value : undefined" aria-label="Propriétés" data-testid="iso-props">
         <IsoProprietes
           :iso="travail" :sel="sel" :catalogue="catalogue" :values="values"
           @change="valider" @supprimer="supprimer" @tourner="tournerSel"
         />
       </aside>
+      <VoletsBarre v-if="editing && panneaux" :p="panneaux" :style="{ left: (panneaux.gaucheOuvert.value ? panneaux.largeurGauche.value : 0) + 12 + 'px' }" />
       <div v-if="!editing && gestes" class="zoomb">
         <button type="button" aria-label="Zoom avant" @click="zoomer(1 / 1.25)">+</button>
         <button type="button" aria-label="Zoom arrière" @click="zoomer(1.25)">−</button>

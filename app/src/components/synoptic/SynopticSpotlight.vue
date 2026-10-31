@@ -19,6 +19,8 @@ const props = defineProps<{
   icone2d?: (cle: string) => string
   /** un élément est-il sélectionné (pour proposer « lier la variable ») ? */
   selectionPresente?: boolean
+  /** Q7 : où poser la fenêtre (la zone en plein écran, sinon <body>) */
+  cible?: string | HTMLElement
 }>()
 const emit = defineEmits<{
   (e: 'symbole', entree: Entree): void
@@ -110,7 +112,7 @@ function glisser(ev: DragEvent, e: Entree) {
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="cible ?? 'body'">
     <div v-if="ouvert" class="spot-fond" data-testid="spotlight" @mousedown.self="fermer">
       <div class="spot" role="dialog" aria-label="Recherche" aria-modal="true">
         <div class="spot-tete">

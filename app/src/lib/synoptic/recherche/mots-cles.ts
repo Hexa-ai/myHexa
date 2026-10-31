@@ -4,6 +4,7 @@
 // Pour ajouter un symbole : ajouter une ligne ici (clé = identifiant iso « famille.nom » ou clé de la palette 2D).
 import { mots } from './texte'
 import { T_METIERS } from './mots-cles-metiers'
+import { T_CVC2D } from './mots-cles-cvc2d'
 
 const T: Record<string, string> = {
   // ── pompes
@@ -202,7 +203,7 @@ export interface MotsCles {
 
 /** mots-clés déclarés pour un identifiant de symbole (iso « famille.nom » ou clé 2D) ; vide si non déclaré */
 export function motsClesDe(id: string): MotsCles {
-  const brut = T[id] ?? T_METIERS[id]
+  const brut = T[id] ?? T_METIERS[id] ?? T_CVC2D[id]
   if (!brut) return { fr: [], en: [] }
   const [fr, en] = brut.split('|').map((x) => x.split(',').map((m) => m.trim()).filter(Boolean))
   return { fr: fr ?? [], en: en ?? [] }
@@ -215,4 +216,4 @@ export function motsIndexables(id: string): string[] {
 }
 
 /** identifiants ayant des mots-clés déclarés (utile aux tests) */
-export const idsAvecMotsCles = (): string[] => [...Object.keys(T), ...Object.keys(T_METIERS)]
+export const idsAvecMotsCles = (): string[] => [...Object.keys(T), ...Object.keys(T_METIERS), ...Object.keys(T_CVC2D)]

@@ -559,3 +559,27 @@
 /* CVC : cartouche des valeurs posé sur la pièce centrale d'un module double */
 .syn-root .cv-cartouche{fill:var(--syn-fond);stroke:var(--border);stroke-width:1}
 .syn-root .pal-biblio { display: flex; align-items: center; gap: 6px; width: 100%; margin: 0 0 6px; text-align: left; }
+
+/* ============================ Q7 — CVC modulaire : insertion / sélection de module ============================ */
+.syn-root .ed-insertion{fill:var(--primary);stroke:none;pointer-events:none;opacity:.95}
+.syn-root .ed-insertion.cadre{fill:rgb(0 212 170 / .12);stroke:var(--primary);stroke-width:1.6;stroke-dasharray:6 4}
+.syn-root .ed-cible-insertion{fill:none;stroke:var(--primary);stroke-width:1.2;stroke-dasharray:3 4;pointer-events:none;opacity:.7}
+.syn-root .ed-mod-sel{fill:rgb(0 212 170 / .07);stroke:var(--primary);stroke-width:1.8;pointer-events:none}
+.syn-root .synbody.edition .cv-mod{cursor:grab}
+
+/* ============================ Q7 — volets repliables et redimensionnables (2D et iso) ============================ */
+.syn-root .ed-palette, .syn-root .ed-props{position:relative;transition:width .16s ease}
+.syn-root .synbody.edition:has(.ed-volet-poignee.actif) .ed-palette, .syn-root .synbody.edition:has(.ed-volet-poignee.actif) .ed-props{transition:none}
+.syn-root .ed-palette.ed-replie, .syn-root .ed-props.ed-replie{width:0!important;min-width:0;padding-left:0;padding-right:0;border-width:0;overflow:hidden}
+.syn-root .ed-volet-poignee{flex:none;position:relative;width:7px;margin:0 -3px;z-index:6;cursor:col-resize;touch-action:none;background:transparent}
+.syn-root .ed-volet-poignee::after{content:"";position:absolute;top:0;bottom:0;left:3px;width:1px;background:transparent;transition:background .12s,width .12s,left .12s}
+.syn-root .ed-volet-poignee:hover::after, .syn-root .ed-volet-poignee:focus-visible::after, .syn-root .ed-volet-poignee.actif::after{background:var(--primary);width:3px;left:2px}
+.syn-root .ed-volet-poignee:focus-visible{outline:none}
+.syn-root .ed-volets-barre{position:absolute;top:10px;z-index:7;display:flex;gap:4px;padding:3px;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb, var(--syn-fond) 88%, transparent);backdrop-filter:blur(6px);transition:left .16s ease}
+.syn-root .ed-volet-btn{width:30px;height:28px;display:grid;place-items:center;border:1px solid transparent;border-radius:7px;background:none;color:var(--muted-foreground);cursor:pointer;padding:0}
+.syn-root .ed-volet-btn:hover{color:var(--foreground);background:var(--syn-surface)}
+.syn-root .ed-volet-btn[aria-pressed="true"]{color:var(--primary)}
+.syn-root .ed-volet-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+/* le zoom et la légende suivent les volets repliés */
+.syn-root .synbody.edition:has(.ed-props.ed-replie) .zoomb{right:12px}
+.syn-root .synbody.edition:has(.ed-palette.ed-replie) .legende{left:12px}

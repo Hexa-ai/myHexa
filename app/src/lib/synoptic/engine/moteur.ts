@@ -9,6 +9,9 @@
 import * as CVC from './cvc-modele'
 import { epingler as resumeEpingler } from '../resume-config'
 import { dessinerCta, dessinerHydro } from './cvc-dessin'
+// Q7 — CVC modulaire : assemblage module par module (fonctions pures) et pictogrammes des modules
+import * as ASM from './cvc-assemblage'
+import { ICONES_MODULES } from './cvc-icones'
 import GEOM from './geom'
 import { appliquerRegle, estEmplacementEtat, OPERATEURS } from '../regles'
 import { cadreDepuisVue, vueDepuisCadre } from '../cadrage'
@@ -955,8 +958,9 @@ addG(document, 'keydown', ev => { if (ev.key === 'Escape') fermerDetail(); });
    Le document édité = { modele, layout } : exactement le format produit par la chaîne (modele.json + layout_h.json),
    donc réimportable par `build.py --doc`. Rien n'est envoyé nulle part : tout reste dans le navigateur de l'utilisateur. */
 const SCHEMA = 'myhexa-synoptique-edition/1';
-const ED = { outil: 'selection', sel: [], fluide: 'procede', grandeur: 'generique', palQ: '', palReplie: ['proc', 'cvc', 'chauf', 'mach', 'elec', 'gen', 'ent'], pile: [], idx: -1, grille: 10, grilleVisible: true, aimant: true, restaure: false,
-  attente: null, drag: null, armee: null, espace: false, onglet: 'proprietes', enregistre: null };
+const ED = { outil: 'selection', sel: [], fluide: 'procede', grandeur: 'generique', palQ: '', palReplie: ['proc', 'modeles', 'mach', 'elec', 'gen', 'ent'], pile: [], idx: -1, grille: 10, grilleVisible: true, aimant: true, restaure: false,
+  attente: null, drag: null, armee: null, espace: false, onglet: 'proprietes', enregistre: null,
+  cvcModSel: null /* Q7 : module CVC sélectionné { eq, mod } */, cvcIndic: null /* Q7 : indicateur d'insertion pendant un glisser */ };
 let BROUILLON_IA = JSON.stringify({ modele: DATA.modele, layout: DATA.layout });   // instantané de la dernière version enregistrée
 const EMPREINTE = hash(BROUILLON_IA);
 const CLE_LS = 'myhexa.synoptique.' + (((DATA.modele.meta && DATA.modele.meta.projet) || 'proto').replace(/\W+/g, '_'));
@@ -1154,7 +1158,7 @@ function majLiensCartes() {
 
 /* ------------------------------------------------------------------ création */
 function creerEquipement(cle, opt) {
-  opt = opt || {}; const b = BIBLIO[cle], gr = cle === 'mesure' ? GRANDEURS[opt.grandeur || 'generique'] : null;
+  opt = opt || {}; const b = opt.b || BIBLIO[cle], gr = cle === 'mesure' ? GRANDEURS[opt.grandeur || 'generique'] : null;
   const id = idLibre('NV-' + (gr ? gr.pref : b.pref) + '-', 2);
   const e = { id, libelle: b.lib, type: b.type, confiance: 1, a_verifier: false, source: 'éditeur', slots: {} };
   ['role', 'famille', 'grandeur', 'variante', 'forme'].forEach(k => { if (b[k]) e[k] = b[k]; });
@@ -1207,6 +1211,7 @@ function ajouterZone(cx, cy) {
 /* Dépôt d'un symbole de la palette en (x, y) ; `cible` = élément DOM sous le pointeur (fixation sur un ouvrage ou une conduite). */
 function deposer(cle, x, y, cible, opt) {
   if (String(cle).startsWith('ent:')) return deposerEnt(cle.slice(4), x, y, cible);
+  if (ASM.estCleModule(cle)) return deposerModuleCvc(cle, x, y);   // Q7 : module de CTA / de départ hydraulique
   const b = BIBLIO[cle]; if (!b) return null;
   if (b.special === 'texte') return { cle: 'te:' + ajouterTexte(x, y).id };
   if (b.special === 'zone') return { cle: 'zo:' + ajouterZone(x, y).id };
@@ -1216,6 +1221,71 @@ function deposer(cle, x, y, cible, opt) {
   if (hoteEl && ['agitateur', 'mesure', 'voyant'].includes(cle) && !(opt && opt.pasHote) && attacher(e, hoteEl.dataset.node)) return { cle: 'eq:' + e.id, fixe: hoteEl.dataset.node };
   if (cond && ['vanne', 'vanne_reg', 'mesure', 'vanne_man', 'vanne_3v', 'clapet'].includes(cle) && poserSurConduite(e, cond.dataset.arete)) return { cle: 'eq:' + e.id, surConduite: cond.dataset.arete };
   ajouterNoeud(e, x, y); return { cle: 'eq:' + e.id };
+}
+
+
+/* ------------------------------------------------------------------ Q7 : CVC modulaire (dépôt, insertion, déplacement de modules) */
+const MARGE_INSERTION = 28;   // distance (px monde) à laquelle un module lâché « près » d'un élément s'y insère
+/** élément CVC du même type le plus proche du point (dans l'élément ou à moins de MARGE_INSERTION) ; null si aucun */
+function cvcSousPoint(type, x, y) {
+  let best = null, dm = Infinity;
+  for (const n of L.noeuds) { const e = EQ[n.id]; if (!e || e.type !== type) continue;
+    const dx = Math.max(n.x - x, 0, x - (n.x + n.w)), dy = Math.max(n.y - y, 0, y - (n.y + n.h)), d = Math.hypot(dx, dy);
+    if (d <= MARGE_INSERTION && d < dm) { dm = d; best = { e, n }; } }
+  return best;
+}
+/** emplacement d'insertion d'un module de palette `mp` sur l'élément cible, au point monde (x, y) */
+function emplacementCvc(cible, mp, x, y) {
+  const lx = x - cible.n.x, ly = y - cible.n.y;
+  return mp.type === 'cta' ? ASM.emplacementCta(cible.e.params, lx, ly, mp.k) : ASM.emplacementHydro(cible.e.params, lx, ly);
+}
+function deposerModuleCvc(cle, x, y) {
+  const mp = ASM.moduleDePalette(cle); if (!mp) return null;
+  const cible = cvcSousPoint(mp.type, x, y);
+  if (cible) {
+    const { e } = cible, emp = emplacementCvc(cible, mp, x, y); let idMod = null;
+    if (mp.rangee) ASM.ajouterDepart(e.params);
+    else idMod = (mp.type === 'cta' ? ASM.insererModuleCta(e.params, mp.k, emp, mp.preset) : ASM.insererModuleHydro(e.params, mp.k, emp, mp.preset)).id;
+    majModulesCvc(e.id);
+    return { cle: 'eq:' + e.id, module: idMod, insere: e.id };
+  }
+  // hors de tout élément du même type : un élément d'un seul module (ou un départ seul)
+  const b = mp.type === 'cta'
+    ? { nom: mp.nom, pref: 'CTA', lib: 'Centrale de traitement d’air', type: 'cta', slots: [], params: ASM.paramsCtaDepuisModule(mp.k) }
+    : { nom: mp.nom, pref: 'HYD', lib: 'Départ hydraulique', type: 'hydro', slots: [], params: ASM.paramsHydroDepuisModule(mp.rangee ? undefined : mp) };
+  const e = creerEquipement(cle, { b }); ajouterNoeud(e, x, y);
+  const m = CVC.modulesDe(e.type, e.params)[0];
+  return { cle: 'eq:' + e.id, module: m ? m.m.id : null };
+}
+/** module CVC sélectionné s'il existe encore (et si son élément est la seule sélection) ; sinon null */
+function modSelValide() {
+  const s = ED.cvcModSel; if (!s || ED.sel.length !== 1 || ED.sel[0] !== 'eq:' + s.eq) return null;
+  const e = EQ[s.eq]; return e && CVC.estTypeCvc(e.type) && CVC.trouverModule(e.type, e.params, s.mod) ? s : null;
+}
+function supprimerModuleSel() {
+  const s = modSelValide(); if (!s) return false;
+  const e = EQ[s.eq]; if (e.type === 'cta') CVC.supprimerModuleCta(e.params, s.mod); else CVC.supprimerModuleHydro(e.params, s.mod);
+  ED.cvcModSel = null; majModulesCvc(e.id); pousser(); redessinerTout(); return true;
+}
+/** rectangle monde d'un élément SVG de la scène */
+function rectMonde(el) {
+  const r = el.getBoundingClientRect(), p = svg.createSVGPoint(), m = svg.getScreenCTM().inverse();
+  p.x = r.left; p.y = r.top; const a = p.matrixTransform(m); p.x = r.right; p.y = r.bottom; const b = p.matrixTransform(m);
+  return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+}
+/** indicateur d'insertion (calque haut) : cadre de l'élément visé + repère d'insertion ; appelé par apresDessin */
+function dessinerIndicateurCvc(haut) {
+  const ind = ED.cvcIndic; if (!ind) return; const n = leNoeud(ind.id), e = EQ[ind.id]; if (!n || !e) return;
+  haut.append(s('rect', { x: n.x - 4, y: n.y - 4, width: n.w + 8, height: n.h + 8, rx: 6, class: 'ed-cible-insertion' }));
+  if (ind.rangee) return;   // « nouveau départ » : seul le cadre de l'élément est mis en évidence
+  const r = ind.type === 'cta' ? ASM.indicateurCta(e.params, ind.emp, ind.k) : ASM.indicateurHydro(ind.emp);
+  haut.append(s('rect', { x: n.x + r.x - (r.trait ? 2 : 0), y: n.y + r.y, width: r.trait ? 4 : r.w, height: r.h, rx: r.trait ? 2 : 6, class: 'ed-insertion' + (r.trait ? '' : ' cadre') }));
+}
+/** met à jour l'indicateur pendant un glisser (module de palette `mp` ou module déplacé `deja`) au point monde ; redessine si besoin */
+function majIndicateurCvc(mp, x, y) {
+  const cible = mp ? cvcSousPoint(mp.type, x, y) : null; const avant = JSON.stringify(ED.cvcIndic);
+  ED.cvcIndic = cible ? { id: cible.e.id, type: mp.type, k: mp.k, rangee: !!mp.rangee, emp: mp.rangee ? null : emplacementCvc(cible, mp, x, y) } : null;
+  if (JSON.stringify(ED.cvcIndic) !== avant) dessiner();
 }
 
 /* ------------------------------------------------------------------ modification */
@@ -1539,6 +1609,10 @@ EDITEUR.apresDessin = function () {
       const [x, y] = portAbs(n, nom); const att = ED.attente && ED.attente.id === n.id && ED.attente.port === nom;
       haut.append(s('circle', { cx: x, cy: y, r: 8, class: 'ed-port' + (att ? ' att' : ''), 'data-port': n.id + '|' + nom }, s('title', { text: `${n.id} · ${PORTS_FR[nom] || nom}` }))); })); }
   EDITEUR.apercu(haut);
+  // Q7 : module CVC sélectionné (mis en évidence) et indicateur d'insertion pendant un glisser
+  { const ms = modSelValide(); const el = ms && svg.querySelector(`[data-eq="${ms.eq}"] [data-mod="${ms.mod}"]`);
+    if (el) { const r = rectMonde(el); haut.append(s('rect', { x: r.x - 2, y: r.y - 2, width: r.w + 4, height: r.h + 4, rx: 4, class: 'ed-mod-sel' })); } }
+  dessinerIndicateurCvc(haut);
   if (ED.drag && ED.drag.type === 'cadre' && ED.drag.actif) { const r = ED.drag.rect; haut.append(s('rect', { x: r.x, y: r.y, width: r.w, height: r.h, class: 'ed-cadre-selection' })); }
   planifierControles();
 };
@@ -1574,8 +1648,15 @@ EDITEUR.gere = function (ev) {
   if (cibleEl && cibleEl.dataset.poignee) { ED.drag = { type: 'taille', ...base, cote: cibleEl.dataset.poignee, cle: ED.sel[0] }; initTaille(ED.drag); return true; }
   if (cibleEl && cibleEl.dataset.jalons != null) { const a = lArete(ED.sel[0].slice(3)); ED.drag = { type: 'via', ...base, arete: a.id, i: +cibleEl.dataset.jalons }; return true; }
   if (cibleEl && cibleEl.dataset.mid != null) { const a = lArete(ED.sel[0].slice(3)); ED.drag = { type: 'via', ...base, arete: a.id, i: null, seg: +cibleEl.dataset.mid }; return true; }
+  // Q7 : appui sur un module d'un élément CVC = sélection du module ; glisser = réordonner (Alt+glisser ou élément à un seul module = déplacer l'élément)
+  const modEl = cibleEl && cibleEl.dataset.eq && !ev.altKey && !ev.shiftKey ? ev.target.closest('[data-mod]') : null;
+  if (modEl) { const e = EQ[cibleEl.dataset.eq];
+    if (e && CVC.estTypeCvc(e.type)) { const k = 'eq:' + e.id; if (!(ED.sel.length === 1 && ED.sel[0] === k)) selectionner([k]); ED.cvcModSel = { eq: e.id, mod: modEl.dataset.mod }; dessiner();
+      if (CVC.modulesDe(e.type, e.params).length > 1) { ED.drag = { type: 'module', ...base, eq: e.id, mod: modEl.dataset.mod }; return true; }
+      ED.drag = { type: 'deplacer', ...base, cle: k, orig: originesDe([k]) }; return true; } }
   if (cibleEl) {
     const k = cleDe(cibleEl); if (!k) return true;
+    ED.cvcModSel = null;   // Q7 : un appui hors module désélectionne le module
     if (ev.shiftKey) { basculerSel(k); return true; }
     if (!ED.sel.includes(k)) selectionner([k]);
     const cles = ED.sel.filter(deplacable);
@@ -1604,6 +1685,11 @@ addG(window, 'pointermove', ev => {
   const d = ED.drag; if (!d) return;
   if (!d.actif) { if (Math.hypot(ev.clientX - d.cx, ev.clientY - d.cy) < SEUIL_CLIC) return; d.actif = true; }
   const [mx, my] = monde(ev), dx0 = mx - d.depart[0], dy0 = my - d.depart[1];
+  if (d.type === 'module') {   // Q7 : réordonner un module — indicateur d'insertion sous le pointeur
+    const e = EQ[d.eq], mp = e && { type: e.type, k: (CVC.trouverModule(e.type, e.params, d.mod) || {}).k };
+    if (mp) { const cible = { e, n: leNoeud(d.eq) }; const emp = emplacementCvc(cible, mp, mx, my); ED.cvcIndic = { id: d.eq, type: e.type, k: mp.k, rangee: false, emp }; dessiner(); }
+    return;
+  }
   if (d.type === 'deplacer') {
     const ref = d.orig.get(d.cle); if (!ref) return;
     const dx = snap(ref.x + dx0) - ref.x, dy = snap(ref.y + dy0) - ref.y;
@@ -1624,6 +1710,12 @@ addG(window, 'pointerup', ev => {
   if (d.type === 'port') {   // glisser d'un port à l'autre = même résultat que deux clics
     if (d.actif && ED.attente) { const ps = portSous(document.elementFromPoint(ev.clientX, ev.clientY)); if (ps && !(ps.id === ED.attente.id && ps.port === ED.attente.port)) { terminerConduite(ps.id, ps.port); } else { dessiner(); } }
     return;
+  }
+  if (d.type === 'module') {   // Q7 : dépôt du module réordonné
+    const ind = ED.cvcIndic; ED.cvcIndic = null; const e = EQ[d.eq];
+    if (d.actif && ind && e) { const ok = e.type === 'cta' ? ASM.deplacerModuleCtaVers(e.params, d.mod, ind.emp) : ASM.deplacerModuleHydroVers(e.params, d.mod, ind.emp);
+      if (ok) { majModulesCvc(e.id); pousser(); redessinerTout(); return; } }
+    dessiner(); return;
   }
   if (d.type === 'cadre') {
     if (d.actif) { const r = d.rect, hit = (x, y, w, h) => x < r.x + r.w && x + w > r.x && y < r.y + r.h && y + h > r.y;
@@ -1646,7 +1738,8 @@ corpsScene.addEventListener('dblclick', ev => {   // double-clic : sur une condu
 /* ------------------------------------------------------------------ dépôt depuis la palette / image glissée */
 function deposerEtSelectionner(cle, x, y, cible) {
   const r = deposer(cle, x, y, cible); if (!r) return null;
-  ED.sel = [r.cle]; pousser(); redessinerTout();
+  ED.sel = [r.cle]; ED.cvcModSel = r.module ? { eq: r.cle.slice(3), mod: r.module } : null; pousser(); redessinerTout();
+  if (r.insere) toast(`Module inséré dans ${r.insere}`, 'ok');
   if (r.fixe) toast(`Fixé sur ${r.fixe}`, 'ok'); else if (r.surConduite) toast(`Posé sur la conduite ${r.surConduite}`, 'ok');
   return r;
 }
@@ -1675,6 +1768,7 @@ addG(document, 'keydown', ev => {
   if (enSaisie) { if (ev.key === 'Escape') ev.target.blur(); return; }
   if (ctrl && k === 'a') { ev.preventDefault(); selectionner(L.noeuds.map(n => 'eq:' + n.id)); return; }
   if (ev.key === 'Escape') { ED.attente = null; ED.armee = null; fermerSelecteur(); ED.sel = []; dessiner(); EDITEUR.panneau(); majPalette(); return; }
+  if ((ev.key === 'Delete' || ev.key === 'Backspace') && modSelValide()) { ev.preventDefault(); supprimerModuleSel(); toast('Module retiré', 'ok'); return; }   // Q7
   if (ev.key === 'Delete' || ev.key === 'Backspace') { if (!ED.sel.length) return; ev.preventDefault(); supprimerCles(ED.sel.slice()); pousser(); redessinerTout(); toast('Supprimé', 'ok'); return; }
   if (ev.key.startsWith('Arrow')) {
     const cles = ED.sel.filter(deplacable); if (!cles.length) return; ev.preventDefault();
@@ -2249,6 +2343,7 @@ const ICONES = {   // pictogrammes de la palette (même trait que les symboles :
   voyant: '<circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>', carte: '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18"/>',
   texte: '<path d="M5 6h14M12 6v13M9 19h6"/>', zone: '<rect x="3" y="4" width="18" height="16" rx="3" stroke-dasharray="3 3"/>', image: '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M4 18l5-5 4 4 3-3 4 4"/>'
 };
+Object.assign(ICONES, ICONES_MODULES);   // Q7 : pictogrammes des modules CVC (clés « cta:… », « hyd:… »)
 Object.assign(ICONES, {
   cta_simple: '<rect x="2" y="8" width="20" height="8" rx="1.5"/><path d="M8 8v8M14 8v8M18 12h-3"/>', cta_double: '<rect x="2" y="3" width="20" height="7" rx="1.5"/><rect x="2" y="14" width="20" height="7" rx="1.5"/><path d="M9 3l6 18M15 3L9 21"/>',
   chaufferie: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M12 8c2 3 4 4 4 7a4 4 0 01-8 0c0-2 1-3 2-4 1 1 1 1 2-3z"/>', collecteur: '<path d="M5 3v18M9 3v18M9 8h12M9 16h12"/><circle cx="5" cy="8" r="1.2"/><circle cx="5" cy="16" r="1.2"/>',
@@ -2263,13 +2358,13 @@ Object.assign(ICONES, {
 });
 const FAMILLES_PALETTE = [
   ['proc', 'Procédé', ['cuve', 'decanteur', 'silo', 'bassin', 'pompe', 'compresseur', 'ventilateur', 'vanne', 'vanne_reg', 'vanne_man', 'vanne_3v', 'clapet', 'filtre', 'echangeur']],
-  ['cvc', 'CVC (traitement d’air)', ['cta_simple', 'cta_double']],
-  ['chauf', 'Chaufferie', ['chaufferie', 'collecteur']],
+  ['modeles', 'Modèles de départ', ['cta_simple', 'cta_double', 'chaufferie', 'collecteur']],   // Q7 : gabarits tout faits, section à part (les modules sont dans « Modules de CTA / de départ »)
   ['mach', 'Machine', ['moteur', 'agitateur', 'convoyeur', 'verin']],
   ['elec', 'Électrique', ['disjoncteur', 'transformateur', 'variateur']],
   ['gen', 'Génériques', ['mesure', 'voyant', 'carte', 'texte', 'zone', 'image']]
 ];
-const NOM_PAL = (c) => c === 'image' ? 'Image…' : c === 'mesure' ? 'Mesure…' : BIBLIO[c].nom;
+const NOM_PAL = (c) => c === 'image' ? 'Image…' : c === 'mesure' ? 'Mesure…' : ASM.estCleModule(c) ? ASM.moduleDePalette(c).nom : BIBLIO[c].nom;
+const CLES_MODULES = (famille) => ASM.MODULES_PALETTE.filter(m => m.famille === famille).map(m => m.cle);   // Q7
 function iconeSil(d) {   // vignette d'un symbole de l'entreprise (mêmes primitives, trait de la palette)
   const sil = d.silhouette, k = 20 / Math.max(sil.largeur, sil.hauteur), ox = (24 - sil.largeur * k) / 2, oy = (24 - sil.hauteur * k) / 2;
   const g = s('svg', { viewBox: '0 0 24 24' }); normaliser(sil, k, ox, oy).forEach(n => g.append(n)); return g.innerHTML;
@@ -2283,7 +2378,7 @@ function itemPalette(c) {
 /* favoris et récents (partagés avec le Spotlight et l'explorateur : mêmes clés de stockage local, entrées « symbole:2d:<clé> ») */
 const CLE_FAV = 'myhexa.synoptique.favoris', CLE_REC = 'myhexa.synoptique.recents', EVT_PREFS = 'myhexa:preferences';
 const lsListe = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string') : []; } catch (e) { return []; } };
-const cles2d = (k) => lsListe(k).filter(c => c.startsWith('symbole:2d:')).map(c => c.slice(11)).filter(c => ICONES[c] && (BIBLIO[c] || c === 'image' || c === 'mesure'));
+const cles2d = (k) => lsListe(k).filter(c => c.startsWith('symbole:2d:')).map(c => c.slice(11)).filter(c => ICONES[c] && (BIBLIO[c] || c === 'image' || c === 'mesure' || ASM.estCleModule(c)));
 function noter2d(cle) {   // un symbole armé ou posé passe en tête des récents
   if (!ICONES[cle] || String(cle).startsWith('ent:')) return;
   const c = 'symbole:2d:' + cle;
@@ -2301,7 +2396,7 @@ function construirePalette() {
     + '<button type="button" class="btn xs pal-biblio" id="pal-bibliotheque" data-testid="pal-bibliotheque" title="Explorer toute la bibliothèque (Ctrl+Maj+K)">▦ Bibliothèque</button>'
     + `<input class="ed-in" id="pal-recherche" type="search" placeholder="Rechercher un symbole…" aria-label="Rechercher un symbole" autocomplete="off" value="${esc(ED.palQ)}">`
     + groupe('fav', '★ Favoris', cles2d(CLE_FAV)) + groupe('rec', 'Récents', cles2d(CLE_REC).slice(0, 8))
-    + FAMILLES_PALETTE.map(([id, t, cles]) => fam(id, t, cles)).join('')
+    + FAMILLES_PALETTE.map(([id, t, cles]) => (id === 'modeles' ? fam('mcta', 'Modules de CTA', CLES_MODULES(ASM.FAMILLE_MODULES_CTA)) + fam('mhyd', 'Modules de départ hydraulique', CLES_MODULES(ASM.FAMILLE_MODULES_HYDRO)) : '') + fam(id, t, cles)).join('')
     + fam('ent', 'Bibliothèque de l’entreprise', bib.map(d => 'ent:' + d.id), `<button type="button" class="btn xs pal-nouveau" id="pal-nouveau"><svg viewBox="0 0 24 24" aria-hidden="true">${ICONES.nouveau}</svg>Nouveau symbole</button>${bib.length ? '' : '<p class="pal-aide">Aucun symbole personnalisé pour l’instant.</p>'}`)
     + '<p class="pal-aide">Glissez un symbole dans la scène (ou cliquez-le, puis cliquez la scène). Sur un ouvrage : agitateur, mesure et voyant s’y fixent. Sur une conduite : vanne, clapet et mesure s’y posent.</p><input type="file" accept="image/*" id="ed-pal-image" hidden>';
   filtrerPalette();
@@ -2337,9 +2432,11 @@ paletteEl.addEventListener('pointerdown', ev => {
     if (!actif && Math.hypot(e.clientX - ev.clientX, e.clientY - ev.clientY) < 5) return; actif = true;
     if (!fantome) { fantome = h('div', 'pal-fantome'); fantome.innerHTML = `<svg viewBox="0 0 24 24">${iconeDe(cle)}</svg>`; root.append(fantome); }
     fantome.style.left = e.clientX + 'px'; fantome.style.top = e.clientY + 'px';
+    if (ASM.estCleModule(cle)) { const sur = document.elementFromPoint(e.clientX, e.clientY); if (sur && svg.contains(sur)) { const [x, y] = monde(e); majIndicateurCvc(ASM.moduleDePalette(cle), x, y); } else if (ED.cvcIndic) { ED.cvcIndic = null; dessiner(); } }   // Q7
   };
   const up = e => {
     window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); if (fantome) fantome.remove();
+    if (ED.cvcIndic) { ED.cvcIndic = null; dessiner(); }   // Q7 : l'indicateur d'insertion disparaît au lâcher
     if (!actif) { if (cle === 'image') { byId('ed-pal-image').click(); return; } ED.armee = ED.armee === cle ? null : cle; if (ED.armee) noter2d(cle); majPalette(); return; }
     const el = document.elementFromPoint(e.clientX, e.clientY); if (!el || !svg.contains(el)) return;
     if (cle === 'image') { creerImageA(monde(e), null); return; }
@@ -2430,7 +2527,7 @@ const instance = {
   marquerEnregistre() { BROUILLON_IA = instantane(); majBarre(); habillage(); },
   estModifie: () => estModifie(),
   /** recherche Spotlight : arme un symbole de la palette (le prochain clic sur la scène le pose) */
-  armer(cle) { if (!BIBLIO[cle] && cle !== 'image' && cle !== 'mesure' && !String(cle).startsWith('ent:')) return false; ED.armee = cle; noter2d(cle); majPalette(); toast('Cliquez sur la scène pour poser « ' + NOM_PAL(cle) + ' »', 'ok'); return true; },
+  armer(cle) { if (!BIBLIO[cle] && cle !== 'image' && cle !== 'mesure' && !String(cle).startsWith('ent:') && !ASM.estCleModule(cle)) return false; ED.armee = cle; noter2d(cle); majPalette(); toast('Cliquez sur la scène pour poser « ' + NOM_PAL(cle) + ' »', 'ok'); return true; },
   /** recherche Spotlight : contenu SVG (24×24) du pictogramme d'un symbole de la palette */
   icone: (cle) => iconeDe(cle) || '',
   /** recherche Spotlight : éléments du synoptique (repère, nom, type) */

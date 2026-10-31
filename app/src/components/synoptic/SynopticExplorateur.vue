@@ -26,6 +26,8 @@ const props = defineProps<{
   bibliotheques: Bibliotheque[]
   /** contenu SVG 24×24 d'un symbole 2D de la palette */
   icone2d?: (cle: string) => string
+  /** Q7 : où poser la fenêtre (la zone en plein écran, sinon <body>) */
+  cible?: string | HTMLElement
 }>()
 const emit = defineEmits<{
   (e: 'poser', entree: Entree): void
@@ -266,7 +268,7 @@ const modeleJson = (): void => telecharger('modele-bibliotheque.json', exporterB
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="cible ?? 'body'">
     <div v-if="ouvert" class="expl-fond" data-testid="explorateur" @mousedown.self="fermer">
       <div ref="dialogue" class="expl" role="dialog" aria-modal="true" aria-label="Bibliothèque de symboles" @keydown="cleDialogue">
         <header class="expl-tete">

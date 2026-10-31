@@ -3,6 +3,7 @@
 import type { SymboleDef } from './iso/lib/types'
 import { estAccessoireIso } from './iso/familles'
 import { entreeSymbole, type Entree } from './recherche'
+import { MODULES_PALETTE } from './engine/cvc-assemblage'
 import { FAMILLE_MA_BIBLIOTHEQUE, idSymboleBibliotheque, type Bibliotheque } from './bibliotheque'
 
 /** nom court affiché : le nom du catalogue sans sa parenthèse descriptive */
@@ -24,10 +25,10 @@ export const PALETTE_2D: ReadonlyArray<{ cle: string; nom: string; famille: stri
   { cle: 'clapet', nom: 'Clapet anti-retour', famille: 'Procédé' },
   { cle: 'filtre', nom: 'Filtre', famille: 'Procédé' },
   { cle: 'echangeur', nom: 'Échangeur', famille: 'Procédé' },
-  { cle: 'cta_simple', nom: 'CTA simple flux', famille: 'CVC' },
-  { cle: 'cta_double', nom: 'CTA double flux', famille: 'CVC' },
-  { cle: 'chaufferie', nom: 'Chaufferie', famille: 'Chaufferie' },
-  { cle: 'collecteur', nom: 'Collecteur', famille: 'Chaufferie' },
+  { cle: 'cta_simple', nom: 'CTA simple flux', famille: 'Modèles de départ' },
+  { cle: 'cta_double', nom: 'CTA double flux', famille: 'Modèles de départ' },
+  { cle: 'chaufferie', nom: 'Chaufferie', famille: 'Modèles de départ' },
+  { cle: 'collecteur', nom: 'Collecteur', famille: 'Modèles de départ' },
   { cle: 'moteur', nom: 'Moteur', famille: 'Machine' },
   { cle: 'agitateur', nom: 'Agitateur', famille: 'Machine' },
   { cle: 'convoyeur', nom: 'Convoyeur', famille: 'Machine' },
@@ -49,7 +50,10 @@ export function entreesIso(catalogue: readonly SymboleDef[]): Entree[] {
   return catalogue.map((d) => entreeSymbole('iso', d.id, nomCourt(d.nom), d.famille, [d.nom, d.id, estAccessoireIso(d.id) ? 'sur tuyau accessoire' : '']))
 }
 
-export const entrees2d = (): Entree[] => PALETTE_2D.map((p) => entreeSymbole('2d', p.cle, p.nom, p.famille))
+/** modules CVC à assembler (clés « cta:… » / « hyd:… » de cvc-assemblage.ts) : proposés comme des symboles 2D à part entière */
+export const entreesModules2d = (): Entree[] => MODULES_PALETTE.map((m) => entreeSymbole('2d', m.cle, m.nom, m.famille))
+
+export const entrees2d = (): Entree[] => [...PALETTE_2D.map((p) => entreeSymbole('2d', p.cle, p.nom, p.famille)), ...entreesModules2d()]
 
 export function entreesBibliotheques(bibs: readonly Bibliotheque[]): Entree[] {
   return bibs.flatMap((b) =>

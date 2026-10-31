@@ -45,7 +45,7 @@ describe('mots-clés couvrants', () => {
   it('la liste 2D suit la palette du moteur (FAMILLES_PALETTE de moteur.ts)', () => {
     const src = readFileSync('src/lib/synoptic/engine/moteur.ts', 'utf8')
     const bloc = src.slice(src.indexOf('const FAMILLES_PALETTE = ['), src.indexOf('const NOM_PAL'))
-    const cles = [...bloc.matchAll(/'([a-z_0-9]+)'/g)].map((m) => m[1]).filter((c) => !['proc', 'cvc', 'chauf', 'mach', 'elec', 'gen'].includes(c))
+    const cles = [...bloc.matchAll(/'([a-z_0-9]+)'/g)].map((m) => m[1]).filter((c) => !['proc', 'modeles', 'mach', 'elec', 'gen'].includes(c))
     expect(PALETTE_2D.map((p) => p.cle).sort()).toEqual(cles.sort())
   })
 })

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // Éditeur de synoptique en plein cadre (toute la zone de contenu de l'application, menu latéral conservé).
 // Enregistrer = nouvelle version ; « Retour » revient au tableau d'où l'on vient (query `retour`).
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useDevices } from '@/composables/useDevices'
+import { CLE_PANNEAUX_EDITEUR, usePanneauxEditeur } from '@/composables/usePanneauxEditeur'
 import { useSynoptic, useSynopticLive } from '@/composables/useSynoptic'
 import { enregistrerVersion, synchroniserBlocs } from '@/lib/synoptic/api'
 import type { SynopticDocument, SynopticEtat } from '@/lib/synoptic/engine/types'
@@ -25,6 +26,10 @@ import { valeursDuStatut } from '@/lib/synoptic/variables'
 // l'éditeur isométrique (et la bibliothèque de dessin) ne se charge que si on ouvre la vue Iso
 const SynopticIso = defineAsyncComponent(() => import('@/components/synoptic/SynopticIso.vue'))
 
+// Q7 : volets repliables / redimensionnables et plein écran, partagés par l'éditeur 2D et l'éditeur iso (injectés par les deux)
+const zone = ref<HTMLElement | null>(null)
+const panneaux = usePanneauxEditeur({ zone: () => zone.value })
+provide(CLE_PANNEAUX_EDITEUR, panneaux)
 const route = useRoute()
 const router = useRouter()
 const id = computed(() => String(route.params.id))
@@ -207,8 +212,8 @@ defineExpose({ recharger })
 </script>
 
 <template>
-  <div>
-    <SynopticFrame enligne @close="() => undefined">
+  <div ref="zone" class="bg-background">
+    <SynopticFrame enligne :plein="panneaux.pleinEcran.value" @close="() => undefined">
       <SynopticBar
         :titre="`Édition · ${charge?.synoptic.name ?? 'Synoptique'}`"
         :en-direct="enDirect"
@@ -320,6 +325,7 @@ defineExpose({ recharger })
       :variables="variablesRecherche"
       :icone2d="(c: string) => canvas?.instance?.icone?.(c) ?? ''"
       :selection-presente="true"
+      :cible="panneaux.pleinEcran.value && zone ? zone : undefined"
       @symbole="rechercheSymbole"
       @element="rechercheElement"
       @variable="rechercheVariable"
@@ -331,6 +337,7 @@ defineExpose({ recharger })
       :contexte="vueEdition"
       :symboles="symbolesRecherche"
       :bibliotheques="bibliotheques"
+      :cible="panneaux.pleinEcran.value && zone ? zone : undefined"
       :icone2d="(c: string) => canvas?.instance?.icone?.(c) ?? ''"
       @poser="rechercheSymbole"
       @bibliotheques="bibliotheques = $event"
