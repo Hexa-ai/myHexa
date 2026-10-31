@@ -55,7 +55,7 @@ Tout est dans [`docs/`](docs/README.md). Ordre conseillé pour un nouveau dével
 
 1. [`docs/glossaire.md`](docs/glossaire.md) — le vocabulaire (box, variable, direct, synoptique…).
 2. [`docs/architecture.md`](docs/architecture.md) — la vue d'ensemble avec schémas.
-3. [`docs/flux/`](docs/flux/) — comment les données circulent (ingestion, direct, position, météo, alertes, partage).
+3. [`docs/flux/`](docs/flux/) — comment les données circulent (ingestion, direct, position, météo, alertes, partage, grille des tableaux de bord, synoptique).
 4. [`docs/front/`](docs/front/README.md) — le code de `app/src` et comment ajouter un écran.
 5. [`docs/backend/`](docs/backend/) — tables, droits (RLS), fonctions SQL, Edge Functions.
 6. [`docs/exploitation/`](docs/exploitation/README.md) — environnements, migrations, déploiement, tests, retour arrière.

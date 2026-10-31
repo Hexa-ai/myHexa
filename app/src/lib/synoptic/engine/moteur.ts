@@ -11,6 +11,7 @@ import { epingler as resumeEpingler } from '../resume-config'
 import { dessinerCta, dessinerHydro } from './cvc-dessin'
 import GEOM from './geom'
 import { appliquerRegle, estEmplacementEtat, OPERATEURS } from '../regles'
+import { cadreDepuisVue, vueDepuisCadre } from '../cadrage'
 import type { SynopticDocument, SynopticHost, SynopticInstance, SynopticOptions } from './types'
 
 export function creerSynoptique(root: HTMLElement, options: SynopticOptions): SynopticInstance {
@@ -729,13 +730,19 @@ function echelle() {   // pixels écran par unité du dessin ; les textes grandi
   svg.classList.toggle('sans-lib', sc < 0.62); SYN.sc = sc;
 }
 let fitAuto = true;   // vrai tant que l'utilisateur n'a pas zoomé / déplacé : la vue suit alors la taille de la tuile
-function appliquerVB() { fitAuto = false; svg.setAttribute('viewBox', `${VB.x} ${VB.y} ${VB.w} ${VB.h}`); echelle(); }
+let CADRE = options.cadreVue ?? null;   // cadrage enregistré (rectangle du dessin en fractions) : null = ajustement automatique
+let rafVue = 0;
+function appliquerVB() {
+  fitAuto = false; svg.setAttribute('viewBox', `${VB.x} ${VB.y} ${VB.w} ${VB.h}`); echelle();
+  if (HOST.onVue && !rafVue) rafVue = requestAnimationFrame(() => { rafVue = 0; HOST.onVue(cadreDepuisVue(VB, L)); });   // remonte la vue (réglage « Cadrage »)
+}
 function ajuster() {
   const r = svg.getBoundingClientRect(); const ar = r.width / r.height; const mobile = false;
   if (mobile) { // vue de départ : centrée sur la zone qui contient le plus d'équipements (le cœur du procédé)
     const cnt = z => L.noeuds.filter(n => n.x >= z.x && n.x <= z.x + z.w && n.y >= z.y && n.y <= z.y + z.h).length;
     const zc = [...L.zones].sort((a, b) => cnt(b) - cnt(a))[0] || { x: 0, y: 0, w: L.w, h: L.h };
     VB.w = Math.min(L.w, 640); VB.h = VB.w / ar; VB.x = zc.x + zc.w / 2 - VB.w / 2; VB.y = zc.y + zc.h / 2 - VB.h / 2; }
+  else if (CADRE) { Object.assign(VB, vueDepuisCadre(CADRE, L, ar)); }   // cadrage enregistré : le rectangle tient en entier dans la tuile
   else { let w = L.w, hh = L.w / ar; if (hh < L.h) { hh = L.h; w = hh * ar; } VB.w = w; VB.h = hh; VB.x = (L.w - w) / 2; VB.y = (L.h - hh) / 2; }
   appliquerVB(); fitAuto = true;
 }
@@ -2408,8 +2415,12 @@ const instance = {
   estModifie: () => estModifie(),
   importerTexte: (txt) => importerTexte(txt),
   ajuster, zoomer, cadrer,
+  /** vue courante en fractions du dessin (à enregistrer comme cadrage) */
+  vue: () => cadreDepuisVue(VB, L),
+  /** impose un cadrage (null = ajustement automatique) ; il suit ensuite la taille de la tuile */
+  definirVue(c) { CADRE = c ?? null; ajuster(); },
   interne: INTERNE,
-  destroy() { ecouteurs.forEach(f => f()); observateur.disconnect(); fermerDetail(); fermerSelecteur(); clearTimeout(minuteurPousser); clearTimeout(minuteurControle); root.querySelectorAll('.voile,.ed-popup,#toasts,.pal-fantome').forEach(n => n.remove()); },
+  destroy() { ecouteurs.forEach(f => f()); observateur.disconnect(); cancelAnimationFrame(rafVue); fermerDetail(); fermerSelecteur(); clearTimeout(minuteurPousser); clearTimeout(minuteurControle); root.querySelectorAll('.voile,.ed-popup,#toasts,.pal-fantome').forEach(n => n.remove()); },
 };
 return instance;
 }

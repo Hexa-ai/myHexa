@@ -11,6 +11,7 @@ import {
 } from '@/lib/synoptic/api'
 import { documentVide, lireImport } from '@/lib/synoptic/documents'
 import { variablesLiees } from '@/lib/synoptic/variables'
+import SynopticCadrageOptions from './SynopticCadrageOptions.vue'
 
 const props = defineProps<{
   widget: Widget
@@ -160,5 +161,7 @@ async function surFichier(ev: Event) {
         (ordinateur).
       </p>
     </div>
+
+    <SynopticCadrageOptions :widget="widget" />
   </div>
 </template>

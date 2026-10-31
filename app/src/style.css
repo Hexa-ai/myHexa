@@ -211,3 +211,17 @@
 @media (prefers-reduced-motion: reduce) {
   .live-dot { animation: none; }
 }
+
+
+/* Grille des tableaux de bord (voir lib/dashboardGrid.ts et docs/flux/grille.md).
+   ≥ 768 px : rangées de hauteur fixe + remplissage dense, chaque tuile occupe --rs rangées ; en dessous : empilement simple. */
+@media (min-width: 768px) {
+  .dash-grid {
+    grid-auto-rows: var(--row-unit, 54px);
+    grid-auto-flow: row dense;
+  }
+  .dash-tile {
+    grid-row: span var(--rs, 4) / span var(--rs, 4);
+    min-height: 0;
+  }
+}

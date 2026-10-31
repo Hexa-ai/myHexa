@@ -473,10 +473,11 @@ const tableRows = computed(() =>
     :synoptic-id="w.options.synoptic_id"
     :title="w.title"
     :device="devices.get(w.sources[0]?.device ?? '')"
+    :cadre-tuile="w.options.synoptic_cadre"
   />
   <div
     v-else
-    class="w-mod h-full border border-border rounded-md bg-card/40 p-3 sm:p-4 flex flex-col min-w-0"
+    class="w-mod h-full border border-border rounded-md bg-card/40 p-3 sm:p-4 flex flex-col min-w-0 md:overflow-y-auto md:overflow-x-hidden"
     :data-testid="`widget-${w.type}`"
   >
     <div v-if="title && w.type !== 'image'" class="flex items-baseline gap-2 mb-2 min-w-0">

@@ -27,12 +27,16 @@ const props = withDefaults(
     mobile?: boolean
     /** zone du dessin sur laquelle cadrer la vue à l'ouverture (sinon : tout le dessin) */
     cadre?: { x: number; y: number; w: number; h: number } | null
+    /** cadrage enregistré (rectangle du dessin en fractions) : la vue suit la taille de la tuile ; absent = tout le dessin */
+    vue?: { x: number; y: number; w: number; h: number } | null
   }>(),
-  { catalogue: () => [], gestes: true, cadre: null },
+  { catalogue: () => [], gestes: true, cadre: null, vue: null },
 )
 const emit = defineEmits<{
   (e: 'save', doc: SynopticDocument): void
   (e: 'etat', etat: SynopticEtat): void
+  /** la vue a changé (geste, zoom, taille de la tuile) : rectangle visible en fractions du dessin */
+  (e: 'vue', vue: { x: number; y: number; w: number; h: number }): void
 }>()
 
 const root = ref<HTMLElement | null>(null)
@@ -47,9 +51,11 @@ function creer() {
     values: props.values,
     pleinCadre: props.fullFrame,
     gestes: props.gestes,
+    cadreVue: props.vue,
     host: {
       onSave: (d) => emit('save', d),
       onEtat: (e) => emit('etat', e),
+      onVue: (v) => emit('vue', v),
     },
   })
   if (props.editing) inst.value.mode(true)
@@ -63,6 +69,11 @@ onBeforeUnmount(() => inst.value?.destroy())
 // nouveau document (autre version) ou changement de mode : on repart d'une instance neuve
 watch(() => props.doc, creer)
 watch(() => props.editing, creer)
+// cadrage modifié (réglage de la tuile) : on l'applique sans recréer le dessin
+watch(
+  () => props.vue,
+  (v) => inst.value?.definirVue(v ?? null),
+)
 watch(
   () => props.values,
   (v) => inst.value?.setValues(v),

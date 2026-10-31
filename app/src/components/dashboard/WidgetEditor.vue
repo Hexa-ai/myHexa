@@ -37,7 +37,17 @@ import {
   type WidgetType,
   type WidgetWidth,
 } from '@/composables/useDashboards'
-import { LEGACY_COLS, setSize, widgetCols } from '@/lib/dashboardGrid'
+import {
+  isAutoHeight,
+  LEGACY_COLS,
+  MAX_ROWS,
+  minRows,
+  resetHeight,
+  rowsPx,
+  setSize,
+  widgetCols,
+  widgetRows,
+} from '@/lib/dashboardGrid'
 
 import SynopticWidgetOptions from '@/components/synoptic/SynopticWidgetOptions.vue'
 
@@ -323,7 +333,7 @@ function save() {
         </label>
         <div>
           <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
-            >Largeur (grand écran) · {{ widgetCols(w) }}/12<span class="normal-case tracking-normal"> — taille libre : poignée en bas à droite de la tuile</span></span
+            >Largeur (grand écran) · {{ widgetCols(w) }}/12<span class="normal-case tracking-normal"> — ou poignées sur la tuile en mode Modifier</span></span
           >
           <div class="mt-1 flex gap-1">
             <button
@@ -338,6 +348,35 @@ function save() {
               @click="setSize(w, { w: LEGACY_COLS[x] })"
             >
               {{ x === 'full' ? 'pleine' : x }}
+            </button>
+          </div>
+        </div>
+        <div>
+          <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+            >Hauteur (grand écran et tablette) · {{ widgetRows(w) }} rangées ≈ {{ rowsPx(widgetRows(w)) }} px<span
+              class="normal-case tracking-normal"
+            >
+              — {{ isAutoHeight(w) ? 'automatique (selon le contenu)' : 'fixée' }}</span
+            ></span
+          >
+          <div class="mt-1 flex items-center gap-2">
+            <input
+              type="range"
+              :min="minRows(w.type)"
+              :max="MAX_ROWS"
+              :value="widgetRows(w)"
+              class="flex-1"
+              data-testid="widget-rows"
+              @input="setSize(w, { h: Number(($event.target as HTMLInputElement).value) })"
+            />
+            <button
+              type="button"
+              class="text-xs px-2 py-1 rounded border font-mono"
+              :class="isAutoHeight(w) ? 'border-signal text-signal' : 'border-border text-muted-foreground'"
+              data-testid="widget-rows-auto"
+              @click="resetHeight(w)"
+            >
+              auto
             </button>
           </div>
         </div>

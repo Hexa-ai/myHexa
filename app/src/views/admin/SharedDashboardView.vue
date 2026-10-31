@@ -18,7 +18,7 @@ import {
   type Widget,
 } from '@/composables/useDashboards'
 import DashboardWidget from '@/components/dashboard/DashboardWidget.vue'
-import { minHeightPx, spanClasses, widgetRows } from '@/lib/dashboardGrid'
+import { gridStyle, spanClasses, tileStyle } from '@/lib/dashboardGrid'
 
 const route = useRoute()
 const router = useRouter()
@@ -144,15 +144,16 @@ onMounted(init)
     <p v-if="loading" class="text-sm text-muted-foreground">Chargement…</p>
     <div
       v-else-if="!error"
-      class="grid grid-cols-12 gap-3"
+      class="dash-grid grid grid-cols-12 gap-3"
       :class="loadingData ? 'opacity-60 transition-opacity' : ''"
+      :style="gridStyle()"
       data-testid="dash-grid"
     >
       <div
         v-for="(w, i) in widgets"
         :key="i + w.type"
-        :class="[spanClasses(w), widgetRows(w) > 1 && 'sm:min-h-[var(--min-h)]', 'relative']"
-        :style="{ '--min-h': minHeightPx(w) ? minHeightPx(w) + 'px' : undefined }"
+        :class="[spanClasses(w), 'dash-tile relative']"
+        :style="tileStyle(w, i)"
         data-testid="widget-slot"
       >
         <DashboardWidget

@@ -45,7 +45,8 @@ Identique à l'export du prototype : `{ schema: 'myhexa-synoptique-edition/1', m
 | `components/synoptic/SynopticResumeEditor.vue` | onglet « Résumé mobile » de l'éditeur (cartes, équipements, aperçu téléphone) |
 | `components/synoptic/SynopticMobileFull.vue` | dessin en plein écran mobile / tablette (gestes, croix, retour) |
 | `components/synoptic/SynopticFrame.vue` | cadre plein-application (sans Fullscreen API), Échap ferme |
-| `components/synoptic/SynopticWidgetOptions.vue` | options du bloc : box, synoptique existant, vide, import JSON |
+| `components/synoptic/SynopticWidgetOptions.vue` | options du bloc : box, synoptique existant, vide, import JSON, cadrage |
+| `components/synoptic/SynopticCadrageOptions.vue` · `lib/synoptic/cadrage.ts` | réglage « Cadrage » (aperçu, zoom, enregistrer la vue) et calculs purs du cadrage relatif |
 | `views/admin/SynopticView.vue` · `SynopticEditView.vue` | routes `/admin/synoptic/:id` et `/admin/synoptic/:id/edit` |
 
 Le moteur est un unique module (`engine/moteur.ts`, ~2 300 lignes) : le prototype l'écrivait en 14 fichiers concaténés, ici chaque instance vit dans une fermeture (plusieurs synoptiques par page possibles, aucun global). Ses sections sont séparées par des bandeaux `MODULE : …` ; l'intérieur est volontairement non typé (`any`), seule l'interface publique (`engine/types.ts`) est typée.
@@ -55,6 +56,13 @@ Le moteur est un unique module (`engine/moteur.ts`, ~2 300 lignes) : le prototyp
 - **Direct** : la tuile annonce ses variables via `setWanted` (voir `DashboardView.vue`) ; sans direct, dernières valeurs du statut (30 min), comme les autres tuiles. Une variable sans valeur donne un état *inconnu*, jamais « en marche ».
 - **Agrandir** : la tuile couvre la zone de contenu (menu latéral conservé), Échap ou « Retour » ferme.
 - **Édition** : route plein cadre ; bouton « Éditer le synoptique » visible seulement si l'utilisateur peut modifier le tableau ET `peutEditerIci()`. Sur mobile / tactile, la route redirige vers la vue avec un avis court. Enregistrer = nouvelle version puis retour au tableau.
+
+## Taille de la tuile et cadrage
+
+- **Hauteur libre** : la tuile n'a plus de hauteur minimale (`min-h-[360px]` supprimé) ni de lien avec sa largeur ; sa hauteur est celle que lui donne la grille (`options.rows`, au moins 4 rangées de 54 px = 252 px, 8 par défaut ; voir [grille.md](grille.md)).
+- **Le dessin s'ajuste à la tuile** : le moteur observe la taille du `svg` (`ResizeObserver`) et recalcule la vue à chaque changement (fenêtre, menu latéral, tuile redimensionnée) : tout le dessin, centré, entièrement visible (« contain »). Pendant le geste de redimensionnement la tuile ne bouge pas (fantôme, voir grille.md) ; le dessin se réajuste au relâchement, sans scintillement.
+- **Cadrage enregistré** (options de la tuile, section « Cadrage ») : un aperçu à la forme de la tuile se déplace à la souris et se zoome (curseur 1× à 8× ou Ctrl + molette). *Enregistrer la vue actuelle* écrit `options.synoptic_cadre = { x, y, w, h }` : un **rectangle du dessin en fractions** de son étendue (0 à 1). Il ne dépend pas de la taille de la tuile : quelle que soit sa forme, ce rectangle y tient en entier, centré ; seule la marge change de côté. *Ajuster automatiquement* (défaut) supprime l'option. L'aperçu est indicatif (grille supposée de 1 200 px). Moteur : `creerSynoptique({ cadreVue })`, `instance.definirVue(c | null)`, `instance.vue()`, rappel `host.onVue`. Maths pures : `lib/synoptic/cadrage.ts` (`vueDepuisCadre`, `cadreDepuisVue`, `cadreAvecZoom`).
+- Si l'utilisateur zoome ou déplace le dessin avec la souris dans la tuile, la vue n'est plus suivie jusqu'à « ⤢ » (ajuster) : comportement du moteur inchangé. Résumé mobile et plein écran inchangés (le cadrage n'y est pas utilisé).
 
 ## Mobile et tablette
 
@@ -144,5 +152,6 @@ Les symboles propres à une entreprise se dessinent dans l'éditeur de formes (s
 - Unitaires : `app/tests/unit/lib/synoptic/` (règles, documents / import-export, géométrie, annuler/rétablir sur le vrai moteur monté dans jsdom).
 - Unitaires du résumé : `tests/unit/lib/synoptic/resume.spec.ts` (automatique) et `resume-config.spec.ts` (corrections `modele.resume`, familles de pictogrammes).
 - E2E résumé mobile : `~/depots/myHexa-tools/e2e/resume_config.mjs` (`BASE=… node resume_config.mjs`) : sur une copie du synoptique STEMI, épingler, masquer, renommer, réordonner, carte personnalisée, enregistrer, tuile mobile avant / après ; captures `resume_config_*.png`.
+- Cadrage : `tests/unit/lib/cadrage.spec.ts` ; E2E `grille_libre.mjs` (enregistrement, rechargement, redimensionnement, retour à l'automatique).
 - E2E TEST : `~/depots/myHexa-tools/e2e/synopt_e2e.mjs` (tableau, tuile, import STEMI, agrandir, éditeur, conduite, variable, enregistrement, mobile).
 - E2E mobile : `~/depots/myHexa-tools/e2e/synopt_mobile.mjs` (`BASE=… node synopt_mobile.mjs`, tableau Démo STEMI) : résumé, défilement de la page par glissement, plein écran, gestes, croix / retour / Échap, paysage, tablette, thèmes clair et sombre ; captures `~/.hermes/cache/scratch/mobile_synopt_*.png`.

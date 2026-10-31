@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Tuile « synoptique » d'un tableau de bord : âge de la donnée, alarmes, et selon l'appareil
-// - bureau : dessin animé ajusté à la tuile, bouton « Agrandir » (zone de contenu), bouton « Éditer » (droit de modifier) ;
+// - bureau : dessin animé ajusté à la tuile (tout le dessin, centré, à toute taille de tuile ; ou cadrage enregistré dans les options), bouton « Agrandir » (zone de contenu), bouton « Éditer » (droit de modifier) ;
 // - tablette : dessin sans capture de geste + « Plein écran » ;
 // - mobile : résumé lisible (alarmes, ouvrages) et « Voir le synoptique » (plein écran) ; aucun geste n'est capté.
 import { computed, ref, toRef, watch } from 'vue'
@@ -9,6 +9,7 @@ import { useSynoptic } from '@/composables/useSynoptic'
 import { useAuthStore } from '@/stores/auth'
 import { usePeutEditerIci, useModeAffichage } from '@/lib/synoptic/environnement'
 import { construireResume, type CadreDessin } from '@/lib/synoptic/resume'
+import { lireCadre } from '@/lib/synoptic/cadrage'
 import type { DeviceWithStatus } from '@/composables/useDevices'
 import type { SynopticEtat } from '@/lib/synoptic/engine/types'
 import SynopticCanvas from './SynopticCanvas.vue'
@@ -21,7 +22,10 @@ const props = defineProps<{
   synopticId?: string
   title: string | null
   device: DeviceWithStatus | null | undefined
+  /** cadrage enregistré dans les options de la tuile (rectangle du dessin en fractions) ; absent = ajusté automatiquement */
+  cadreTuile?: unknown
 }>()
+const vueEnregistree = computed(() => lireCadre(props.cadreTuile) ?? null)
 
 const router = useRouter()
 const route = useRoute()
@@ -72,8 +76,7 @@ function editer() {
 
 <template>
   <div
-    class="h-full border border-border rounded-md bg-card/40 flex flex-col min-w-0 overflow-hidden"
-    :class="mode === 'mobile' ? '' : 'min-h-[360px]'"
+    class="h-full border border-border rounded-md bg-card/40 flex flex-col min-w-0 min-h-0 overflow-hidden"
     data-testid="widget-synoptic"
   >
     <SynopticBar :titre="titre" :en-direct="enDirect" :recu="recu" :alarmes="nbAlarmes">
@@ -113,12 +116,18 @@ function editer() {
         Ouvrir l'éditeur
       </button>
     </p>
-    <SynopticSummary v-else-if="resume" :resume="resume" @ouvrir="ouvrirPleinEcran" />
+    <SynopticSummary
+      v-else-if="resume"
+      :resume="resume"
+      class="min-h-0 overflow-y-auto"
+      @ouvrir="ouvrirPleinEcran"
+    />
     <div v-else-if="!agrandi" class="flex-1 min-h-0">
       <SynopticCanvas
         :doc="doc"
         :values="values"
         :gestes="mode === 'bureau'"
+        :vue="vueEnregistree"
         @etat="etat = $event"
       />
     </div>

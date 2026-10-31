@@ -30,11 +30,11 @@ export type WidgetWidth = '1/4' | '1/3' | '1/2' | '2/3' | 'full'
 /**
  * Taille par défaut (colonnes sur 12 × rangées) d'un type de tuile à son choix dans l'éditeur.
  * Un type absent garde la taille actuelle de la tuile. Ex. à ajouter pour un grand synoptique :
- * `synoptic: { w: 12, h: 4 }`.
+ * `synoptic: { w: 12, h: 8 }`.
  */
 export const DEFAULT_SIZE: Partial<Record<WidgetType, { w: number; h: number }>> = {
-  // Un synoptique se lit en grand : pleine largeur, 4 rangées (~480 px)
-  synoptic: { w: 12, h: 4 },
+  // Un synoptique se lit en grand : pleine largeur, 8 rangées (~516 px)
+  synoptic: { w: 12, h: 8 },
 }
 export type Op = 'sum' | 'mean' | 'min' | 'max'
 export type Stat = 'last' | 'mean' | 'min' | 'max' | 'total'
@@ -89,9 +89,13 @@ export const THRESHOLD_COLORS = [
 ]
 
 export interface WidgetOptions {
-  /** taille libre sur la grille : colonnes (2-12) et rangées (1 = hauteur automatique, jusqu'à 6) */
+  /** taille libre sur la grille : colonnes (2-12) et hauteur en rangées de 54 px (absent = hauteur par défaut du type) */
   w?: number
+  rows?: number
+  /** ancien format de hauteur, en rangées de 120 px (lu et converti, jamais réécrit) */
   h?: number
+  /** synoptique : cadrage enregistré (rectangle du dessin en fractions) ; absent = ajustement automatique */
+  synoptic_cadre?: { x: number; y: number; w: number; h: number }
   /** courbes / barres : seuils (traits horizontaux) */
   thresholds?: Threshold[]
   /** bloc signalements : types retenus, ouverts seulement (sinon : ceux de la période), photos affichées */

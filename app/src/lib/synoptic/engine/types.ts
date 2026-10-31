@@ -118,6 +118,8 @@ export interface SynopticHost {
   onSave?: (doc: SynopticDocument) => void
   /** alarmes, modifications, annuler/rétablir possibles… (à chaque changement) */
   onEtat?: (etat: SynopticEtat) => void
+  /** la vue a changé (zoom, déplacement, ajustement) : rectangle visible en fractions du dessin */
+  onVue?: (vue: { x: number; y: number; w: number; h: number }) => void
 }
 
 export interface SynopticOptions {
@@ -130,6 +132,8 @@ export interface SynopticOptions {
   pleinCadre?: boolean
   /** false = consultation sans geste : ni zoom ni déplacement, la page garde tous les gestes tactiles (défaut : true) */
   gestes?: boolean
+  /** cadrage enregistré (rectangle du dessin en fractions) ; absent = ajustement automatique */
+  cadreVue?: { x: number; y: number; w: number; h: number } | null
 }
 
 export interface SynopticInstance {
@@ -144,6 +148,10 @@ export interface SynopticInstance {
   estModifie(): boolean
   importerTexte(txt: string): boolean
   ajuster(): void
+  /** vue courante en fractions du dessin */
+  vue(): { x: number; y: number; w: number; h: number }
+  /** impose un cadrage enregistré (null = automatique) */
+  definirVue(c: { x: number; y: number; w: number; h: number } | null): void
   zoomer(f: number, cx?: number, cy?: number): void
   /** cadre la vue sur une zone du dessin (unités du dessin), avec une marge */
   cadrer(zone: { x: number; y: number; w: number; h: number }): void

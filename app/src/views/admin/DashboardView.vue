@@ -32,7 +32,7 @@ import DashboardNavDrawer from '@/components/dashboard/DashboardNavDrawer.vue'
 import LiveControl from '@/components/dashboard/LiveControl.vue'
 import LiveBanner from '@/components/dashboard/LiveBanner.vue'
 import { useGridEditing } from '@/composables/useGridEditing'
-import { minHeightPx, spanClasses, widgetRows } from '@/lib/dashboardGrid'
+import { gridStyle, spanClasses, tileStyle, widgetCols, widgetRows } from '@/lib/dashboardGrid'
 import { useLiveStore } from '@/stores/live'
 
 const route = useRoute()
@@ -837,8 +837,9 @@ const backTo = computed(() =>
     </div>
     <div
       v-else
-      class="grid grid-cols-12 gap-3"
+      class="dash-grid grid grid-cols-12 gap-3 relative"
       :class="loadingData ? 'opacity-60 transition-opacity' : ''"
+      :style="gridStyle()"
       data-testid="dash-grid"
     >
       <div
@@ -846,15 +847,16 @@ const backTo = computed(() =>
         :key="i + w.type"
         :class="[
           spanClasses(w),
-          widgetRows(w) > 1 && 'sm:min-h-[var(--min-h)]',
-          'relative',
+          'dash-tile relative',
           editing && 'cursor-move',
           grid.dragIdx.value === i && 'opacity-40',
           grid.resizingIdx.value === i && 'ring-1 ring-signal rounded-md',
         ]"
         :draggable="editing && grid.resizingIdx.value === null"
-        :style="{ '--i': i, '--min-h': minHeightPx(w) ? minHeightPx(w) + 'px' : undefined }"
+        :style="tileStyle(w, i)"
         data-testid="widget-slot"
+        :data-cols="widgetCols(w)"
+        :data-rows="widgetRows(w)"
         @dragstart="grid.onDragStart($event, i)"
         @dragover.prevent="grid.onDragOver($event, i)"
         @drop.prevent="grid.onDrop()"
@@ -898,19 +900,62 @@ const backTo = computed(() =>
           </button>
           <button class="px-1 hover:text-offline" @click="widgets.splice(i, 1)">×</button>
         </div>
-        <!-- poignée de redimensionnement (largeur en colonnes, hauteur en rangées) -->
-        <div
-          v-if="editing"
-          class="z-30 absolute bottom-0.5 right-0.5 size-4 cursor-nwse-resize touch-none rounded-br border-b-2 border-r-2 border-signal"
-          title="Tirer pour redimensionner"
-          data-testid="resize-handle"
-          draggable="false"
-          @mousedown.prevent
-          @pointerdown.stop="grid.onResizeStart($event, i)"
-          @pointermove="grid.onResizeMove($event, i)"
-          @pointerup="grid.onResizeEnd()"
-          @pointercancel="grid.onResizeEnd()"
-        />
+        <!-- poignées de redimensionnement (≥ 768 px) : angle = largeur + hauteur, bord droit = largeur, bord bas = hauteur.
+             Pendant le geste seul le fantôme (ci-dessous) bouge ; la taille est appliquée au relâchement. -->
+        <template v-if="editing">
+          <div
+            class="hidden md:block z-30 absolute bottom-0.5 right-0.5 size-4 cursor-nwse-resize touch-none rounded-br border-b-2 border-r-2 border-signal"
+            title="Tirer pour redimensionner (largeur et hauteur)"
+            data-testid="resize-handle"
+            draggable="false"
+            @mousedown.prevent
+            @pointerdown.stop="grid.onResizeStart($event, i, 'xy')"
+            @pointermove="grid.onResizeMove($event, i)"
+            @pointerup="grid.onResizeEnd()"
+            @pointercancel="grid.cancelResize()"
+          />
+          <div
+            class="hidden md:block z-20 absolute top-8 bottom-5 -right-1.5 w-3 cursor-ew-resize touch-none after:absolute after:inset-y-0 after:right-1 after:w-0.5 after:rounded after:bg-signal/0 hover:after:bg-signal"
+            title="Tirer pour changer la largeur"
+            data-testid="resize-handle-e"
+            draggable="false"
+            @mousedown.prevent
+            @pointerdown.stop="grid.onResizeStart($event, i, 'x')"
+            @pointermove="grid.onResizeMove($event, i)"
+            @pointerup="grid.onResizeEnd()"
+            @pointercancel="grid.cancelResize()"
+          />
+          <div
+            class="hidden md:block z-20 absolute left-5 right-5 -bottom-1.5 h-3 cursor-ns-resize touch-none after:absolute after:inset-x-0 after:bottom-1 after:h-0.5 after:rounded after:bg-signal/0 hover:after:bg-signal"
+            title="Tirer pour changer la hauteur"
+            data-testid="resize-handle-s"
+            draggable="false"
+            @mousedown.prevent
+            @pointerdown.stop="grid.onResizeStart($event, i, 'y')"
+            @pointermove="grid.onResizeMove($event, i)"
+            @pointerup="grid.onResizeEnd()"
+            @pointercancel="grid.cancelResize()"
+          />
+        </template>
+      </div>
+      <!-- fantôme de la taille cible pendant le redimensionnement (aimanté aux colonnes et aux rangées) -->
+      <div
+        v-if="grid.preview.value"
+        class="absolute z-40 pointer-events-none rounded-md border-2 border-dashed border-signal bg-signal/10"
+        :style="{
+          left: grid.preview.value.left + 'px',
+          top: grid.preview.value.top + 'px',
+          width: grid.preview.value.width + 'px',
+          height: grid.preview.value.height + 'px',
+        }"
+        data-testid="resize-ghost"
+      >
+        <span
+          class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-background/95 border border-signal px-2 py-1 font-mono text-xs text-signal shadow"
+          data-testid="resize-size"
+          >{{ grid.preview.value.w }} col. × {{ grid.preview.value.h }} rangées ·
+          {{ Math.round(grid.preview.value.width) }} × {{ Math.round(grid.preview.value.height) }} px</span
+        >
       </div>
     </div>
     <!-- fin de liste : déposer ici place la tuile en dernier -->
