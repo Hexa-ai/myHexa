@@ -2,6 +2,7 @@
 // symboles des bibliothèques importées. Un seul endroit pour savoir « quels symboles existent, avec quel nom court et quelle famille ».
 import type { SymboleDef } from './iso/lib/types'
 import { estAccessoireIso } from './iso/familles'
+import { entreesPresets } from './iso/presets'
 import { entreeSymbole, type Entree } from './recherche'
 import { FAMILLE_MA_BIBLIOTHEQUE, idSymboleBibliotheque, type Bibliotheque } from './bibliotheque'
 
@@ -46,7 +47,11 @@ export const PALETTE_2D: ReadonlyArray<{ cle: string; nom: string; famille: stri
 export const FAMILLE_ACCESSOIRES = 'Sur un tuyau (vannes, capteurs)'
 
 export function entreesIso(catalogue: readonly SymboleDef[]): Entree[] {
-  return catalogue.map((d) => entreeSymbole('iso', d.id, nomCourt(d.nom), d.famille, [d.nom, d.id, estAccessoireIso(d.id) ? 'sur tuyau accessoire' : '']))
+  // les préréglages (circulateur double, V3V verticale…) sont des symboles à part entière : visibles en palette, Ctrl+K et explorateur
+  return [
+    ...catalogue.map((d) => entreeSymbole('iso', d.id, nomCourt(d.nom), d.famille, [d.nom, d.id, estAccessoireIso(d.id) ? 'sur tuyau accessoire' : ''])),
+    ...entreesPresets(),
+  ]
 }
 
 export const entrees2d = (): Entree[] => PALETTE_2D.map((p) => entreeSymbole('2d', p.cle, p.nom, p.famille))

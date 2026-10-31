@@ -6,6 +6,8 @@ import { add, sub, mul, len, unit, dot, proj, f, VUE, bboxDe } from './geom'
 import type { Plan, Rel } from './geom'
 import { dessiner } from './registre'
 import { Scene } from './scene'
+import { appliquerPiquages } from './piquages'
+import type { Piquage } from './piquages'
 import type { Item } from './tubes'
 import type { Seg, Obstacle, PortRoute } from './routeur'
 import { router, collisions, ajouterPonts, simplifier } from './routeur'
@@ -82,8 +84,10 @@ export interface Composant {
   /** pose sur un port d'un autre composant (capteur sur cuve…) : position déduite */
   monte?: { sur: string; port: string; local?: string }
   /** basculement d'axe ('x' : l'axe local x devient vertical) ; `ancre` = port local posé au point (x, y, z) */
-  tilt?: 'x' | 'xn'
+  tilt?: 'x' | 'xn' | 'y' | 'yn'
   ancre?: string
+  /** piquages libres : ports reliables ajoutés sur une face du composant (voir piquages.ts) */
+  piquages?: Piquage[]
 }
 export interface Etiq { c: string; ancre?: string; nom?: string; valeur?: string | number; unite?: string; repere?: string; dx?: number; dy?: number; etat?: EtatNom; compact?: boolean }
 export interface Doc {
@@ -243,6 +247,7 @@ export function construire(doc: Doc, opt: { K?: number } = {}): Resultat {
       const dp = rot ? decalagePivot(c, etat, val) : [0, 0]
       r = translater(rendu0(c.type, c.params ?? {}, etat, val, rot, undefined, c.id), [c.x + dp[0], c.y + dp[1], c.z])
     }
+    if (c.piquages?.length) r = appliquerPiquages(r, c.piquages)
     rendus[c.id] = r
     let cb = r.corps ?? r.bbox
     // cuve sur pieds : l'espace sous le fond est libre (les jambes sont fines), on y passe des tuyaux

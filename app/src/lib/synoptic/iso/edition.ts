@@ -7,6 +7,9 @@ import type { IsoAccessoire, IsoComposant, IsoSection } from './format'
 import { familleIso } from './familles'
 import { aimanter } from './grille'
 import type { SymboleBibliotheque } from '../bibliotheque'
+import { rendu0 } from './lib/modele'
+import type { Piquage } from './lib/piquages'
+import { resoudre, type TiltIso } from './presets'
 
 /** identifiant libre construit sur un préfixe (« pompe1 », « pompe2 »…) */
 export function idLibre(iso: IsoSection, prefixe: string): string {
@@ -27,6 +30,31 @@ export interface OptionsPose {
   z?: number
   params?: Record<string, unknown>
   libelle?: string
+  rot?: 0 | 90 | 180 | 270
+  tilt?: TiltIso
+  etat?: string
+}
+
+/** centre de l'empreinte d'un symbole (monde, depuis l'origine), pour poser le CENTRE sous le curseur ; [0, 0] si le symbole ne se dessine pas */
+export function centrePose(type: string, params: Record<string, unknown> = {}, rot = 0, tilt?: string): [number, number] {
+  try {
+    const a = rendu0(type, params as Record<string, never>, 'arret', {}, tilt ? rot : 0, tilt).ancres.centre
+    return Number.isFinite(a[0]) && Number.isFinite(a[1]) ? [a[0], a[1]] : [0, 0]
+  } catch {
+    return [0, 0]
+  }
+}
+
+/**
+ * pose un symbole de palette (symbole du catalogue OU préréglage « preset:… ») centré sur le point visé.
+ * Renvoie l'identifiant du composant posé.
+ */
+export function poserSymbole(iso: IsoSection, idPalette: string, x: number, y: number, o: { aimant: number; rot?: 0 | 90 | 180 | 270; tilt?: TiltIso }): string {
+  const r = resoudre(idPalette)
+  const rot = o.rot ?? r.rot ?? 0
+  const tilt = o.tilt ?? r.tilt
+  const id = poserComposant(iso, r.type, x, y, { aimant: o.aimant, centre: centrePose(r.type, r.params, rot, tilt), params: r.params, libelle: r.libelle, rot, tilt, etat: r.etat })
+  return id
 }
 
 /** pose un composant sur la grille, aimanté au pas ; renvoie son identifiant */
@@ -40,10 +68,12 @@ export function poserComposant(iso: IsoSection, type: string, x: number, y: numb
     x: aimanter(x - cx, o.aimant),
     y: aimanter(y - cy, o.aimant),
     z: o.z ?? (type === 'raccord.bout' ? 40 : 0),
-    etat: fam === 'vanne' ? 'ouvert' : 'arret',
+    etat: (o.etat as IsoComposant['etat']) ?? (fam === 'vanne' ? 'ouvert' : 'arret'),
     valeurs: fam === 'cuve' ? { niveau: 50 } : {},
     params: { ...(o.params ?? {}) },
     ...(o.libelle ? { libelle: o.libelle } : {}),
+    ...(o.rot ? { rot: o.rot } : {}),
+    ...(o.tilt ? { tilt: o.tilt } : {}),
   }
   iso.composants.push(c)
   return id
@@ -75,6 +105,44 @@ export function deplacerComposant(c: IsoComposant, x: number, y: number, aimant:
 
 export function tourner(c: IsoComposant): void {
   c.rot = ((((c.rot ?? 0) + 90) % 360) as 0 | 90 | 180 | 270)
+}
+
+/** orientation : bascule d'un composant en ligne (axe local x vertical montant, vertical descendant, ou le même sur l'axe y) ; la suite se fait en cycle */
+export type AxeBascule = 'x' | 'y'
+export function basculer(c: IsoComposant, axe: AxeBascule = 'x'): void {
+  const cycle: (TiltIso | undefined)[] = axe === 'x' ? [undefined, 'x', 'xn'] : [undefined, 'y', 'yn']
+  const i = cycle.indexOf(c.tilt)
+  const suivant = i < 0 ? cycle[1] : cycle[(i + 1) % cycle.length]
+  if (suivant) c.tilt = suivant
+  else delete c.tilt
+  delete c.ancre
+}
+export function reglerTilt(c: IsoComposant, t: TiltIso | undefined): void {
+  if (t) c.tilt = t
+  else delete c.tilt
+  delete c.ancre
+}
+export const LIBELLE_TILT: Record<string, string> = { '': 'Horizontal', x: 'Vertical (montant)', xn: 'Vertical (descendant)', y: 'Transversal (montant)', yn: 'Transversal (descendant)' }
+
+// ───────────── piquages libres
+/** ajoute un piquage libre au composant ; renvoie son identifiant */
+export function ajouterPiquage(c: IsoComposant, p: Omit<Piquage, 'id'>): Piquage {
+  const pris = new Set((c.piquages ?? []).map((q) => q.id))
+  let n = 1
+  while (pris.has('p' + n)) n++
+  const pq: Piquage = { id: 'p' + n, ...p }
+  ;(c.piquages ??= []).push(pq)
+  return pq
+}
+/** retire un piquage ; les liaisons qui y étaient reliées sont supprimées avec lui */
+export function retirerPiquage(iso: IsoSection, cid: string, pid: string): void {
+  const c = iso.composants.find((q) => q.id === cid)
+  if (!c) return
+  c.piquages = (c.piquages ?? []).filter((q) => q.id !== pid)
+  if (!c.piquages.length) delete c.piquages
+  const port = 'pq_' + pid
+  const morts = iso.liaisons.filter((l) => [l.de, l.vers].some((e) => 'c' in e && e.c === cid && e.port === port)).map((l) => l.id)
+  for (const id of morts) supprimerObjet(iso, 'l', id)
 }
 
 export interface ExtremitePort {
