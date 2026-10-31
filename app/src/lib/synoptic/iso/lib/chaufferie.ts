@@ -94,36 +94,29 @@ enregistrer({
 })
 
 enregistrer({
-  id: 'chaufferie.pac', famille: 'Chaufferie', nom: 'Pompe à chaleur air/eau (ventilateur dessus)',
-  taille: () => [104, 64, 80], defauts: { dn: 4, fluide: 'eau_chaude_aller' }, planche: PL,
+  id: 'chaufferie.pac', famille: 'Chaufferie', nom: 'Pompe à chaleur air/eau (grille frontale ronde, ventilateur à axe horizontal)', statut: 'revu',
+  taille: () => [90, 52, 62], defauts: { dn: 4, fluide: 'eau_chaude_aller' }, planche: PL,
   dessiner(b: Builder, p: Params) {
-    const W = 104, D = 64, H = 56, r = p.dn
-    socle(b, 0, 0, W, D, 6)
-    const cs = b.box(2, 2, 6, W - 4, D - 4, H, 'mb')
-    // grille d'échangeur (batterie à ailettes) face +y
-    let g = r2(5, 10, 62, 46, 'in') + r2(5, 10, 62, 46, 'ed')
-    for (let x = 8; x < 68; x += 2.6) g += l2(x, 12, x, 54, 'ed2')
-    b.pl('xz', D - 2, g + r2(76, 12, 22, 42, 'ed2') + [0, 1, 2, 3, 4, 5].map((i) => l2(78, 15 + i * 6.6, 96, 15 + i * 6.6, 'ed2')).join(''), cs)
-    b.pl('yz', W - 2, [0, 1, 2, 3, 4].map((i) => l2(8, 14 + i * 9, D - 8, 14 + i * 9, 'ed2')).join(''), cs)
-    // ventilateur sur le dessus : carter + grille + hélice
-    const cx = 36, cy = 32, R = 22
-    const v = b.cylZ(cx, cy, 6 + H, R + 2, 5, 'mm')
-    b.pl('xy', 6 + H + 5, `<g transform="translate(${cx} ${cy})">${c2(0, 0, R, 'in')}</g>`, v)
-    b.rotor('xy', 6 + H + 5.1, cx, cy, helice(R - 2, 5, 'fm'), v, 1.1)
-    b.pl('xy', 6 + H + 5.2, `<g transform="translate(${cx} ${cy})">${grille(R, 3, 12)}</g>`, v)
-    // groupe frigorifique : coffret électrique + compresseur visible (voyants)
-    const co = b.box(70, D - 2, 14, 28, 5, 24, 'mm')
-    b.pl('xz', D + 3, r2(72, 28, 12, 7, 'fk', 1) + c2(90, 30, 1.6, 'led') + c2(90, 36, 1.6, 'fm'), co)
-    b.led([90, D + 3, 30], co, 1.5)
+    const W = 90, D = 52, H = 52, r = p.dn
+    socle(b, 0, 0, W, D, 5)
+    const cs = b.box(2, 2, 5, W - 4, D - 4, H, 'mb')
+    // face +y : grille ronde (le ventilateur est DERRIÈRE, axe horizontal y) ; coffret technique à droite
+    const cx = 32, cz = 5 + H / 2, R = 20
+    const g = b.cylY(cx, D - 2, cz, R + 2.5, 2.5, 'mm') // carter (ellipse dans le plan xz)
+    b.pl('xz', D + 0.55, c2(cx, cz, R, 'fk') + `<g transform="translate(${cx} ${cz})">${helice(R - 4, 5, 'fm')}</g>`, g)
+    b.pl('xz', D + 0.6, `<g transform="translate(${cx} ${cz})">${grille(R, 3, 12)}</g>`, g)
+    b.pl('xz', D - 1.95, r2(62, 12, 22, 40, 'fm', 0.8) + c2(73, 40, 1.8, 'led') + r2(66, 18, 14, 8, 'fk', 0.6), cs)
+    // flanc +x : fentes de ventilation (côté échangeur)
+    b.pl('yz', W - 1.95, [0, 1, 2, 3, 4].map((i) => l2(8, 14 + i * 8, D - 8, 14 + i * 8, 'ed2')).join(''), cs)
     // piquages eau côté +x (aller haut / retour bas)
-    piq(b, 'aller', [W - 2, 18, 40], 'x', 1, 12, r, 'eau_chaude_aller')
-    piq(b, 'retour', [W - 2, 18, 18], 'x', 1, 12, r, 'eau_chaude_retour')
-    b.anchor('badge', [cx, cy, 6 + H + 20])
+    piq(b, 'aller', [W - 2, 14, 38], 'x', 1, 12, r, 'eau_chaude_aller')
+    piq(b, 'retour', [W - 2, 14, 18], 'x', 1, 12, r, 'eau_chaude_retour')
+    b.anchor('badge', [W / 2, D / 2, 5 + H + 14])
   },
 })
 
 enregistrer({
-  id: 'chaufferie.groupe_froid', famille: 'Chaufferie', nom: 'Groupe froid (refroidisseur, 2 ventilateurs)',
+  id: 'chaufferie.groupe_froid', famille: 'Chaufferie', nom: 'Groupe froid / dry cooler (ventilateurs sur le dessus)', statut: 'revu',
   taille: () => [150, 64, 86], defauts: { dn: 5, fluide: 'eau_glacee' }, planche: PL,
   dessiner(b: Builder, p: Params) {
     const W = 150, D = 64, H = 56, r = p.dn

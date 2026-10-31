@@ -8,6 +8,7 @@ import { enregistrer } from './registre'
 import { Builder, c2, r2, l2, p2 } from './iso'
 import type { Params, EtatNom, Valeurs } from './types'
 import type { V3 } from './geom'
+import { toit2Pans } from './metiers_commun'
 
 const FAM = 'Site / Architecture'
 const PL: [EtatNom, Valeurs?, number?][] = [['arret'], ['marche'], ['defaut'], ['alarme'], ['inconnu']]
@@ -27,16 +28,9 @@ export function facades(b: Builder, W: number, D: number, z = 4) {
 /** toit plat (débord + frise d'accent) ou à 2 pans (faîtage sur le grand côté) ; renvoie la hauteur ajoutée */
 function toit(b: Builder, W: number, D: number, z: number, kind: string, m: string, acc: string, tech = true): number {
   if (kind === '2pans') {
-    const s = 2.5
+    // géométrie partagée (metiers_commun.toit2Pans) : 2 pans, pan arrière, pignons alignés sur les rampants
     const h = Math.max(8, Math.min(W, D) * 0.3)
-    if (W >= D) {
-      b.poly([[-s, D + s, z], [W + s, D + s, z], [W + s, D / 2, z + h], [-s, D / 2, z + h]], 't', m)
-      b.poly([[W, -1, z], [W, D + 1, z], [W, D / 2, z + h]], 'r', 'mb')
-    } else {
-      b.poly([[W + s, -s, z], [W + s, D + s, z], [W / 2, D + s, z + h], [W / 2, -s, z + h]], 'r', m)
-      b.poly([[-1, D, z], [W + 1, D, z], [W / 2, D, z + h]], 'l', 'mb')
-    }
-    b.box(-s, -s, z - 3, W + 2 * s, 3, 3, acc)
+    toit2Pans(b, W, D, z, h, m, 'mb')
     return h
   }
   b.box(-2, -2, z, W + 4, D + 4, 3, m)
@@ -86,18 +80,18 @@ function immeuble(b: Builder, p: Params, style: string) {
 const tailleImm = (p: Params): [number, number, number] => [p.w + 2, p.d + 2, Math.round(p.etages) * p.hetage + 2 + (p.toit === '2pans' ? Math.min(p.w, p.d) * 0.3 : 10)]
 
 enregistrer({
-  id: 'site.batiment', famille: FAM, nom: 'Bâtiment principal (étages, toit plat ou 2 pans)',
+  id: 'site.batiment', statut: 'obsolete', remplacePar: 'batiment.immeuble_ancien', famille: FAM, nom: 'Bâtiment principal (étages, toit plat ou 2 pans)',
   taille: tailleImm, defauts: { w: 150, d: 90, etages: 3, hetage: 32, toit: 'plat', accent: 'signal' }, variantes: ['toit=plat|2pans', ACCENTS], planche: PL,
   dessiner(b: Builder, p: Params) { immeuble(b, p, 'trames') },
 })
 enregistrer({
-  id: 'site.bureaux', famille: FAM, nom: 'Bureaux (bandeaux vitrés)',
+  id: 'site.bureaux', statut: 'obsolete', remplacePar: 'batiment.bureaux', famille: FAM, nom: 'Bureaux (bandeaux vitrés)',
   taille: tailleImm, defauts: { w: 110, d: 56, etages: 2, hetage: 30, toit: 'plat', accent: 'signal' }, variantes: ['toit=plat|2pans', ACCENTS], planche: PL,
   dessiner(b: Builder, p: Params) { immeuble(b, p, 'bandeau') },
 })
 
 enregistrer({
-  id: 'site.entrepot', famille: FAM, nom: 'Entrepôt / hall industriel (portes sectionnelles)',
+  id: 'site.entrepot', statut: 'obsolete', remplacePar: 'batiment.entrepot', famille: FAM, nom: 'Entrepôt / hall industriel (portes sectionnelles)',
   taille: (p) => [p.w + 2, p.d + 2, p.h + 2 + (p.toit === '2pans' ? Math.min(p.w, p.d) * 0.3 : 6)],
   defauts: { w: 190, d: 100, h: 48, toit: '2pans', portes: 3, accent: 'neutre' }, variantes: ['toit=plat|2pans', ACCENTS], planche: PL,
   dessiner(b: Builder, p: Params) {
@@ -184,18 +178,23 @@ enregistrer({
 })
 
 enregistrer({
-  id: 'site.poste_transfo', famille: FAM, nom: 'Poste de transformation (cabine béton)',
-  taille: (p) => [p.w + 2, p.d + 2, p.h + 2 + Math.max(8, Math.min(p.w, p.d) * 0.3)], defauts: { w: 64, d: 46, h: 40, toit: '2pans', accent: 'chaud' }, variantes: ['toit=plat|2pans', ACCENTS], planche: PL,
+  id: 'site.poste_transfo', famille: FAM, nom: 'Poste de transformation préfabriqué béton (type Enedis)', statut: 'revu',
+  taille: (p) => [p.w + 6, p.d + 6, p.h + 12], defauts: { w: 56, d: 36, h: 34, accent: 'chaud' }, variantes: [ACCENTS], planche: PL,
   dessiner(b: Builder, p: Params) {
     const W = p.w, D = p.d, H = p.h
-    b.box(-1, -1, 0, W + 2, D + 2, 2, 'mc')
-    const wall = b.box(0, 0, 2, W, D, H, 'mc')
+    b.box(-1, -1, 0, W + 2, D + 2, 2, 'mc') // radier
+    const wall = b.box(0, 0, 2, W, D, H, 'mb') // monobloc béton
+    // façade : 2 portes métalliques grises à lames, grille de ventilation haute, panneau danger électrique
     let s = ''
-    for (const x0 of [W * 0.22, W * 0.56]) s += r2(x0, 0, W * 0.22, H * 0.7, 'fm', 0.8) + [0, 1, 2, 3, 4, 5].map((k) => l2(x0 + 2, 4 + k * 5, x0 + W * 0.22 - 2, 4 + k * 5, 'ed2')).join('')
-    s += p2([[W * 0.88, H * 0.58], [W * 0.88 + 4.2, H * 0.58 + 7.2], [W * 0.88 - 4.2, H * 0.58 + 7.2]], 'fo') // triangle « danger électrique »
+    for (const x0 of [W * 0.1, W * 0.4]) s += r2(x0, 0, W * 0.24, H * 0.72, 'fm', 0.8) + l2(x0 + W * 0.12, 0, x0 + W * 0.12, H * 0.72, 'ed2') + r2(x0 + W * 0.2, H * 0.3, 1.4, 4, 'fk', 0.4)
+    s += r2(W * 0.1, H * 0.8, W * 0.54, H * 0.1, 'fk', 0.6) + [0, 1, 2, 3, 4, 5, 6, 7].map((k) => l2(W * 0.1 + 3 + k * (W * 0.54 - 6) / 7, H * 0.8 + 1, W * 0.1 + 3 + k * (W * 0.54 - 6) / 7, H * 0.9 - 1, 'ed2')).join('')
+    // panneau « danger électrique » : triangle jaune, éclair sombre
+    s += p2([[W * 0.84, H * 0.5], [W * 0.84 + 6, H * 0.5 + 10], [W * 0.84 - 6, H * 0.5 + 10]], 'fo') + p2([[W * 0.84 + 1, H * 0.5 + 8.2], [W * 0.84 - 2.2, H * 0.5 + 4.6], [W * 0.84 - 0.2, H * 0.5 + 4.6], [W * 0.84 - 1, H * 0.5 + 2.2], [W * 0.84 + 2.2, H * 0.5 + 6], [W * 0.84 + 0.2, H * 0.5 + 6]], 'fk')
     b.pl('xz', D + 0.05, s, wall)
-    toit(b, W, D, H + 2, p.toit, 'mb', accent(p, 'chaud'), false)
-    b.led([W * 0.5, D, H - 4], wall, 1.8)
+    b.pl('yz', W + 0.05, r2(D * 0.5 - 8, H * 0.8, 16, H * 0.1, 'fk', 0.6) + [0, 1, 2, 3, 4].map((k) => l2(D * 0.5 - 6 + k * 3, H * 0.8 + 1, D * 0.5 - 6 + k * 3, H * 0.9 - 1, 'ed2')).join(''), wall)
+    // toit béton débordant, à faible pente (2 pans)
+    toit2Pans(b, W, D, H + 2, 6, 'mm', 'mb', { debord: 3 })
+    b.led([W * 0.78, D, H * 0.28], wall, 1.6)
     facades(b, W, D)
     b.anchor('badge', [W / 2, D / 2, H + 24])
   },
