@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
 import UsageDeviceTable from '@/components/staff/UsageDeviceTable.vue'
+import { BETA_FEATURES, setCachedBetas } from '@/composables/useFeature'
 import { fmtBytes, loadUsageDevices, totals, type UsageDevice } from '@/composables/useUsage'
 
 interface CompanyDetail {
@@ -12,6 +13,7 @@ interface CompanyDetail {
   is_hexa_internal: boolean
   created_at: string
   status_email_frequency: 'none' | 'daily' | 'weekly'
+  beta_features: string[]
 }
 interface DeviceLite {
   id: string
@@ -48,7 +50,7 @@ async function load() {
 
   const [{ data: c, error: cErr }, { data: ds, error: dErr }, { data: rs, error: rErr }] =
     await Promise.all([
-      supabase.from('companies').select('id, name, is_hexa_internal, created_at, status_email_frequency').eq('id', id.value).maybeSingle(),
+      supabase.from('companies').select('id, name, is_hexa_internal, created_at, status_email_frequency, beta_features').eq('id', id.value).maybeSingle(),
       supabase.from('devices').select('id, name, mac_eth0, last_connection_at').eq('company_id', id.value).order('name'),
       supabase.from('recipients').select('id, name, contact_email, role').eq('company_id', id.value),
     ])
@@ -118,6 +120,23 @@ async function setFrequency(value: 'none' | 'daily' | 'weekly') {
     company.value.status_email_frequency = prev
     error.value = err.message
   }
+}
+
+async function toggleBeta(key: string) {
+  if (!company.value) return
+  const prev = company.value.beta_features ?? []
+  const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+  company.value.beta_features = next
+  const { error: err } = await supabase
+    .from('companies')
+    .update({ beta_features: next })
+    .eq('id', company.value.id)
+  if (err) {
+    company.value.beta_features = prev
+    error.value = err.message
+    return
+  }
+  setCachedBetas(company.value.id, next)
 }
 
 function enterAs() {
@@ -363,6 +382,30 @@ watch(id, load)
       <p class="text-xs text-muted-foreground">
         Pour inviter un recipient dans cette compagnie, utilise "Entrer comme {{ company?.name ?? '…' }}" puis va dans Destinataires.
       </p>
+    </section>
+
+    <section v-if="auth.isHexaStaffAdmin && company" class="space-y-2" data-testid="company-betas">
+      <h2 class="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+        Options de l'entreprise
+      </h2>
+      <p class="text-xs text-muted-foreground">
+        Fonctions activées pour cette entreprise seulement (option souscrite ou avant-première) ;
+        décochée, la fonction disparaît pour ce client.
+      </p>
+      <label
+        v-for="f in BETA_FEATURES"
+        :key="f.key"
+        class="flex items-center gap-2 text-sm cursor-pointer"
+      >
+        <input
+          type="checkbox"
+          :checked="company?.beta_features?.includes(f.key)"
+          :data-testid="`beta-${f.key}`"
+          @change="toggleBeta(f.key)"
+        />
+        <span>{{ f.label }}</span>
+        <span class="text-xs text-muted-foreground">· {{ f.hint }}</span>
+      </label>
     </section>
 
     <section class="space-y-2" data-testid="company-usage">
