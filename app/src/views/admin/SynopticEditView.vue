@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Éditeur de synoptique en plein cadre (toute la zone de contenu de l'application, menu latéral conservé).
 // Enregistrer = nouvelle version ; « Retour » revient au tableau d'où l'on vient (query `retour`).
-import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useDevices } from '@/composables/useDevices'
 import { useSynoptic, useSynopticLive } from '@/composables/useSynoptic'
@@ -10,6 +10,10 @@ import type { SynopticDocument, SynopticEtat } from '@/lib/synoptic/engine/types
 import SynopticCanvas from '@/components/synoptic/SynopticCanvas.vue'
 import SynopticFrame from '@/components/synoptic/SynopticFrame.vue'
 import SynopticBar from '@/components/synoptic/SynopticBar.vue'
+import SynopticSpotlight from '@/components/synoptic/SynopticSpotlight.vue'
+import { entrees2d, entreesIso } from '@/lib/synoptic/catalogue-symboles'
+import { catalogue as catalogueIso } from '@/lib/synoptic/iso/lib'
+import type { Entree } from '@/lib/synoptic/recherche'
 import SynopticResumeEditor from '@/components/synoptic/SynopticResumeEditor.vue'
 import type { ResumeConfig } from '@/lib/synoptic/engine/types'
 import { isoVide, normaliserIso, variablesIso, vueInitiale, type IsoSection, type VueSynoptique } from '@/lib/synoptic/iso/format'
@@ -47,6 +51,13 @@ const etat = ref<SynopticEtat | null>(null)
 const message = ref('')
 const enregistrement = ref(false)
 const canvas = ref<InstanceType<typeof SynopticCanvas> | null>(null)
+const isoComp = ref<{
+  armer(t: string): void
+  elements(): { id: string; nom: string; type: string }[]
+  selectionnerElement(id: string): boolean
+  lierVariableSelection(v: string): boolean
+} | null>(null)
+const spotlight = ref<InstanceType<typeof SynopticSpotlight> | null>(null)
 // ── vue isométrique : la section `iso` du document est tenue ici (le moteur 2D ne la connaît pas) et fusionnée à l'enregistrement
 const vueEdition = ref<VueSynoptique>('2d')
 const iso = ref<IsoSection>(isoVide())
@@ -137,6 +148,34 @@ onBeforeRouteLeave(() => {
   }
   return true
 })
+
+// ── recherche Spotlight (Ctrl+K) : symboles 2D / iso, éléments du synoptique courant, variables de la box
+const symbolesRecherche = computed<Entree[]>(() => [...entreesIso(catalogueIso()), ...entrees2d()])
+const elementsRecherche = computed(() =>
+  vueEdition.value === 'iso' ? (isoComp.value?.elements() ?? iso.value.composants.map((c) => ({ id: c.id, nom: c.libelle || c.tag || c.id, type: c.type }))) : (canvas.value?.instance?.elements?.() ?? []),
+)
+const variablesRecherche = computed(() => catalogue.value.map((v) => ({ nom: v.nom, description: v.description, unite: v.unite })))
+/** passe à la vue voulue (et à l'onglet Dessin), puis attend que le composant soit monté */
+async function irVers(vue: VueSynoptique) {
+  onglet.value = 'dessin'
+  vueEdition.value = vue
+  await nextTick()
+  await nextTick()
+}
+async function rechercheSymbole(e: Entree) {
+  await irVers(e.contexte)
+  if (e.contexte === 'iso') isoComp.value?.armer(e.id)
+  else canvas.value?.instance?.armer?.(e.id)
+}
+async function rechercheElement(e: Entree) {
+  await irVers(e.contexte)
+  if (e.contexte === 'iso') isoComp.value?.selectionnerElement(e.id)
+  else canvas.value?.instance?.selectionnerElement?.(e.id)
+}
+function rechercheVariable(e: Entree) {
+  const ok = vueEdition.value === 'iso' ? isoComp.value?.lierVariableSelection(e.id) : canvas.value?.instance?.lierVariableSelection?.(e.id)
+  message.value = ok ? `Variable ${e.id} reliée à l'élément sélectionné` : 'Sélectionnez d’abord un élément à relier'
+}
 defineExpose({ recharger })
 </script>
 
@@ -191,6 +230,15 @@ defineExpose({ recharger })
         <button
           type="button"
           class="text-xs px-2.5 py-1 rounded border border-border text-muted-foreground hover:text-foreground"
+          data-testid="synoptic-recherche"
+          title="Rechercher un symbole, un élément ou une variable (Ctrl+K)"
+          @click="spotlight?.ouvrir()"
+        >
+          Rechercher <kbd class="ml-1 text-[10px] opacity-70">Ctrl K</kbd>
+        </button>
+        <button
+          type="button"
+          class="text-xs px-2.5 py-1 rounded border border-border text-muted-foreground hover:text-foreground"
           data-testid="synoptic-retour"
           @click="revenir"
         >
@@ -209,6 +257,7 @@ defineExpose({ recharger })
         />
         <SynopticIso
           v-if="vueEdition === 'iso' && onglet === 'dessin'"
+          ref="isoComp"
           class="absolute inset-0 z-[5] bg-background"
           :iso="iso"
           :values="valuesIso"
@@ -232,5 +281,18 @@ defineExpose({ recharger })
         />
       </div>
     </SynopticFrame>
+    <SynopticSpotlight
+      v-if="doc"
+      ref="spotlight"
+      :contexte="vueEdition"
+      :symboles="symbolesRecherche"
+      :elements="elementsRecherche"
+      :variables="variablesRecherche"
+      :icone2d="(c: string) => canvas?.instance?.icone?.(c) ?? ''"
+      :selection-presente="true"
+      @symbole="rechercheSymbole"
+      @element="rechercheElement"
+      @variable="rechercheVariable"
+    />
   </div>
 </template>

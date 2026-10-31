@@ -2413,6 +2413,23 @@ const instance = {
   /** après un enregistrement réussi : le document courant devient la référence (plus « modifié ») */
   marquerEnregistre() { BROUILLON_IA = instantane(); majBarre(); habillage(); },
   estModifie: () => estModifie(),
+  /** recherche Spotlight : arme un symbole de la palette (le prochain clic sur la scène le pose) */
+  armer(cle) { if (!BIBLIO[cle] && cle !== 'image' && cle !== 'mesure' && !String(cle).startsWith('ent:')) return false; ED.armee = cle; majPalette(); toast('Cliquez sur la scène pour poser « ' + NOM_PAL(cle) + ' »', 'ok'); return true; },
+  /** recherche Spotlight : contenu SVG (24×24) du pictogramme d'un symbole de la palette */
+  icone: (cle) => iconeDe(cle) || '',
+  /** recherche Spotlight : éléments du synoptique (repère, nom, type) */
+  elements() { return M.equipements.map(e => ({ id: e.id, nom: e.nom || e.id, type: e.type })); },
+  /** recherche Spotlight : sélectionne un équipement et centre la vue dessus */
+  selectionnerElement(id) {
+    const n = leNoeud(id); if (!n && !EQ[id]) return false;
+    ED.sel = ['eq:' + id]; if (n) cadrer({ x: n.x, y: n.y, w: n.w, h: n.h }); dessiner(); EDITEUR.panneau(); return true;
+  },
+  /** recherche Spotlight : relie une variable de la box à l'emplacement principal de l'équipement sélectionné */
+  lierVariableSelection(variable) {
+    const k = ED.sel.find(x => x.startsWith('eq:')); const e = k && EQ[k.slice(3)]; if (!e) return false;
+    const slot = e.slots && (e.slots.valeur ? 'valeur' : e.slots.marche ? 'marche' : Object.keys(e.slots)[0]);
+    if (!slot) return false; e.slots[slot] = { ...(e.slots[slot] || slotVide()), variable }; pousser(); dessiner(); EDITEUR.panneau(); return true;
+  },
   importerTexte: (txt) => importerTexte(txt),
   ajuster, zoomer, cadrer,
   /** vue courante en fractions du dessin (à enregistrer comme cadrage) */

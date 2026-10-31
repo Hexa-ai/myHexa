@@ -81,7 +81,7 @@ export interface Composant {
   tilt?: 'x' | 'xn'
   ancre?: string
 }
-export interface Etiq { c: string; ancre?: string; nom?: string; valeur?: string | number; unite?: string; repere?: string; dx?: number; dy?: number; etat?: EtatNom }
+export interface Etiq { c: string; ancre?: string; nom?: string; valeur?: string | number; unite?: string; repere?: string; dx?: number; dy?: number; etat?: EtatNom; compact?: boolean }
 export interface Doc {
   version: 1
   /** niveau de détail de l'instrumentation (défaut 'indicateur') */
@@ -524,7 +524,7 @@ export function construire(doc: Doc, opt: { K?: number } = {}): Resultat {
   if (doc.sol) sc.sol(doc.sol.x0, doc.sol.y0, doc.sol.x1, doc.sol.y1, doc.sol.pas ?? 40)
   for (const e of doc.etiquettes ?? []) {
     const r = rendus[e.c]; if (!r) continue
-    sc.etiquette({ ancre: (r.ancres[e.ancre ?? 'haut'] ?? r.ancres.haut), nom: e.nom, valeur: e.valeur, unite: e.unite, repere: e.repere, dx: e.dx, dy: e.dy, etat: e.etat })
+    sc.etiquette({ ancre: (r.ancres[e.ancre ?? 'haut'] ?? r.ancres.haut), nom: e.nom, valeur: e.valeur, unite: e.unite, repere: e.repere, dx: e.dx, dy: e.dy, etat: e.etat, compact: e.compact })
   }
   for (const e of auto) sc.etiquette(e)
   return { scene: sc, rendus, liaisons: infos, obstacles, collisions: collis, avertissements: avert, items }

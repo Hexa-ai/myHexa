@@ -6,7 +6,7 @@ import type { CatalogueVariable } from '@/lib/synoptic/engine/types'
 import { OPERATEURS_LIBELLES, type OperateurRegle } from '@/lib/synoptic/regles'
 import { FLUIDES, DN_TABLE, symbole } from '@/lib/synoptic/iso/lib'
 import type { EtatNom } from '@/lib/synoptic/iso/lib'
-import type { IsoAccessoire, IsoComposant, IsoLiaison, IsoSection } from '@/lib/synoptic/iso/format'
+import { MAX_MESURES, type Habillage, type IsoAccessoire, type IsoComposant, type IsoLiaison, type IsoSection, type NiveauHabillage } from '@/lib/synoptic/iso/format'
 import { familleIso, SLOTS_LIAISON, SLOTS_PAR_FAMILLE, type SlotDef } from '@/lib/synoptic/iso/familles'
 import { ETATS_STATIQUES, reglerPlan } from '@/lib/synoptic/iso/edition'
 import { LIBELLES_ETAT, lireEtat, estLie } from '@/lib/synoptic/iso/etats'
@@ -106,7 +106,7 @@ const proposees = computed(() => {
   const liste = props.catalogue
   return (f ? liste.filter((v) => (v.nom + ' ' + v.description).toLowerCase().includes(f)) : liste).slice(0, 200)
 })
-const defCourante = computed(() => slotsDef.value.find((s) => s.nom === choix.value))
+const defCourante = computed(() => (choix.value?.startsWith('hab:') ? { libelle: 'Variable de l’habillage' } : slotsDef.value.find((s) => s.nom === choix.value)))
 function ouvrirChoix(nom: string) {
   filtre.value = ''
   choix.value = nom
@@ -114,11 +114,81 @@ function ouvrirChoix(nom: string) {
 function choisir(nom: string | null) {
   const o = objet.value
   if (!o || !choix.value) return
+  if (choix.value.startsWith('hab:')) return choisirHab(nom)
   const slots = (o.slots ??= {})
   if (nom) slots[choix.value] = { ...(slots[choix.value] ?? {}), variable: nom }
   else delete slots[choix.value]
   if (!Object.keys(slots).length) delete o.slots
   choix.value = null
+  modifie()
+}
+// ── habillage d'information (rien / voyant / mesures / carte)
+const NIVEAUX: { id: NiveauHabillage; libelle: string; aide: string }[] = [
+  { id: 'rien', libelle: 'Rien', aide: 'Décoratif : aucune variable' },
+  { id: 'voyant', libelle: 'Voyant', aide: 'Pastille d’état (défaut / marche)' },
+  { id: 'mesures', libelle: 'Mesures', aide: '1 à 4 valeurs dans une étiquette' },
+  { id: 'carte', libelle: 'Carte', aide: 'Titre, état, mesures et lien' },
+]
+const hab = computed<Habillage | undefined>(() => composant.value?.habillage)
+function niveauHab(n: NiveauHabillage | null) {
+  const c = composant.value
+  if (!c) return
+  if (n === null) delete c.habillage
+  else {
+    const h: Habillage = { ...(c.habillage ?? {}), niveau: n }
+    if ((n === 'mesures' || n === 'carte') && !h.mesures?.length) h.mesures = [{ slot: {} }]
+    c.habillage = h
+  }
+  modifie()
+}
+function ajouterMesure() {
+  const h = hab.value
+  if (!h || (h.mesures?.length ?? 0) >= MAX_MESURES) return
+  h.mesures = [...(h.mesures ?? []), { slot: {} }]
+  modifie()
+}
+function retirerMesure(i: number) {
+  const h = hab.value
+  if (!h?.mesures) return
+  h.mesures = h.mesures.filter((_, k) => k !== i)
+  modifie()
+}
+function champMesure(i: number, k: 'libelle' | 'unite', v: string) {
+  const m = hab.value?.mesures?.[i]
+  if (!m) return
+  if (v) m[k] = v
+  else delete m[k]
+  modifie()
+}
+function champCarte(k: 'titre' | 'lien', v: string) {
+  const h = hab.value
+  if (!h) return
+  const c = { ...(h.carte ?? {}) }
+  if (v.trim()) c[k] = v.trim()
+  else delete c[k]
+  h.carte = c
+  modifie()
+}
+const varHab = (cle: string): string | undefined => {
+  const h = hab.value
+  if (cle === 'hab:defaut') return h?.voyant?.defaut?.variable ?? undefined
+  if (cle === 'hab:marche') return h?.voyant?.marche?.variable ?? undefined
+  return h?.mesures?.[Number(cle.slice(5))]?.slot.variable ?? undefined
+}
+function choisirHab(nom: string | null) {
+  const h = hab.value
+  const cle = choix.value
+  choix.value = null
+  if (!h || !cle) return
+  const sl = nom ? { variable: nom } : {}
+  if (cle === 'hab:defaut' || cle === 'hab:marche') {
+    const v = (h.voyant ??= {})
+    if (nom) v[cle === 'hab:defaut' ? 'defaut' : 'marche'] = sl
+    else delete v[cle === 'hab:defaut' ? 'defaut' : 'marche']
+  } else {
+    const m = h.mesures?.[Number(cle.slice(5))]
+    if (m) m.slot = sl
+  }
   modifie()
 }
 function poserRegle(slot: string, champ: 'op' | 'val', v: string | number) {
@@ -296,6 +366,42 @@ v-else type="checkbox" :checked="!!valeurParam(objet as IsoComposant, p.cle, p.d
             </div>
           </template>
         </div>
+      </div>
+
+      <!-- habillage d'information -->
+      <div v-if="composant" class="ed-sec" data-testid="iso-habillage">
+        <h4>Affichage des données</h4>
+        <div class="ed-btns" role="group" aria-label="Niveau d’affichage">
+          <button
+            v-for="n in NIVEAUX" :key="n.id" type="button" class="btn" :class="{ on: hab?.niveau === n.id }" :aria-pressed="hab?.niveau === n.id" :title="n.aide"
+            :data-testid="`iso-habillage-${n.id}`" @click="niveauHab(n.id)"
+          >{{ n.libelle }}</button>
+        </div>
+        <p v-if="!hab" class="ed-desc">Réglage d’origine : la valeur reliée s’affiche en étiquette.</p>
+        <button v-else type="button" class="btn" data-testid="iso-habillage-origine" @click="niveauHab(null)">Revenir au réglage d’origine</button>
+        <template v-if="hab && (hab.niveau === 'voyant' || hab.niveau === 'carte' || hab.niveau === 'mesures')">
+          <div v-for="v in [{ k: 'hab:defaut', l: 'Variable de défaut' }, { k: 'hab:marche', l: 'Variable de marche' }]" :key="v.k" class="ed-slot">
+            <div class="ed-slot-h"><b>{{ v.l }}</b></div>
+            <button type="button" class="ed-var" :class="{ vide: !varHab(v.k) }" :data-testid="`iso-${v.k.replace(':', '-')}`" @click="ouvrirChoix(v.k)">{{ varHab(v.k) || 'Relier une variable…' }}</button>
+          </div>
+        </template>
+        <template v-if="hab && (hab.niveau === 'mesures' || hab.niveau === 'carte')">
+          <div v-for="(m, i) in hab.mesures ?? []" :key="i" class="ed-slot" :data-testid="`iso-mesure-${i}`">
+            <div class="ed-slot-h"><b>Mesure {{ i + 1 }}</b><button type="button" class="btn" :aria-label="`Retirer la mesure ${i + 1}`" @click="retirerMesure(i)">×</button></div>
+            <button type="button" class="ed-var" :class="{ vide: !m.slot.variable }" :data-testid="`iso-hab-m${i}`" @click="ouvrirChoix(`hab:${i}`)">{{ m.slot.variable || 'Relier une variable…' }}</button>
+            <div class="ed-btns">
+              <input class="ed-in sm" type="text" placeholder="Libellé" :value="m.libelle ?? ''" @change="champMesure(i, 'libelle', ($event.target as HTMLInputElement).value)">
+              <input class="ed-in sm" type="text" placeholder="Unité" :value="m.unite ?? ''" @change="champMesure(i, 'unite', ($event.target as HTMLInputElement).value)">
+            </div>
+          </div>
+          <button v-if="(hab.mesures?.length ?? 0) < MAX_MESURES" type="button" class="btn" data-testid="iso-hab-ajouter" @click="ajouterMesure">+ Ajouter une mesure ({{ hab.mesures?.length ?? 0 }}/{{ MAX_MESURES }})</button>
+        </template>
+        <template v-if="hab && hab.niveau === 'carte'">
+          <label class="ed-champ"><span>Titre de la carte</span>
+            <input class="ed-in" type="text" :value="hab.carte?.titre ?? ''" data-testid="iso-carte-titre" @change="champCarte('titre', ($event.target as HTMLInputElement).value)"></label>
+          <label class="ed-champ"><span>Ouvre le synoptique (identifiant)</span>
+            <input class="ed-in" type="text" :value="hab.carte?.lien ?? ''" data-testid="iso-carte-lien" placeholder="collez l’identifiant du synoptique" @change="champCarte('lien', ($event.target as HTMLInputElement).value)"></label>
+        </template>
       </div>
 
       <!-- profondeur -->

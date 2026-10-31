@@ -7,7 +7,7 @@ import { catalogue as catalogueIso, construire, rendu0, cssIso } from '@/lib/syn
 import type { Resultat } from '@/lib/synoptic/iso/lib'
 import type { CatalogueVariable, SynopticEtat } from '@/lib/synoptic/engine/types'
 import { docLib, objetsIso, type IsoSection } from '@/lib/synoptic/iso/format'
-import { estAccessoireIso } from '@/lib/synoptic/iso/familles'
+import { estAccessoireIso, familleIso } from '@/lib/synoptic/iso/familles'
 import { lireEtat, estLie } from '@/lib/synoptic/iso/etats'
 import {
   abscisseCurviligne, ajouterAccessoire, deplacerComposant, poserComposant, reglerPlan, relierPorts, supprimerObjet, tourner,
@@ -513,7 +513,36 @@ const groupes = computed(() => {
   return tous.sort((a, b) => Number(b.nom.startsWith('Sur un')) - Number(a.nom.startsWith('Sur un')))
 })
 
-defineExpose({ annuler, retablir, ajuster, snapshot: () => clone(travail.value) })
+/** recherche Spotlight : éléments (composants) de la scène, pour les trouver par repère ou libellé */
+function elements() {
+  return travail.value.composants.map((c) => ({ id: c.id, nom: c.libelle || c.tag || c.id, type: c.type }))
+}
+/** recherche Spotlight : sélectionne un composant et centre la vue dessus */
+function selectionnerElement(id: string): boolean {
+  const c = compo(id)
+  if (!c) return false
+  sel.value = { k: 'c', id }
+  if (vb) {
+    const [px, py] = projeter(c.x, c.y, c.z ?? 0)
+    vb = [px - vb[2] / 2, py - vb[3] / 2, vb[2], vb[3]]
+    svgEl()?.setAttribute('viewBox', vb.join(' '))
+  }
+  rendre(true)
+  return true
+}
+/** recherche Spotlight : relie une variable à l'emplacement principal du composant sélectionné */
+function lierVariableSelection(variable: string): boolean {
+  const c = sel.value?.k === 'c' ? compo(sel.value.id) : null
+  if (!c) return false
+  const slot = SLOT_PRINCIPAL[familleIso(c.type)]
+  c.slots = { ...(c.slots ?? {}), [slot]: { ...(c.slots?.[slot] ?? {}), variable } }
+  valider()
+  rendre(true)
+  return true
+}
+const SLOT_PRINCIPAL: Record<string, string> = { pompe: 'marche', moteur: 'marche', ventilateur: 'marche', vanne: 'ouvert', cuve: 'niveau', mesure: 'valeur', autre: 'marche' }
+
+defineExpose({ annuler, retablir, ajuster, armer: (t: string) => { if (arme.value !== t) armer(t) }, elements, selectionnerElement, lierVariableSelection, snapshot: () => clone(travail.value) })
 void nextTick
 </script>
 

@@ -220,6 +220,27 @@ export const FAMILLE_PICTO_PAR_TYPE_ISO: Readonly<Record<string, FamillePicto | 
   'cta_e.echangeur_contre': null,
   'cta_e.melange_x': null,
   'cta_e.gaine': null,
+  // site / architecture
+  'site.batiment': null,
+  'site.bureaux': null,
+  'site.entrepot': null,
+  'site.chaufferie': null,
+  'site.sous_station': null,
+  'site.salle_gtb': null,
+  'site.poste_transfo': null,
+  'site.transfo_exterieur': null,
+  'site.groupe_container': null,
+  'site.local_tgbt': null,
+  'site.parking_irve': null,
+  'site.parking': null,
+  'site.toiture_pv': null,
+  'site.station_pompage': null,
+  'site.chateau_eau': null,
+  'site.step': null,
+  'site.arbres': null,
+  'site.cloture': null,
+  'site.voirie': null,
+  'site.poste_gaz': null,
 }
 
 /** famille déclarée pour un symbole iso, null si aucune */

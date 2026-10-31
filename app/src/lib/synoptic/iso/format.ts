@@ -3,13 +3,35 @@
 // pour chaque objet, un libellé et des emplacements de variables (`slots`, même forme que les équipements 2D).
 import type { SynopticDocument, SynopticEquipement, SynopticSlot } from '../engine/types'
 import type { Accessoire, Composant, Doc, Etiq, Liaison, Niveau } from './lib/modele'
-import { estLie, lireEtat } from './etats'
+import type { EtatNom } from './lib/types'
+import { LIBELLES_ETAT, estLie, lireEtat } from './etats'
 import { estAccessoireIso, familleIso, typeMoteurIso } from './familles'
 
 export type VueSynoptique = '2d' | 'iso'
 
+/** « habillage d'information » : ce que l'on montre des données sur un symbole (absent = comportement d'avant) */
+export type NiveauHabillage = 'rien' | 'voyant' | 'mesures' | 'carte'
+export const MAX_MESURES = 4
+export interface MesureHabillee {
+  /** variable reliée (même forme qu'un emplacement : variable + règle éventuelle) */
+  slot: SynopticSlot
+  libelle?: string
+  unite?: string
+}
+export interface Habillage {
+  niveau: NiveauHabillage
+  /** voyant : variables de défaut et/ou de marche (aussi lues pour l'état du symbole et la carte) */
+  voyant?: { defaut?: SynopticSlot; marche?: SynopticSlot }
+  /** mesures (1 à 4) ; une carte en affiche aussi */
+  mesures?: MesureHabillee[]
+  /** carte : titre, et synoptique ouvert au clic (identifiant d'un autre synoptique) */
+  carte?: { titre?: string; lien?: string }
+}
+
 /** ce que l'éditeur ajoute à chaque objet de la bibliothèque */
 export interface ExtensionIso {
+  /** habillage d'information (rien / voyant / mesures / carte) ; absent = étiquette de valeur d'avant */
+  habillage?: Habillage
   libelle?: string
   /** variables reliées : marche, defaut, ouvert, ferme, position, niveau, valeur, vitesse selon la famille */
   slots?: Record<string, SynopticSlot>
@@ -106,6 +128,45 @@ export function variablesIso(iso: IsoSection | undefined): string[] {
   return [...noms]
 }
 
+/** emplacements d'un objet, complétés par ceux de son voyant (un emplacement déjà relié passe avant) */
+export function slotsEffectifs(o: ExtensionIso): Record<string, SynopticSlot> | undefined {
+  const v = o.habillage?.voyant
+  if (!o.habillage || o.habillage.niveau === 'rien' || !v) return o.slots
+  const s = { ...(o.slots ?? {}) }
+  if (v.defaut?.variable && !s.defaut?.variable) s.defaut = v.defaut
+  if (v.marche?.variable && !s.marche?.variable) s.marche = v.marche
+  return s
+}
+
+/** variables que lit l'habillage (pour les abonner en direct) */
+export function variablesHabillage(h: Habillage | undefined): string[] {
+  if (!h || h.niveau === 'rien') return []
+  const l = [h.voyant?.defaut?.variable, h.voyant?.marche?.variable, ...(h.mesures ?? []).map((m) => m.slot.variable)]
+  return l.filter((x): x is string => !!x)
+}
+
+/** étiquettes d'un objet selon son habillage ; `null` = pas d'habillage, on garde l'étiquette de valeur d'avant */
+function etiquettesHabillage(id: string, o: ExtensionIso & { tag?: string }, etat: EtatNom, values: Record<string, number>): Etiq[] | null {
+  const h = o.habillage
+  if (!h) return null
+  const out: Etiq[] = []
+  const mesures = () => {
+    for (const m of (h.mesures ?? []).slice(0, MAX_MESURES)) {
+      if (!m.slot?.variable) continue
+      const x = values[m.slot.variable]
+      out.push({ c: id, nom: m.libelle, valeur: typeof x === 'number' ? fmt(x) : '—', unite: m.unite ?? '', compact: true })
+    }
+  }
+  if (h.niveau === 'voyant') {
+    if (h.voyant?.defaut?.variable || h.voyant?.marche?.variable) out.push({ c: id, valeur: etat === 'defaut' || etat === 'alarme' ? '!' : '●', etat, compact: true })
+  } else if (h.niveau === 'mesures') mesures()
+  else if (h.niveau === 'carte') {
+    out.push({ c: id, nom: h.carte?.titre || o.libelle || o.tag || id, valeur: LIBELLES_ETAT[etat], unite: h.carte?.lien ? '↗' : '', etat })
+    mesures()
+  }
+  return out
+}
+
 const fmt = (x: number): string => (Number.isInteger(x) ? String(x) : String(Math.round(x * 100) / 100))
 
 /**
@@ -116,12 +177,15 @@ const fmt = (x: number): string => (Number.isInteger(x) ? String(x) : String(Mat
 export function docLib(iso: IsoSection, values: Record<string, number>, o: { editeur?: boolean } = {}): Doc {
   const etiquettes: Etiq[] = []
   const composants: Composant[] = iso.composants.map((c) => {
-    const e = lireEtat(c, values)
-    const { libelle, slots, niveau_max, seuils, ...pur } = c
+    const e = lireEtat({ ...c, slots: slotsEffectifs(c) }, values)
+    const { libelle, slots, niveau_max, seuils, habillage, ...pur } = c
     void slots; void niveau_max; void seuils
     const fam = familleIso(c.type)
-    if (e.lie && e.valeurs.valeur != null && fam !== 'mesure' && fam !== 'cuve')
+    const hab = etiquettesHabillage(c.id, c, e.etat, values)
+    if (hab) etiquettes.push(...hab)
+    else if (e.lie && e.valeurs.valeur != null && fam !== 'mesure' && fam !== 'cuve')
       etiquettes.push({ c: c.id, nom: libelle ?? c.tag, valeur: fmt(e.valeurs.valeur), unite: c.unite ?? '' })
+    void habillage
     return { ...pur, etat: e.etat, valeurs: e.valeurs }
   })
   const liaisons: Liaison[] = iso.liaisons.map((L) => {
@@ -160,8 +224,9 @@ function versEquipement(id: string, type: string, o: ExtensionIso & { tag?: stri
     libelle: o.libelle?.trim() || o.tag || id,
     type: typeMoteurIso(type),
     type_iso: type,
-    slots: o.slots ?? {},
+    slots: slotsEffectifs(o) ?? {},
     params,
+    ...(o.habillage && o.habillage.niveau !== 'rien' ? { habillage: o.habillage } : {}),
     origine: 'iso',
   }
 }
@@ -172,7 +237,7 @@ export function equipementsIso(iso: IsoSection | undefined): SynopticEquipement[
   const out: SynopticEquipement[] = []
   for (const c of iso.composants) {
     if (c.monte && !c.slots) continue
-    if (familleIso(c.type) === 'autre' && !estLie(c) && !c.libelle) continue // raccords, scène : pas des équipements
+    if (familleIso(c.type) === 'autre' && !estLie({ slots: slotsEffectifs(c) }) && !c.libelle && !variablesHabillage(c.habillage).length) continue // raccords, scène : pas des équipements
     out.push(versEquipement(c.id, c.type, c))
   }
   for (const L of iso.liaisons)
