@@ -132,5 +132,6 @@ export function lireEtat(o: ObjetIsoLie, v: Record<string, number>): EtatLu {
   if (x != null) valeurs.valeur = x
   if (defaut) return sorti('defaut')
   const m = lu(o, 'marche', v)
-  return sorti(m === 1 ? 'marche' : m === 0 ? 'arret' : x != null ? 'marche' : 'inconnu')
+  // bâtiments, locaux et autres volumes : sans donnée on reste « arrêt » (plein), jamais fantôme pointillé
+  return sorti(m === 1 ? 'marche' : m === 0 ? 'arret' : x != null ? 'marche' : fam === 'autre' ? 'arret' : 'inconnu')
 }

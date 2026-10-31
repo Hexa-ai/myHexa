@@ -311,8 +311,7 @@ export function construire(doc: Doc, opt: { K?: number } = {}): Resultat {
     const bb = bboxDe(...P)
     const q = P.map(proj)
     const d = 'M' + q.map((a) => f(a[0]) + ' ' + f(a[1])).join('L')
-    const col = def ? 'var(--i-offline,#e5484d)' : lien.style === 'chaleur' ? 'var(--i-eau_chaude_aller,#e0623a)' : lien.style === 'cable' ? 'var(--i-edge)' : 'var(--i-signal,#3b8fc0)'
-    const anim = L.etat === 'marche' || L.etat === 'modulant'
+    const col = def ? 'var(--i-offline,#e5484d)' : lien.style === 'chaleur' ? '#e0623a' : lien.style === 'cable' ? 'var(--i-edge)' : lien.style === 'radio' ? '#7d62d6' : lien.style === 'flux' ? 'var(--i-edge)' : '#3b8fc0'
     let svg = ''
     if (lien.style === 'chaleur') {
       // réseau enterré : double trait au sol (deux parallèles décalées de ±1,8)
@@ -323,7 +322,7 @@ export function construire(doc: Doc, opt: { K?: number } = {}): Resultat {
     } else {
       const dash = lien.style === 'reseau' ? '5 3' : lien.style === 'radio' ? '1.5 4' : ''
       const w = lien.style === 'cable' ? 1.8 : 1.5
-      svg += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="${lien.style === 'radio' ? 'round' : 'butt'}"${dash ? ` stroke-dasharray="${dash}"` : ''}${anim && lien.style !== 'cable' ? ' class="flow"' : ''}/>`
+      svg += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="${lien.style === 'radio' ? 'round' : 'butt'}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`
     }
     if (lien.style === 'radio') {
       // icône d'ondes au milieu : trois arcs concentriques
@@ -339,7 +338,7 @@ export function construire(doc: Doc, opt: { K?: number } = {}): Resultat {
       const m = q[Math.floor(q.length / 2)]
       svg += `<circle cx="${f(m[0])}" cy="${f(m[1] - 6)}" r="4.5" fill="var(--i-offline,#e5484d)"/><path d="M${f(m[0])} ${f(m[1] - 8.4)}v2.6M${f(m[0])} ${f(m[1] - 4)}v.1" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>`
     }
-    out_lien.push({ bb, id: 'l:' + L.id, plan: L.plan, svg: wrapLien(svg, L.id) })
+    out_lien.push({ bb, id: 'l:' + L.id, plan: L.plan ?? 'arriere', svg: wrapLien(svg, L.id) })
     return { id: L.id, pts: P, r: 1.5, fluide: 'eau' as Fluide, coudes: Math.max(0, P.length - 2), ok, accessoires: [], tes: [], segments: [], ponts: 0 }
   }
 
@@ -581,6 +580,7 @@ export function construire(doc: Doc, opt: { K?: number } = {}): Resultat {
   }
 
   // 3. assemblage scène
+  sc.placement = { dist: 8, pas: 6, anneaux: 14, ...sc.placement }
   for (const it of [...items, ...out_lien]) sc.item(it)
   if (doc.sol) sc.sol(doc.sol.x0, doc.sol.y0, doc.sol.x1, doc.sol.y1, doc.sol.pas ?? 40)
   for (const e of doc.etiquettes ?? []) {

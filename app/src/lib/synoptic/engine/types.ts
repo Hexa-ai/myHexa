@@ -158,6 +158,16 @@ export interface SynopticInstance {
   zoomer(f: number, cx?: number, cy?: number): void
   /** cadre la vue sur une zone du dessin (unités du dessin), avec une marge */
   cadrer(zone: { x: number; y: number; w: number; h: number }): void
+  /** recherche Spotlight : arme un symbole de la palette (pose au clic) ; faux si la clé est inconnue */
+  armer?(cle: string): boolean
+  /** pictogramme SVG (24×24) d'une clé de palette */
+  icone?(cle: string): string
+  /** éléments du dessin (repère ou nom) pour la recherche */
+  elements?(): { id: string; nom: string; type: string }[]
+  /** sélectionne un élément et centre la vue dessus */
+  selectionnerElement?(id: string): void
+  /** relie une variable à l'emplacement principal de l'élément sélectionné ; faux si rien n'est sélectionné */
+  lierVariableSelection?(variable: string): boolean
   /** opérations internes (sans souris) : réservées aux tests */
   interne: Record<string, (...args: never[]) => unknown>
   destroy(): void

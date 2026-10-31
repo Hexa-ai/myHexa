@@ -79,7 +79,12 @@ function clavier(ev: KeyboardEvent) {
 
 /** raccourcis globaux : Ctrl+K partout ; « / » ou Espace seulement quand rien n'est en saisie */
 function global(ev: KeyboardEvent) {
-  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'k') { ev.preventDefault(); ouvert.value ? fermer() : ouvrir(); return }
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'k') {
+    ev.preventDefault()
+    if (ouvert.value) fermer()
+    else ouvrir()
+    return
+  }
   if (ouvert.value && ev.key === 'Escape') { ev.preventDefault(); fermer(); return }
   if (ev.defaultPrevented || ouvert.value || ev.ctrlKey || ev.metaKey || ev.altKey) return
   if (ev.key !== '/' && ev.key !== ' ') return

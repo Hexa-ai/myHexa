@@ -160,7 +160,7 @@ function etiquettesHabillage(id: string, o: ExtensionIso & { tag?: string }, eta
     }
   }
   if (h.niveau === 'voyant') {
-    if (h.voyant?.defaut?.variable || h.voyant?.marche?.variable) out.push({ c: id, valeur: etat === 'defaut' || etat === 'alarme' ? '!' : '●', etat, compact: true })
+    if (h.voyant?.defaut?.variable || h.voyant?.marche?.variable) out.push({ c: id, nom: o.libelle || o.tag || '', valeur: etat === 'defaut' || etat === 'alarme' ? '! Défaut' : etat === 'marche' || etat === 'modulant' ? '● En marche' : etat === 'inconnu' ? '○ —' : '● OK', etat, compact: !(o.libelle || o.tag) })
   } else if (h.niveau === 'mesures') mesures()
   else if (h.niveau === 'carte') {
     out.push({ c: id, nom: h.carte?.titre || o.libelle || o.tag || id, valeur: LIBELLES_ETAT[etat], unite: h.carte?.lien ? '↗' : '', etat })
