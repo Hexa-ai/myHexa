@@ -75,6 +75,11 @@ export interface SymboleDef {
   id: string
   famille: string
   nom: string
+  /** Qualité (revue Julien) : 'brouillon' par défaut ; 'revu' = corrigé par l'agent, à valider ;
+   *  'valide' = validé par Julien ; 'obsolete' = retiré du catalogue visible mais gardé pour les documents existants. */
+  statut?: 'brouillon' | 'revu' | 'valide' | 'obsolete'
+  /** Si obsolete : id du symbole qui le remplace (facultatif) */
+  remplacePar?: string
   /** taille locale [W,D,H] selon params */
   taille(p: Params): [number, number, number]
   defauts?: Params
